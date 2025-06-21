@@ -111,6 +111,7 @@ elif st.session_state["search_triggered"] and not user_coords:
     st.info("❗ Adresse invalide ou introuvable. Essayez un autre format.")
     if st.button("🔄 Nouvelle recherche"):
         st.session_state["search_triggered"] = False
-        st.experimental_rerun()
+        st.rerun()
+
 else:
     st.info("Veuillez entrer votre adresse et appuyer sur « Lancer la recherche ».")
