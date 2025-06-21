@@ -9,16 +9,20 @@ from streamlit_folium import st_folium
 # --- 1. App Configuration ---
 st.set_page_config(page_title="Navira", layout="wide")
 
-# --- 2. Data Loading ---
+# --- 2. Session State Initialization ---
+if "search_triggered" not in st.session_state:
+    st.session_state["search_triggered"] = False
+
+# --- 3. Load Data ---
 @st.cache_data
 def load_data(path="navira_test_hospitals_bariatric.csv"):
     df = pd.read_csv(path)
-    assert {"activity","address","latitude","longitude","group","name","category"}.issubset(df.columns)
+    assert {"activity", "address", "latitude", "longitude", "group", "name", "category"}.issubset(df.columns)
     return df
 
 df = load_data()
 
-# --- 3. UI Layout (no sidebar) ---
+# --- 4. Main UI ---
 st.markdown("## 🔍 Recherche d’hôpitaux")
 st.markdown("Trouvez les établissements spécialisés en fonction de votre pathologie et de votre localisation.")
 
@@ -28,25 +32,28 @@ with col1:
     address = st.text_input("📍 Votre adresse ou code postal", placeholder="ex: 75019 ou Paris")
 
 with col2:
-    pathology = st.selectbox("🧬 Type de pathologie", df['group'].unique())
+    pathology = st.selectbox("🦠 Type de pathologie", df['group'].unique())
 
 with col3:
     radius_km = st.slider("📏 Rayon de recherche (km)", min_value=1, max_value=1000, value=50)
 
-search = st.button("🔎 Lancer la recherche")
+# Trigger search
+if st.button("🔎 Lancer la recherche"):
+    st.session_state["search_triggered"] = True
+
 st.markdown("---")
 
-# --- 4. Geocoding Function ---
+# --- 5. Geocoding Function ---
 @st.cache_data(show_spinner=False)
 def geocode_address(address):
     geolocator = Nominatim(user_agent="navira_app")
     return geolocator.geocode(address, timeout=5)
 
-# --- 5. Geocode and Filter ---
+# --- 6. Processing Logic ---
 user_coords = None
 filtered = pd.DataFrame()
 
-if search and address:
+if st.session_state["search_triggered"] and address:
     try:
         enriched_address = address.strip()
         if enriched_address.isdigit() and len(enriched_address) == 5:
@@ -67,7 +74,7 @@ if search and address:
     except Exception as e:
         st.error(f"❗ Erreur de géocodage : {str(e)}")
 
-# --- 6. Map Display ---
+# --- 7. Display Results ---
 if user_coords and not filtered.empty:
     m = folium.Map(location=user_coords, zoom_start=10)
     cluster = MarkerCluster().add_to(m)
@@ -89,10 +96,21 @@ if user_coords and not filtered.empty:
     st_data = st_folium(m, width="100%", height=600, center=user_coords, zoom=10)
 
     st.markdown(f"### 🏥 {len(filtered)} établissements trouvés")
-    st.dataframe(filtered[['name','address','distance_km','activity','category']])
-elif search and user_coords and filtered.empty:
+    st.dataframe(filtered[['name', 'address', 'distance_km', 'activity', 'category']])
+
+    if st.button("🔄 Nouvelle recherche"):
+        st.session_state["search_triggered"] = False
+        st.experimental_rerun()
+
+elif st.session_state["search_triggered"] and user_coords and filtered.empty:
     st.warning("Aucun hôpital trouvé dans ce rayon.")
-elif search and not user_coords:
-    st.info("Veuillez entrer une adresse valide pour lancer la recherche.")
+    if st.button("🔄 Nouvelle recherche"):
+        st.session_state["search_triggered"] = False
+        st.experimental_rerun()
+elif st.session_state["search_triggered"] and not user_coords:
+    st.info("❗ Adresse invalide ou introuvable. Essayez un autre format.")
+    if st.button("🔄 Nouvelle recherche"):
+        st.session_state["search_triggered"] = False
+        st.experimental_rerun()
 else:
     st.info("Veuillez entrer votre adresse et appuyer sur « Lancer la recherche ».")
