@@ -98,20 +98,17 @@ if user_coords and not filtered.empty:
     st.markdown(f"### 🏥 {len(filtered)} établissements trouvés")
     st.dataframe(filtered[['name', 'address', 'distance_km', 'activity', 'category']])
 
-    if st.button("🔄 Nouvelle recherche"):
-        st.session_state["search_triggered"] = False
-        st.experimental_rerun()
-
 elif st.session_state["search_triggered"] and user_coords and filtered.empty:
     st.warning("Aucun hôpital trouvé dans ce rayon.")
-    if st.button("🔄 Nouvelle recherche"):
-        st.session_state["search_triggered"] = False
-        st.experimental_rerun()
+
 elif st.session_state["search_triggered"] and not user_coords:
     st.info("❗ Adresse invalide ou introuvable. Essayez un autre format.")
+else:
+    st.info("Veuillez entrer votre adresse et appuyer sur « Lancer la recherche ».")
+
+# --- 8. Reset Button (Always show after search) ---
+if st.session_state["search_triggered"]:
+    st.markdown("---")
     if st.button("🔄 Nouvelle recherche"):
         st.session_state["search_triggered"] = False
         st.rerun()
-
-else:
-    st.info("Veuillez entrer votre adresse et appuyer sur « Lancer la recherche ».")
