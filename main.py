@@ -32,7 +32,7 @@ with col1:
     address = st.text_input("📍 Votre adresse ou code postal", placeholder="ex: 75019 ou Paris")
 
 with col2:
-    pathology = st.selectbox("🦠 Type de pathologie", df['group'].unique())
+    pathology = st.selectbox("🏥 Type de pathologie", df['group'].unique())
 
 with col3:
     radius_km = st.slider("📏 Rayon de recherche (km)", min_value=1, max_value=1000, value=50)
@@ -98,17 +98,19 @@ if user_coords and not filtered.empty:
     st.markdown(f"### 🏥 {len(filtered)} établissements trouvés")
     st.dataframe(filtered[['name', 'address', 'distance_km', 'activity', 'category']])
 
-elif st.session_state["search_triggered"] and user_coords and filtered.empty:
-    st.warning("Aucun hôpital trouvé dans ce rayon.")
-
-elif st.session_state["search_triggered"] and not user_coords:
-    st.info("❗ Adresse invalide ou introuvable. Essayez un autre format.")
-else:
-    st.info("Veuillez entrer votre adresse et appuyer sur « Lancer la recherche ».")
-
-# --- 8. Reset Button (Always show after search) ---
-if st.session_state["search_triggered"]:
-    st.markdown("---")
     if st.button("🔄 Nouvelle recherche"):
         st.session_state["search_triggered"] = False
-        st.rerun()
+        st.experimental_rerun()
+
+elif st.session_state["search_triggered"] and user_coords and filtered.empty:
+    st.warning("Aucun hôpital trouvé dans ce rayon.")
+    if st.button("🔄 Nouvelle recherche"):
+        st.session_state["search_triggered"] = False
+        st.experimental_rerun()
+elif st.session_state["search_triggered"] and not user_coords:
+    st.info("❗ Adresse invalide ou introuvable. Essayez un autre format.")
+    if st.button("🔄 Nouvelle recherche"):
+        st.session_state["search_triggered"] = False
+        st.experimental_rerun()
+else:
+    st.info("Veuillez entrer votre adresse et appuyer sur « Lancer la recherche ».")
