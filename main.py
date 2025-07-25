@@ -8,7 +8,7 @@ from streamlit_folium import st_folium
 
 # --- 1. App Configuration ---
 st.set_page_config(
-    page_title="Navira - Where Care Finds Its Path",
+    page_title="Navira - Hospital Explorer",
     page_icon="🏥",
     layout="wide"
 )
@@ -23,7 +23,7 @@ if "user_coords" not in st.session_state:
 @st.cache_data
 def load_data(path="flat_denormalized_data.csv"):
     """
-    Loads the new FLAT denormalized hospital data.
+    Loads the new FLAT denormalized hospital data and performs robust cleaning.
     """
     try:
         df = pd.read_csv(path)
@@ -37,9 +37,16 @@ def load_data(path="flat_denormalized_data.csv"):
             'redo_n': 'Redo Surgeries (N)',
             'redo_pct': 'Redo Surgeries (%)'
         }, inplace=True)
+
+        # Convert coordinates to numeric, coercing errors to NaN (Not a Number)
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
         df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+
+        # Drop rows with invalid coordinates
         df.dropna(subset=['latitude', 'longitude'], inplace=True)
+        df = df[df['latitude'].between(-90, 90)]
+        df = df[df['longitude'].between(-180, 180)]
+        
         return df
     except FileNotFoundError:
         st.error(f"Fatal Error: The data file '{path}' was not found. Please make sure it's in the same directory as the script.")
@@ -101,7 +108,6 @@ if st.session_state["search_triggered"]:
             if selected_status != 'All':
                 temp_df = temp_df[temp_df['Status'] == selected_status]
             
-            # Since the data is flat, we now have duplicates. We'll handle this for display.
             filtered_df = temp_df.sort_values('Distance (km)')
         else:
             st.error("Address not found. Please try a different address or format.")
@@ -112,7 +118,6 @@ else:
 
 # --- 7. Display Results ---
 if not filtered_df.empty:
-    # Create a new dataframe with unique hospitals for the map and main list
     unique_hospitals_df = filtered_df.drop_duplicates(subset=['ID']).copy()
 
     st.header(f"🗺️ Map of {len(unique_hospitals_df)} Found Hospitals")
@@ -142,7 +147,12 @@ if not filtered_df.empty:
 
     st.header("📋 Hospital Details")
     display_cols = ['Hospital Name', 'City', 'Status', 'Distance (km)', 'Redo Surgeries (N)', 'Redo Surgeries (%)']
-    st.dataframe(unique_hospitals_df[display_cols].style.format({'Distance (km)': "{:.1f}", 'Redo Surgeries (%)': "{:.1f}"}))
+    
+    # --- FIX #1: Hide the index column on the dataframe ---
+    st.dataframe(
+        unique_hospitals_df[display_cols].style.format({'Distance (km)': "{:.1f}", 'Redo Surgeries (%)': "{:.1f}"}), 
+        hide_index=True
+    )
 
     st.header("📊 Detailed Annual Procedure Data")
     hospital_to_view = st.selectbox(
@@ -151,13 +161,13 @@ if not filtered_df.empty:
     )
 
     if hospital_to_view:
-        # Get all rows for the selected hospital from the ORIGINAL filtered dataframe
         hospital_annual_data = filtered_df[filtered_df['Hospital Name'] == hospital_to_view].copy()
         
         annual_cols = ['annee', 'ABL', 'ANN', 'BPG', 'REV', 'SLE', 'COE', 'LAP', 'ROB']
         display_annual = hospital_annual_data[annual_cols].rename(columns={'annee': 'Year'}).set_index('Year')
         
-        st.table(display_annual)
+        # --- FIX #2: Sort the annual data by year in descending order ---
+        st.table(display_annual.sort_index(ascending=False))
 
 elif st.session_state["search_triggered"]:
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
