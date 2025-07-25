@@ -8,7 +8,7 @@ from streamlit_folium import st_folium
 
 # --- 1. App Configuration ---
 st.set_page_config(
-    page_title="Navira - Where Care Finds Its Path",
+    page_title="Navira - Hospital Explorer",
     page_icon="🏥",
     layout="wide"
 )
@@ -23,7 +23,7 @@ if "user_coords" not in st.session_state:
 @st.cache_data
 def load_data(path="flat_denormalized_data.csv"):
     """
-    Loads the new FLAT denormalized hospital data.
+    Loads the new FLAT denormalized hospital data and performs robust cleaning.
     """
     try:
         df = pd.read_csv(path)
@@ -37,9 +37,17 @@ def load_data(path="flat_denormalized_data.csv"):
             'redo_n': 'Redo Surgeries (N)',
             'redo_pct': 'Redo Surgeries (%)'
         }, inplace=True)
+
+        # Convert coordinates to numeric, coercing errors to NaN (Not a Number)
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
         df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
-        df.dropna(subset=['latitude', 'longitude'], inplace=True)
+
+        # --- THIS IS THE FIX ---
+        # Filter out rows with invalid coordinate ranges before any calculations
+        df = df[df['latitude'].between(-90, 90)]
+        df = df[df['longitude'].between(-180, 180)]
+        # --- END OF FIX ---
+
         return df
     except FileNotFoundError:
         st.error(f"Fatal Error: The data file '{path}' was not found. Please make sure it's in the same directory as the script.")
@@ -93,6 +101,7 @@ if st.session_state["search_triggered"]:
 
         if st.session_state["user_coords"]:
             temp_df = df.copy()
+            # This line will now be safe because the data is clean
             temp_df['Distance (km)'] = temp_df.apply(
                 lambda row: geodesic(st.session_state["user_coords"], (row['latitude'], row['longitude'])).km,
                 axis=1
@@ -101,7 +110,6 @@ if st.session_state["search_triggered"]:
             if selected_status != 'All':
                 temp_df = temp_df[temp_df['Status'] == selected_status]
             
-            # Since the data is flat, we now have duplicates. We'll handle this for display.
             filtered_df = temp_df.sort_values('Distance (km)')
         else:
             st.error("Address not found. Please try a different address or format.")
@@ -151,7 +159,6 @@ if not filtered_df.empty:
     )
 
     if hospital_to_view:
-        # Get all rows for the selected hospital from the ORIGINAL filtered dataframe
         hospital_annual_data = filtered_df[filtered_df['Hospital Name'] == hospital_to_view].copy()
         
         annual_cols = ['annee', 'ABL', 'ANN', 'BPG', 'REV', 'SLE', 'COE', 'LAP', 'ROB']
