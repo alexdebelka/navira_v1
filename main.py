@@ -62,21 +62,25 @@ with st.sidebar:
     unique_statuses = ['All'] + sorted(df['Status'].dropna().unique().tolist())
     selected_status = st.selectbox("Filter by Hospital Status", unique_statuses)
 
+    # --- THIS IS THE FIX: More robust state handling ---
     if st.button("🔎 Search Hospitals"):
         if address_input:
+            # Save the input to session state and trigger the search flag
             st.session_state.address = address_input
             st.session_state.search_triggered = True
-            st.session_state.selected_hospital_id = None
-            st.rerun() # <-- FIX #1: Replaced experimental_rerun
+            st.session_state.selected_hospital_id = None # Reset selection
+            st.experimental_rerun() # Force a clean rerun
         else:
             st.warning("Please enter an address first.")
             st.session_state.search_triggered = False
 
     if st.button("🔄 Reset Search"):
+        # Clear all relevant state variables
         st.session_state.search_triggered = False
         st.session_state.selected_hospital_id = None
         st.session_state.address = ""
-        st.rerun() # <-- FIX #2: Replaced experimental_rerun
+        st.experimental_rerun()
+    # --- END OF FIX ---
 
 
 # --- 5. Main Page UI ---
@@ -98,7 +102,9 @@ def geocode_address(address):
 filtered_df = pd.DataFrame()
 user_coords = None
 
+# We now only perform calculations if the search has been triggered
 if st.session_state.search_triggered:
+    # Use the address from session state for consistency
     user_coords = geocode_address(st.session_state.address)
     if user_coords:
         temp_df = df.copy()
@@ -122,4 +128,57 @@ if not filtered_df.empty:
     st.info("Click on a blue hospital marker on the map to see its detailed statistics below.")
     
     m = folium.Map(location=user_coords, zoom_start=9)
-    folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to
+    folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to(m)
+    marker_cluster = MarkerCluster().add_to(m)
+    for idx, row in unique_hospitals_df.iterrows():
+        popup_content = f"<b>{row['Hospital Name']}</b><br>City: {row['City']}"
+        folium.Marker(
+            location=[row['latitude'], row['longitude']], 
+            popup=folium.Popup(popup_content, max_width=300), 
+            icon=folium.Icon(icon="hospital-o", prefix="fa", color="blue")
+        ).add_to(marker_cluster)
+        
+    map_data = st_folium(m, width="100%", height=500, center=user_coords, zoom=9)
+
+    if map_data and map_data.get("last_object_clicked"):
+        clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])
+        distances = unique_hospitals_df.apply(
+            lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1
+        )
+        st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
+
+    if st.session_state.selected_hospital_id:
+        selected_hospital_all_data = filtered_df[filtered_df['ID'] == st.session_state.selected_hospital_id]
+        selected_hospital_details = selected_hospital_all_data.drop_duplicates(subset=['ID']).iloc[0]
+
+        st.header(f"📊 Detailed Data for: {selected_hospital_details['Hospital Name']}")
+
+        st.subheader("Revision Surgery Statistics (2020-2024)")
+        col1, col2 = st.columns(2)
+        col1.metric("Total Revision Surgeries", f"{selected_hospital_details['Revision Surgeries (N)']:.0f}")
+        col2.metric("Revision Surgery Rate", f"{selected_hospital_details['Revision Surgeries (%)']:.1f}%")
+        
+        hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index(ascending=False)
+
+        st.subheader("Bariatric Procedures by Year")
+        bariatric_cols = ['ABL', 'ANN', 'BPG', 'REV', 'SLE']
+        bariatric_df = hospital_annual_data[bariatric_cols]
+        if not bariatric_df.empty and bariatric_df.sum().sum() > 0:
+            st.bar_chart(bariatric_df)
+            st.dataframe(bariatric_df)
+        else:
+            st.info("No bariatric procedure data available for this hospital.")
+
+        st.subheader("Surgical Approaches by Year")
+        approach_cols = ['COE', 'LAP', 'ROB']
+        approach_df = hospital_annual_data[approach_cols]
+        if not approach_df.empty and approach_df.sum().sum() > 0:
+            st.bar_chart(approach_df)
+            st.dataframe(approach_df)
+        else:
+            st.info("No surgical approach data available for this hospital.")
+
+elif st.session_state.search_triggered:
+    st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
+else:
+    st.info("Enter your address in the sidebar and click 'Search Hospitals' to begin.")
