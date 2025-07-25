@@ -117,20 +117,12 @@ else:
 
 # --- 7. Display Results ---
 if not filtered_df.empty:
-    # Create a dataframe with unique hospitals for the main list and map
     unique_hospitals_df = filtered_df.drop_duplicates(subset=['ID']).copy()
 
-    # --- THIS IS THE FIX ---
-    # Get the 2024 data and ensure it's unique per hospital ID before creating the mapping Series
     data_2024 = filtered_df[filtered_df['annee'] == 2024].drop_duplicates(subset=['ID'])
-    # --- END OF FIX ---
-    
     total_2024 = data_2024.set_index('ID')['total_procedures_year']
     unique_hospitals_df['Total Procedures (2024)'] = unique_hospitals_df['ID'].map(total_2024).fillna(0).astype(int)
-
-    # Rename the period total column for display
     unique_hospitals_df.rename(columns={'total_procedures_period': 'Total Procedures (2020-2024)'}, inplace=True)
-
 
     st.header(f"🗺️ Map of {len(unique_hospitals_df)} Found Hospitals")
     
@@ -142,19 +134,13 @@ if not filtered_df.empty:
     marker_cluster = MarkerCluster().add_to(m)
 
     for idx, row in unique_hospitals_df.iterrows():
-        popup_html = f"""
-        <b>{row['Hospital Name']}</b><br>
-        <b>City:</b> {row['City']}<br>
-        <b>Status:</b> {row['Status']}<br>
-        <b>Distance:</b> {row['Distance (km)']:.1f} km
-        """
+        popup_html = f"<b>{row['Hospital Name']}</b><br><b>City:</b> {row['City']}<br><b>Status:</b> {row['Status']}<br><b>Distance:</b> {row['Distance (km)']:.1f} km"
         folium.Marker(
             location=[row['latitude'], row['longitude']],
             popup=folium.Popup(popup_html, max_width=300),
             icon=folium.Icon(icon="hospital-o", prefix="fa", color="blue")
         ).add_to(marker_cluster)
     st_folium(m, width="100%", height=500, center=st.session_state["user_coords"], zoom=9)
-
 
     st.header("📋 Hospital Details")
     display_cols = ['Hospital Name', 'City', 'Status', 'Distance (km)', 'Total Procedures (2024)', 'Total Procedures (2020-2024)']
@@ -178,13 +164,32 @@ if not filtered_df.empty:
         col1.metric("Total Revision Surgeries", f"{selected_hospital_details['Revision Surgeries (N)']:.0f}")
         col2.metric("Revision Surgery Rate", f"{selected_hospital_details['Revision Surgeries (%)']:.1f}%")
         
-        st.subheader("Annual Procedure Counts")
+        # --- NEW VISUALIZATION SECTION ---
+        # Prepare the data for the selected hospital
         hospital_annual_data = filtered_df[filtered_df['Hospital Name'] == hospital_to_view].copy()
+        hospital_annual_data.set_index('annee', inplace=True)
+        hospital_annual_data.sort_index(ascending=False, inplace=True)
+
+        # 1. Bariatric Procedures Chart
+        st.subheader("Bariatric Procedures by Year")
+        bariatric_cols = ['ABL', 'ANN', 'BPG', 'REV', 'SLE']
+        bariatric_df = hospital_annual_data[bariatric_cols]
         
-        annual_cols = ['annee', 'ABL', 'ANN', 'BPG', 'REV', 'SLE', 'COE', 'LAP', 'ROB']
-        display_annual = hospital_annual_data[annual_cols].rename(columns={'annee': 'Year'}).set_index('Year')
+        if not bariatric_df.empty and bariatric_df.sum().sum() > 0:
+            st.bar_chart(bariatric_df)
+        else:
+            st.info("No bariatric procedure data available for this hospital.")
+
+        # 2. Surgical Approaches Chart
+        st.subheader("Surgical Approaches by Year")
+        approach_cols = ['COE', 'LAP', 'ROB']
+        approach_df = hospital_annual_data[approach_cols]
         
-        st.table(display_annual.sort_index(ascending=False))
+        if not approach_df.empty and approach_df.sum().sum() > 0:
+            st.bar_chart(approach_df)
+        else:
+            st.info("No surgical approach data available for this hospital.")
+        # --- END OF NEW VISUALIZATION SECTION ---
 
 elif st.session_state["search_triggered"]:
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
