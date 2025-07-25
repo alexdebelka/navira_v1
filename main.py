@@ -175,4 +175,3 @@ elif st.session_state.search_triggered:
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
 else:
     st.info("Enter your address in the sidebar and click 'Search Hospitals' to begin.")
-�
