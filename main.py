@@ -50,6 +50,7 @@ def load_data(path="flattened_v3.csv"):
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
 
+        # --- FIX: More robustly convert all numeric columns to prevent any chart errors ---
         numeric_int_cols = [
             'Revision Surgeries (N)', 'total_procedures_period', 'annee',
             'total_procedures_year', 'university', 'cso', 'LAB_SOFFCO'
@@ -123,7 +124,7 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v18")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v19")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception as e:
@@ -190,14 +191,12 @@ if not filtered_df.empty:
 
             st.header(f"📊 Detailed Data for: {selected_hospital_details['Hospital Name']}")
 
-            # --- FIX 1: Use st.markdown for smaller, responsive text instead of st.metric ---
             st.subheader("Hospital Information")
             col1, col2, col3 = st.columns(3)
             col1.markdown(f"**City:** {selected_hospital_details['City']}")
             col2.markdown(f"**Status:** {selected_hospital_details['Status']}")
             col3.markdown(f"**Distance:** {selected_hospital_details['Distance (km)']:.1f} km")
             
-            # --- FIX 2: Add "negative" labels for clarity ---
             st.subheader("Labels & Affiliations")
             labels_col, geo_col = st.columns(2)
 
