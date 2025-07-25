@@ -21,7 +21,7 @@ if "user_coords" not in st.session_state:
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
-def load_data(path="flattened_denormalized_v2.csv"): 
+def load_data(path="final_flat_data.csv"): # <-- Make sure this matches the name of your new CSV file
     """
     Loads the final FLAT denormalized hospital data with pre-calculated totals.
     """
@@ -120,8 +120,11 @@ if not filtered_df.empty:
     # Create a dataframe with unique hospitals for the main list and map
     unique_hospitals_df = filtered_df.drop_duplicates(subset=['ID']).copy()
 
-    # Get the 2024 data to map to the unique hospitals list
-    data_2024 = filtered_df[filtered_df['annee'] == 2024]
+    # --- THIS IS THE FIX ---
+    # Get the 2024 data and ensure it's unique per hospital ID before creating the mapping Series
+    data_2024 = filtered_df[filtered_df['annee'] == 2024].drop_duplicates(subset=['ID'])
+    # --- END OF FIX ---
+    
     total_2024 = data_2024.set_index('ID')['total_procedures_year']
     unique_hospitals_df['Total Procedures (2024)'] = unique_hospitals_df['ID'].map(total_2024).fillna(0).astype(int)
 
@@ -185,4 +188,3 @@ if not filtered_df.empty:
 
 elif st.session_state["search_triggered"]:
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
-
