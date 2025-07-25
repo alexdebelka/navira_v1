@@ -42,15 +42,11 @@ def load_data(path="flat_denormalized_data.csv"):
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
         df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
 
-        # --- THIS IS THE MORE ROBUST FIX ---
-        # Step 1: Explicitly drop any rows where latitude or longitude is not a valid number.
+        # Drop rows with invalid coordinates
         df.dropna(subset=['latitude', 'longitude'], inplace=True)
-
-        # Step 2: As a final safety check, filter for valid geographic ranges.
         df = df[df['latitude'].between(-90, 90)]
         df = df[df['longitude'].between(-180, 180)]
-        # --- END OF FIX ---
-
+        
         return df
     except FileNotFoundError:
         st.error(f"Fatal Error: The data file '{path}' was not found. Please make sure it's in the same directory as the script.")
@@ -104,7 +100,6 @@ if st.session_state["search_triggered"]:
 
         if st.session_state["user_coords"]:
             temp_df = df.copy()
-            # This calculation is now safe
             temp_df['Distance (km)'] = temp_df.apply(
                 lambda row: geodesic(st.session_state["user_coords"], (row['latitude'], row['longitude'])).km,
                 axis=1
@@ -152,7 +147,12 @@ if not filtered_df.empty:
 
     st.header("📋 Hospital Details")
     display_cols = ['Hospital Name', 'City', 'Status', 'Distance (km)', 'Redo Surgeries (N)', 'Redo Surgeries (%)']
-    st.dataframe(unique_hospitals_df[display_cols].style.format({'Distance (km)': "{:.1f}", 'Redo Surgeries (%)': "{:.1f}"}))
+    
+    # --- FIX #1: Hide the index column on the dataframe ---
+    st.dataframe(
+        unique_hospitals_df[display_cols].style.format({'Distance (km)': "{:.1f}", 'Redo Surgeries (%)': "{:.1f}"}), 
+        hide_index=True
+    )
 
     st.header("📊 Detailed Annual Procedure Data")
     hospital_to_view = st.selectbox(
@@ -166,7 +166,8 @@ if not filtered_df.empty:
         annual_cols = ['annee', 'ABL', 'ANN', 'BPG', 'REV', 'SLE', 'COE', 'LAP', 'ROB']
         display_annual = hospital_annual_data[annual_cols].rename(columns={'annee': 'Year'}).set_index('Year')
         
-        st.table(display_annual)
+        # --- FIX #2: Sort the annual data by year in descending order ---
+        st.table(display_annual.sort_index(ascending=False))
 
 elif st.session_state["search_triggered"]:
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
