@@ -8,7 +8,7 @@ from streamlit_folium import st_folium
 
 # --- 1. App Configuration ---
 st.set_page_config(
-    page_title="Navira - Hospital Explorer",
+    page_title="Navira - Where Care Finds Its Path",
     page_icon="🏥",
     layout="wide"
 )
@@ -87,27 +87,32 @@ df = load_data()
 # --- 4. Sidebar for User Input and Filters ---
 with st.sidebar:
     st.header("🔍 Search Controls")
-    address_input = st.text_input(
-        "📍 Enter your address or postal code",
-        value=st.session_state.address,
-        placeholder="e.g., 75019 or Paris"
-    )
-    radius_km = st.slider("📏 Search Radius (km)", min_value=5, max_value=500, value=50, step=5)
+    # --- FIX: Use a form for 'Enter to Submit' functionality ---
+    with st.form(key="search_form"):
+        address_input = st.text_input(
+            "📍 Enter your address or postal code",
+            value=st.session_state.address,
+            placeholder="e.g., 75019 or Paris"
+        )
+        radius_km = st.slider("📏 Search Radius (km)", min_value=5, max_value=500, value=50, step=5)
 
-    st.header("⚙️ Filter Results")
-    unique_statuses = ['All'] + sorted(df['Status'].dropna().unique().tolist())
-    selected_status = st.selectbox("Filter by Hospital Status", unique_statuses)
+        st.header("⚙️ Filter Results")
+        unique_statuses = ['All'] + sorted(df['Status'].dropna().unique().tolist())
+        selected_status = st.selectbox("Filter by Hospital Status", unique_statuses)
+        
+        # This button submits the form
+        submitted = st.form_submit_button("🔎 Search Hospitals")
 
-    if st.button("🔎 Search Hospitals"):
-        if address_input:
-            st.session_state.address = address_input
-            st.session_state.search_triggered = True
-            st.session_state.selected_hospital_id = None
-            st.rerun()
-        else:
-            st.warning("Please enter an address first.")
-            st.session_state.search_triggered = False
+        if submitted:
+            if address_input:
+                st.session_state.address = address_input
+                st.session_state.search_triggered = True
+                st.session_state.selected_hospital_id = None
+            else:
+                st.warning("Please enter an address first.")
+                st.session_state.search_triggered = False
 
+    # Reset button is outside the form to have its own action
     if st.button("🔄 Reset Search"):
         st.session_state.search_triggered = False
         st.session_state.selected_hospital_id = None
