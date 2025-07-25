@@ -14,12 +14,14 @@ st.set_page_config(
 )
 
 # --- 2. Session State Initialization ---
-# This will store the ID of the hospital clicked on the map
-if "selected_hospital_id" not in st.session_state:
-    st.session_state.selected_hospital_id = None
-
+# Initialize all session state variables we will use
 if "search_triggered" not in st.session_state:
     st.session_state.search_triggered = False
+if "selected_hospital_id" not in st.session_state:
+    st.session_state.selected_hospital_id = None
+if "address" not in st.session_state:
+    st.session_state.address = ""
+
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
@@ -49,25 +51,37 @@ df = load_data()
 # --- 4. Sidebar for User Input and Filters ---
 with st.sidebar:
     st.header("🔍 Search Controls")
-    address = st.text_input("📍 Enter your address or postal code", placeholder="e.g., 75019 or Paris")
+    address_input = st.text_input(
+        "📍 Enter your address or postal code", 
+        value=st.session_state.address,
+        placeholder="e.g., 75019 or Paris"
+    )
     radius_km = st.slider("📏 Search Radius (km)", min_value=5, max_value=500, value=50, step=5)
 
     st.header("⚙️ Filter Results")
     unique_statuses = ['All'] + sorted(df['Status'].dropna().unique().tolist())
     selected_status = st.selectbox("Filter by Hospital Status", unique_statuses)
 
+    # --- THIS IS THE FIX: More robust state handling ---
     if st.button("🔎 Search Hospitals"):
-        if address:
+        if address_input:
+            # Save the input to session state and trigger the search flag
+            st.session_state.address = address_input
             st.session_state.search_triggered = True
-            st.session_state.selected_hospital_id = None # Reset selection on new search
+            st.session_state.selected_hospital_id = None # Reset selection
+            st.experimental_rerun() # Force a clean rerun
         else:
             st.warning("Please enter an address first.")
             st.session_state.search_triggered = False
 
     if st.button("🔄 Reset Search"):
+        # Clear all relevant state variables
         st.session_state.search_triggered = False
         st.session_state.selected_hospital_id = None
+        st.session_state.address = ""
         st.experimental_rerun()
+    # --- END OF FIX ---
+
 
 # --- 5. Main Page UI ---
 st.title("🏥 Navira - French Hospital Explorer")
@@ -79,7 +93,7 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v5")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v6")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception:
@@ -87,8 +101,11 @@ def geocode_address(address):
 
 filtered_df = pd.DataFrame()
 user_coords = None
+
+# We now only perform calculations if the search has been triggered
 if st.session_state.search_triggered:
-    user_coords = geocode_address(address)
+    # Use the address from session state for consistency
+    user_coords = geocode_address(st.session_state.address)
     if user_coords:
         temp_df = df.copy()
         temp_df['Distance (km)'] = temp_df.apply(
@@ -99,7 +116,7 @@ if st.session_state.search_triggered:
             temp_df = temp_df[temp_df['Status'] == selected_status]
         filtered_df = temp_df.sort_values('Distance (km)')
     else:
-        if address: # Only show error if an address was actually entered
+        if st.session_state.address:
             st.error("Address not found. Please try a different address or format.")
         st.session_state.search_triggered = False
 
@@ -123,23 +140,13 @@ if not filtered_df.empty:
         
     map_data = st_folium(m, width="100%", height=500, center=user_coords, zoom=9)
 
-    # --- NEW, ROBUST LOGIC ---
-    # Check if a marker was clicked by looking at the returned coordinates
     if map_data and map_data.get("last_object_clicked"):
-        clicked_coords = (
-            map_data["last_object_clicked"]["lat"],
-            map_data["last_object_clicked"]["lng"]
-        )
-        
-        # Find the hospital in our unique list that is closest to the clicked point
+        clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])
         distances = unique_hospitals_df.apply(
-            lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km,
-            axis=1
+            lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1
         )
-        # Get the ID of the hospital with the minimum distance (this will be the one clicked)
         st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
 
-    # --- Display details only for the selected hospital ---
     if st.session_state.selected_hospital_id:
         selected_hospital_all_data = filtered_df[filtered_df['ID'] == st.session_state.selected_hospital_id]
         selected_hospital_details = selected_hospital_all_data.drop_duplicates(subset=['ID']).iloc[0]
