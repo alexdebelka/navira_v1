@@ -38,7 +38,7 @@ SURGICAL_APPROACH_NAMES = {
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
-def load_data(path="flattened_v3.csv"): # UPDATED: Using the new flattened file
+def load_data(path="flattened_v3.csv"):
     """
     Loads and cleans the final FLAT denormalized hospital data with robust type conversion.
     """
@@ -72,7 +72,7 @@ def load_data(path="flattened_v3.csv"): # UPDATED: Using the new flattened file
         # Ensure geographic text columns are strings
         for col in ['lib_dep', 'lib_reg']:
              if col in df.columns:
-                df[col] = df[col].astype(str)
+                df[col] = df[col].astype(str).fillna('N/A')
 
         df.drop_duplicates(subset=['ID', 'annee'], keep='first', inplace=True)
         
@@ -80,8 +80,13 @@ def load_data(path="flattened_v3.csv"): # UPDATED: Using the new flattened file
         df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
         return df
     except FileNotFoundError:
-        st.error(f"Fatal Error: The data file '{path}' was not found. Please make sure it's in the same directory.")
-        return pd.DataFrame()
+        # --- FIX: Stop the app if the data file is not found ---
+        st.error(f"Fatal Error: The data file '{path}' was not found. Please make sure it's in the same directory as the script.")
+        st.stop() # This prevents the rest of the app from running and causing a crash.
+    except KeyError as e:
+        st.error(f"A required column is missing from the data file: {e}. Please check the CSV file.")
+        st.stop()
+
 
 df = load_data()
 
@@ -125,7 +130,7 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v15")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v16")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception as e:
@@ -198,7 +203,6 @@ if not filtered_df.empty:
             col2.metric("Status", selected_hospital_details['Status'])
             col3.metric("Distance from you", f"{selected_hospital_details['Distance (km)']:.1f} km")
             
-            # --- NEW: Display Labels and Geographic Info ---
             st.subheader("Labels & Affiliations")
             labels_col, geo_col = st.columns(2)
 
