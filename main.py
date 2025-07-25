@@ -38,34 +38,42 @@ SURGICAL_APPROACH_NAMES = {
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
-def load_data(path="flattened_denormalized_v2.csv"):
+def load_data(path="flattened_v3.csv"): # UPDATED: Using the new flattened file
     """
     Loads and cleans the final FLAT denormalized hospital data with robust type conversion.
     """
     try:
         df = pd.read_csv(path)
+        # Rename columns for consistency and readability
         df.rename(columns={
             'id': 'ID', 'rs': 'Hospital Name', 'statut': 'Status', 'ville': 'City',
-            'latitude': 'latitude', 'longitude': 'longitude',
             'revision_surgeries_n': 'Revision Surgeries (N)',
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
 
-        # --- FIX: Robustly convert all expected numeric columns to prevent chart errors ---
+        # Define all columns that should be numeric
         numeric_int_cols = [
-            'Revision Surgeries (N)', 'total_procedures_period', 'annee', 'total_procedures_year'
+            'Revision Surgeries (N)', 'total_procedures_period', 'annee',
+            'total_procedures_year', 'university', 'cso', 'LAB_SOFFCO'
         ] + list(BARIATRIC_PROCEDURE_NAMES.keys()) + list(SURGICAL_APPROACH_NAMES.keys())
         
         numeric_float_cols = ['latitude', 'longitude', 'Revision Surgeries (%)']
 
+        # Clean and convert integer columns
         for col in numeric_int_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
         
+        # Clean and convert float columns
         for col in numeric_float_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
+        # Ensure geographic text columns are strings
+        for col in ['lib_dep', 'lib_reg']:
+             if col in df.columns:
+                df[col] = df[col].astype(str)
+
         df.drop_duplicates(subset=['ID', 'annee'], keep='first', inplace=True)
         
         df.dropna(subset=['latitude', 'longitude'], inplace=True)
@@ -117,7 +125,7 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v14")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v15")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception as e:
@@ -156,12 +164,7 @@ if not filtered_df.empty:
     
     marker_cluster = MarkerCluster().add_to(m)
     for idx, row in unique_hospitals_df.iterrows():
-        popup_content = f"""
-        <b>{row['Hospital Name']}</b><br>
-        <b>City:</b> {row['City']}<br>
-        <b>Status:</b> {row['Status']}<br>
-        <b>Distance:</b> {row['Distance (km)']:.1f} km
-        """
+        popup_content = f"<b>{row['Hospital Name']}</b><br>City: {row['City']}"
         folium.Marker(
             location=[row['latitude'], row['longitude']],
             popup=folium.Popup(popup_content, max_width=300),
@@ -194,6 +197,23 @@ if not filtered_df.empty:
             col1.metric("City", selected_hospital_details['City'])
             col2.metric("Status", selected_hospital_details['Status'])
             col3.metric("Distance from you", f"{selected_hospital_details['Distance (km)']:.1f} km")
+            
+            # --- NEW: Display Labels and Geographic Info ---
+            st.subheader("Labels & Affiliations")
+            labels_col, geo_col = st.columns(2)
+
+            with labels_col:
+                if selected_hospital_details['LAB_SOFFCO'] == 1:
+                    st.success("✅ Centre of Excellence (Bariatric French Society)")
+                if selected_hospital_details['cso'] == 1:
+                    st.success("✅ Centre of Excellence (Health Ministry)")
+                if selected_hospital_details['university'] == 1:
+                    st.info("🎓 Academic Affiliation")
+
+            with geo_col:
+                st.write(f"**Department:** {selected_hospital_details['lib_dep']} ({selected_hospital_details['code_dep']})")
+                st.write(f"**Region:** {selected_hospital_details['lib_reg']} ({selected_hospital_details['code_reg']})")
+
             st.markdown("---")
             
             st.subheader("Revision Surgery Statistics (2020-2024)")
