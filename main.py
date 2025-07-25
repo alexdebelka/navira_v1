@@ -42,8 +42,11 @@ def load_data(path="flat_denormalized_data.csv"):
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
         df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
 
-        # --- THIS IS THE FIX ---
-        # Filter out rows with invalid coordinate ranges before any calculations
+        # --- THIS IS THE MORE ROBUST FIX ---
+        # Step 1: Explicitly drop any rows where latitude or longitude is not a valid number.
+        df.dropna(subset=['latitude', 'longitude'], inplace=True)
+
+        # Step 2: As a final safety check, filter for valid geographic ranges.
         df = df[df['latitude'].between(-90, 90)]
         df = df[df['longitude'].between(-180, 180)]
         # --- END OF FIX ---
@@ -101,7 +104,7 @@ if st.session_state["search_triggered"]:
 
         if st.session_state["user_coords"]:
             temp_df = df.copy()
-            # This line will now be safe because the data is clean
+            # This calculation is now safe
             temp_df['Distance (km)'] = temp_df.apply(
                 lambda row: geodesic(st.session_state["user_coords"], (row['latitude'], row['longitude'])).km,
                 axis=1
@@ -120,7 +123,6 @@ else:
 
 # --- 7. Display Results ---
 if not filtered_df.empty:
-    # Create a new dataframe with unique hospitals for the map and main list
     unique_hospitals_df = filtered_df.drop_duplicates(subset=['ID']).copy()
 
     st.header(f"🗺️ Map of {len(unique_hospitals_df)} Found Hospitals")
