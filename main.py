@@ -236,7 +236,7 @@ if not filtered_df.empty:
             hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index(ascending=False)
 
             st.subheader("Bariatric Procedures by Year")
-            bariatric_df = hospital_annual_data[list(BARIATRIC_PROCEDURE_NAMES.keys())].rename(columns=BARIATRIC_PROCEDURE_NAMES)
+            bariatric_df = hospital_annual_data[list(BARIATRIC_PROCEDURE_NAMES.keys())].rename(columns=BARIATRIC_PROCEDURE_NAMES).astype(float)
             if not bariatric_df.empty and bariatric_df.sum().sum() > 0:
                 st.bar_chart(bariatric_df)
                 st.dataframe(bariatric_df)
@@ -244,7 +244,7 @@ if not filtered_df.empty:
                 st.info("No bariatric procedure data available for this hospital.")
 
             st.subheader("Surgical Approaches by Year")
-            approach_df = hospital_annual_data[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES)
+            approach_df = hospital_annual_data[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES).astype(float)
             if not approach_df.empty and approach_df.sum().sum() > 0:
                 st.bar_chart(approach_df)
                 st.dataframe(approach_df)
