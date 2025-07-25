@@ -9,7 +9,7 @@ from streamlit_folium import st_folium
 # --- 1. App Configuration ---
 st.set_page_config(
     page_title="Navira - Hospital Explorer",
-    page_icon="🏥",
+    page_icon="�",
     layout="wide"
 )
 
@@ -23,7 +23,7 @@ if "search_triggered" not in st.session_state:
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
-def load_data(path="flattened_denormalized_v2.csv"):
+def load_data(path="final_flat_data.csv"):
     """
     Loads the final FLAT denormalized hospital data with pre-calculated totals.
     """
@@ -79,7 +79,7 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v4")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v5")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception:
@@ -99,7 +99,8 @@ if st.session_state.search_triggered:
             temp_df = temp_df[temp_df['Status'] == selected_status]
         filtered_df = temp_df.sort_values('Distance (km)')
     else:
-        st.error("Address not found. Please try a different address or format.")
+        if address: # Only show error if an address was actually entered
+            st.error("Address not found. Please try a different address or format.")
         st.session_state.search_triggered = False
 
 # --- 7. Display Results ---
@@ -113,33 +114,33 @@ if not filtered_df.empty:
     folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to(m)
     marker_cluster = MarkerCluster().add_to(m)
     for idx, row in unique_hospitals_df.iterrows():
-        # We will pass the hospital ID in the popup to identify it upon click
-        popup_content = f"<b>{row['Hospital Name']}</b><br>City: {row['City']}<div id='hospital_id' style='display: none;'>{row['ID']}</div>"
+        popup_content = f"<b>{row['Hospital Name']}</b><br>City: {row['City']}"
         folium.Marker(
             location=[row['latitude'], row['longitude']], 
             popup=folium.Popup(popup_content, max_width=300), 
             icon=folium.Icon(icon="hospital-o", prefix="fa", color="blue")
         ).add_to(marker_cluster)
         
-    # Capture the map's state, including the last clicked marker
     map_data = st_folium(m, width="100%", height=500, center=user_coords, zoom=9)
 
-    # --- NEW LOGIC: Check if a marker was clicked ---
-    if map_data and map_data.get("last_object_clicked_popup"):
-        # A bit of string manipulation to extract the ID from the popup's HTML
-        popup_html = map_data["last_object_clicked_popup"]
-        start_str = "<div id='hospital_id' style='display: none;'>"
-        end_str = "</div>"
-        start_index = popup_html.find(start_str)
-        if start_index != -1:
-            start_index += len(start_str)
-            end_index = popup_html.find(end_str, start_index)
-            clicked_id = popup_html[start_index:end_index]
-            st.session_state.selected_hospital_id = clicked_id
+    # --- NEW, ROBUST LOGIC ---
+    # Check if a marker was clicked by looking at the returned coordinates
+    if map_data and map_data.get("last_object_clicked"):
+        clicked_coords = (
+            map_data["last_object_clicked"]["lat"],
+            map_data["last_object_clicked"]["lng"]
+        )
+        
+        # Find the hospital in our unique list that is closest to the clicked point
+        distances = unique_hospitals_df.apply(
+            lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km,
+            axis=1
+        )
+        # Get the ID of the hospital with the minimum distance (this will be the one clicked)
+        st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
 
-    # --- NEW DISPLAY: Show details only for the selected hospital ---
+    # --- Display details only for the selected hospital ---
     if st.session_state.selected_hospital_id:
-        # Find the full data for the selected hospital
         selected_hospital_all_data = filtered_df[filtered_df['ID'] == st.session_state.selected_hospital_id]
         selected_hospital_details = selected_hospital_all_data.drop_duplicates(subset=['ID']).iloc[0]
 
@@ -174,3 +175,4 @@ elif st.session_state.search_triggered:
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
 else:
     st.info("Enter your address in the sidebar and click 'Search Hospitals' to begin.")
+�
