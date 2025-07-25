@@ -23,15 +23,15 @@ if "address" not in st.session_state:
 
 # --- MAPPING DICTIONARIES FOR READABILITY ---
 BARIATRIC_PROCEDURE_NAMES = {
-    'ABL': 'Gastric Band Removal',
-    'ANN': 'Adjustable Gastric Band',
+    'ABL': 'Gastric Banding',
+    'ANN': 'Ring Adjustment/Removal',
     'BPG': 'Bypass Gastric',
-    'REV': 'Conversion Surgery',
+    'REV': 'Revision Surgery',
     'SLE': 'Sleeve Gastrectomy'
 }
 
 SURGICAL_APPROACH_NAMES = {
-    'COE': 'Open Surgery',
+    'COE': 'Open Coelioscopy',
     'LAP': 'Laparoscopy',
     'ROB': 'Robotic Assistance'
 }
@@ -51,6 +51,12 @@ def load_data(path="flattened_denormalized_v2.csv"):
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
 
+        # --- FIX: Ensure all procedure columns are clean and numeric for charting ---
+        procedure_cols = list(BARIATRIC_PROCEDURE_NAMES.keys()) + list(SURGICAL_APPROACH_NAMES.keys())
+        for col in procedure_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+        
         df.drop_duplicates(subset=['ID', 'annee'], keep='first', inplace=True)
         
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
@@ -104,7 +110,7 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v11")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v12")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception as e:
@@ -191,7 +197,6 @@ if not filtered_df.empty:
             hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index(ascending=False)
 
             st.subheader("Bariatric Procedures by Year")
-            # --- FIX: Use the dictionary to get readable names ---
             bariatric_df = hospital_annual_data[BARIATRIC_PROCEDURE_NAMES.keys()].rename(columns=BARIATRIC_PROCEDURE_NAMES)
             if not bariatric_df.empty and bariatric_df.sum().sum() > 0:
                 st.bar_chart(bariatric_df)
@@ -200,7 +205,6 @@ if not filtered_df.empty:
                 st.info("No bariatric procedure data available for this hospital.")
 
             st.subheader("Surgical Approaches by Year")
-            # --- FIX: Use the dictionary to get readable names ---
             approach_df = hospital_annual_data[SURGICAL_APPROACH_NAMES.keys()].rename(columns=SURGICAL_APPROACH_NAMES)
             if not approach_df.empty and approach_df.sum().sum() > 0:
                 st.bar_chart(approach_df)
