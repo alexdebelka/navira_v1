@@ -14,41 +14,31 @@ st.set_page_config(
 )
 
 # --- 2. Session State Initialization ---
+# Use .get() for safer access to session state
 if "search_triggered" not in st.session_state:
-    st.session_state["search_triggered"] = False
-if "user_coords" not in st.session_state:
-    st.session_state["user_coords"] = None
+    st.session_state.search_triggered = False
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
-def load_data(path="flattened_denormalized_v2.csv"): # <-- Make sure this matches the name of your new CSV file
+def load_data(path="flattened_denormalized_v2.csv"):
     """
     Loads the final FLAT denormalized hospital data with pre-calculated totals.
     """
     try:
         df = pd.read_csv(path)
-        # Rename columns to be more user-friendly
         df.rename(columns={
-            'id': 'ID',
-            'rs': 'Hospital Name',
-            'statut': 'Status',
-            'ville': 'City',
-            'latitude': 'latitude',
-            'longitude': 'longitude',
+            'id': 'ID', 'rs': 'Hospital Name', 'statut': 'Status', 'ville': 'City',
+            'latitude': 'latitude', 'longitude': 'longitude',
             'revision_surgeries_n': 'Revision Surgeries (N)',
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
-
-        # Robustly clean coordinate data
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
         df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
         df.dropna(subset=['latitude', 'longitude'], inplace=True)
-        df = df[df['latitude'].between(-90, 90)]
-        df = df[df['longitude'].between(-180, 180)]
-        
+        df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
         return df
     except FileNotFoundError:
-        st.error(f"Fatal Error: The data file '{path}' was not found. Please make sure it's in the same directory as the script.")
+        st.error(f"Fatal Error: The data file '{path}' was not found. Please make sure it's in the same directory.")
         return pd.DataFrame()
 
 df = load_data()
@@ -64,12 +54,14 @@ with st.sidebar:
     selected_status = st.selectbox("Filter by Hospital Status", unique_statuses)
 
     if st.button("🔎 Search Hospitals"):
-        st.session_state["search_triggered"] = True
-        st.session_state["user_coords"] = None
+        if address:
+            st.session_state.search_triggered = True
+        else:
+            st.warning("Please enter an address first.")
+            st.session_state.search_triggered = False
 
     if st.button("🔄 Reset Search"):
-        st.session_state["search_triggered"] = False
-        st.session_state["user_coords"] = None
+        st.session_state.search_triggered = False
         st.experimental_rerun()
 
 # --- 5. Main Page UI ---
@@ -82,7 +74,7 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v2")
         enriched_address = address.strip()
         if enriched_address.isdigit() and len(enriched_address) == 5:
             enriched_address += ", France"
@@ -91,31 +83,33 @@ def geocode_address(address):
     except Exception:
         return None
 
+# Initialize an empty dataframe for the results
 filtered_df = pd.DataFrame()
-if st.session_state["search_triggered"]:
-    if address:
-        if not st.session_state["user_coords"]:
-             st.session_state["user_coords"] = geocode_address(address)
 
-        if st.session_state["user_coords"]:
-            temp_df = df.copy()
-            temp_df['Distance (km)'] = temp_df.apply(
-                lambda row: geodesic(st.session_state["user_coords"], (row['latitude'], row['longitude'])).km,
-                axis=1
-            )
-            temp_df = temp_df[temp_df['Distance (km)'] <= radius_km]
-            if selected_status != 'All':
-                temp_df = temp_df[temp_df['Status'] == selected_status]
-            
-            filtered_df = temp_df.sort_values('Distance (km)')
-        else:
-            st.error("Address not found. Please try a different address or format.")
+# --- THIS IS THE FIX: We now only run the filtering logic if the search is triggered ---
+if st.session_state.search_triggered:
+    user_coords = geocode_address(address)
+    if user_coords:
+        # If geocoding is successful, perform all filtering
+        temp_df = df.copy()
+        temp_df['Distance (km)'] = temp_df.apply(
+            lambda row: geodesic(user_coords, (row['latitude'], row['longitude'])).km,
+            axis=1
+        )
+        temp_df = temp_df[temp_df['Distance (km)'] <= radius_km]
+        if selected_status != 'All':
+            temp_df = temp_df[temp_df['Status'] == selected_status]
+        
+        filtered_df = temp_df.sort_values('Distance (km)')
     else:
-        st.warning("Please enter an address to start a search.")
-else:
-    st.info("Enter your address in the sidebar and click 'Search Hospitals' to begin.")
+        # If geocoding fails, show an error and reset the search state
+        st.error("Address not found. Please try a different address or format.")
+        st.session_state.search_triggered = False
+# --- END OF FIX ---
+
 
 # --- 7. Display Results ---
+# This section now only runs if the filtering logic above was successful and produced a result.
 if not filtered_df.empty:
     unique_hospitals_df = filtered_df.drop_duplicates(subset=['ID']).copy()
 
@@ -126,9 +120,9 @@ if not filtered_df.empty:
 
     st.header(f"🗺️ Map of {len(unique_hospitals_df)} Found Hospitals")
     
-    m = folium.Map(location=st.session_state["user_coords"], zoom_start=9)
+    m = folium.Map(location=user_coords, zoom_start=9)
     folium.Marker(
-        location=st.session_state["user_coords"], popup="Your Location",
+        location=user_coords, popup="Your Location",
         icon=folium.Icon(icon="user", prefix="fa", color="red")
     ).add_to(m)
     marker_cluster = MarkerCluster().add_to(m)
@@ -140,15 +134,12 @@ if not filtered_df.empty:
             popup=folium.Popup(popup_html, max_width=300),
             icon=folium.Icon(icon="hospital-o", prefix="fa", color="blue")
         ).add_to(marker_cluster)
-    st_folium(m, width="100%", height=500, center=st.session_state["user_coords"], zoom=9)
+    st_folium(m, width="100%", height=500, center=user_coords, zoom=9)
 
     st.header("📋 Hospital Details")
     display_cols = ['Hospital Name', 'City', 'Status', 'Distance (km)', 'Total Procedures (2024)', 'Total Procedures (2020-2024)']
     
-    st.dataframe(
-        unique_hospitals_df[display_cols], 
-        hide_index=True
-    )
+    st.dataframe(unique_hospitals_df[display_cols], hide_index=True)
 
     st.header("📊 Detailed Annual Procedure Data")
     hospital_to_view = st.selectbox(
@@ -164,13 +155,10 @@ if not filtered_df.empty:
         col1.metric("Total Revision Surgeries", f"{selected_hospital_details['Revision Surgeries (N)']:.0f}")
         col2.metric("Revision Surgery Rate", f"{selected_hospital_details['Revision Surgeries (%)']:.1f}%")
         
-        # --- NEW VISUALIZATION SECTION ---
-        # Prepare the data for the selected hospital
         hospital_annual_data = filtered_df[filtered_df['Hospital Name'] == hospital_to_view].copy()
         hospital_annual_data.set_index('annee', inplace=True)
         hospital_annual_data.sort_index(ascending=False, inplace=True)
 
-        # 1. Bariatric Procedures Chart
         st.subheader("Bariatric Procedures by Year")
         bariatric_cols = ['ABL', 'ANN', 'BPG', 'REV', 'SLE']
         bariatric_df = hospital_annual_data[bariatric_cols]
@@ -180,7 +168,6 @@ if not filtered_df.empty:
         else:
             st.info("No bariatric procedure data available for this hospital.")
 
-        # 2. Surgical Approaches Chart
         st.subheader("Surgical Approaches by Year")
         approach_cols = ['COE', 'LAP', 'ROB']
         approach_df = hospital_annual_data[approach_cols]
@@ -189,7 +176,10 @@ if not filtered_df.empty:
             st.bar_chart(approach_df)
         else:
             st.info("No surgical approach data available for this hospital.")
-        # --- END OF NEW VISUALIZATION SECTION ---
 
-elif st.session_state["search_triggered"]:
+elif st.session_state.search_triggered:
+    # This message now shows if the search was triggered but resulted in no matches
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
+else:
+    # This is the default message before any search
+    st.info("Enter your address in the sidebar and click 'Search Hospitals' to begin.")
