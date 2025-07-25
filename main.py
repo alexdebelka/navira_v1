@@ -202,4 +202,13 @@ if not filtered_df.empty:
             st.subheader("Surgical Approaches by Year")
             # --- FIX: Use the dictionary to get readable names ---
             approach_df = hospital_annual_data[SURGICAL_APPROACH_NAMES.keys()].rename(columns=SURGICAL_APPROACH_NAMES)
-            if not approach_df.empty and approach_df.sum().sum()
+            if not approach_df.empty and approach_df.sum().sum() > 0:
+                st.bar_chart(approach_df)
+                st.dataframe(approach_df)
+            else:
+                st.info("No surgical approach data available for this hospital.")
+
+elif st.session_state.search_triggered:
+    st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
+else:
+    st.info("Enter your address in the sidebar and click 'Search Hospitals' to begin.")
