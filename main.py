@@ -44,14 +44,13 @@ def load_data(path="flattened_v3.csv"):
     """
     try:
         df = pd.read_csv(path)
-        # Rename columns for consistency and readability
         df.rename(columns={
             'id': 'ID', 'rs': 'Hospital Name', 'statut': 'Status', 'ville': 'City',
             'revision_surgeries_n': 'Revision Surgeries (N)',
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
 
-        # Define all columns that should be numeric
+        # --- FIX: More robustly convert all numeric columns to prevent any chart errors ---
         numeric_int_cols = [
             'Revision Surgeries (N)', 'total_procedures_period', 'annee',
             'total_procedures_year', 'university', 'cso', 'LAB_SOFFCO'
@@ -59,17 +58,14 @@ def load_data(path="flattened_v3.csv"):
         
         numeric_float_cols = ['latitude', 'longitude', 'Revision Surgeries (%)']
 
-        # Clean and convert integer columns
         for col in numeric_int_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
         
-        # Clean and convert float columns
         for col in numeric_float_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # Ensure geographic text columns are strings
         for col in ['lib_dep', 'lib_reg']:
              if col in df.columns:
                 df[col] = df[col].astype(str).fillna('N/A')
@@ -80,11 +76,10 @@ def load_data(path="flattened_v3.csv"):
         df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
         return df
     except FileNotFoundError:
-        # --- FIX: Stop the app if the data file is not found ---
         st.error(f"Fatal Error: The data file '{path}' was not found. Please make sure it's in the same directory as the script.")
-        st.stop() # This prevents the rest of the app from running and causing a crash.
-    except KeyError as e:
-        st.error(f"A required column is missing from the data file: {e}. Please check the CSV file.")
+        st.stop()
+    except Exception as e:
+        st.error(f"An error occurred while loading the data: {e}")
         st.stop()
 
 
@@ -130,7 +125,7 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v16")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v17")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception as e:
@@ -228,7 +223,7 @@ if not filtered_df.empty:
             hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index(ascending=False)
 
             st.subheader("Bariatric Procedures by Year")
-            bariatric_df = hospital_annual_data[BARIATRIC_PROCEDURE_NAMES.keys()].rename(columns=BARIATRIC_PROCEDURE_NAMES)
+            bariatric_df = hospital_annual_data[list(BARIATRIC_PROCEDURE_NAMES.keys())].rename(columns=BARIATRIC_PROCEDURE_NAMES)
             if not bariatric_df.empty and bariatric_df.sum().sum() > 0:
                 st.bar_chart(bariatric_df)
                 st.dataframe(bariatric_df)
@@ -236,7 +231,7 @@ if not filtered_df.empty:
                 st.info("No bariatric procedure data available for this hospital.")
 
             st.subheader("Surgical Approaches by Year")
-            approach_df = hospital_annual_data[SURGICAL_APPROACH_NAMES.keys()].rename(columns=SURGICAL_APPROACH_NAMES)
+            approach_df = hospital_annual_data[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES)
             if not approach_df.empty and approach_df.sum().sum() > 0:
                 st.bar_chart(approach_df)
                 st.dataframe(approach_df)
