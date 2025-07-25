@@ -37,8 +37,7 @@ def load_data(path="flattened_denormalized_v2.csv"):
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
 
-        # --- FIX: Remove duplicate rows from the source data ---
-        # This ensures each hospital has only one entry per year.
+        # Remove duplicate rows from the source data
         df.drop_duplicates(subset=['ID', 'annee'], keep='first', inplace=True)
         
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
@@ -92,7 +91,7 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v9")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v10")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception as e:
@@ -153,44 +152,52 @@ if not filtered_df.empty:
         if distances.min() < 0.1:
             st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
 
+    # --- THIS IS THE FIX ---
+    # Before displaying details, check if the selected hospital is still in the filtered dataframe.
+    # If not, reset the selection to avoid an error.
+    if st.session_state.selected_hospital_id and st.session_state.selected_hospital_id not in filtered_df['ID'].values:
+        st.session_state.selected_hospital_id = None
+
     if st.session_state.selected_hospital_id:
         selected_hospital_all_data = filtered_df[filtered_df['ID'] == st.session_state.selected_hospital_id]
-        selected_hospital_details = selected_hospital_all_data.iloc[0]
-
-        st.header(f"📊 Detailed Data for: {selected_hospital_details['Hospital Name']}")
-
-        # --- NEW: Added a details section for immediate feedback ---
-        st.subheader("Hospital Information")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("City", selected_hospital_details['City'])
-        col2.metric("Status", selected_hospital_details['Status'])
-        col3.metric("Distance from you", f"{selected_hospital_details['Distance (km)']:.1f} km")
-        st.markdown("---")
         
-        st.subheader("Revision Surgery Statistics (2020-2024)")
-        col1, col2 = st.columns(2)
-        col1.metric("Total Revision Surgeries", f"{selected_hospital_details['Revision Surgeries (N)']:.0f}")
-        col2.metric("Revision Surgery Rate", f"{selected_hospital_details['Revision Surgeries (%)']:.1f}%")
-        
-        hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index(ascending=False)
+        # This check prevents the error if the dataframe is unexpectedly empty
+        if not selected_hospital_all_data.empty:
+            selected_hospital_details = selected_hospital_all_data.iloc[0]
 
-        st.subheader("Bariatric Procedures by Year")
-        bariatric_cols = ['ABL', 'ANN', 'BPG', 'REV', 'SLE']
-        bariatric_df = hospital_annual_data[bariatric_cols]
-        if not bariatric_df.empty and bariatric_df.sum().sum() > 0:
-            st.bar_chart(bariatric_df)
-            st.dataframe(bariatric_df)
-        else:
-            st.info("No bariatric procedure data available for this hospital.")
+            st.header(f"📊 Detailed Data for: {selected_hospital_details['Hospital Name']}")
 
-        st.subheader("Surgical Approaches by Year")
-        approach_cols = ['COE', 'LAP', 'ROB']
-        approach_df = hospital_annual_data[approach_cols]
-        if not approach_df.empty and approach_df.sum().sum() > 0:
-            st.bar_chart(approach_df)
-            st.dataframe(approach_df)
-        else:
-            st.info("No surgical approach data available for this hospital.")
+            st.subheader("Hospital Information")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("City", selected_hospital_details['City'])
+            col2.metric("Status", selected_hospital_details['Status'])
+            col3.metric("Distance from you", f"{selected_hospital_details['Distance (km)']:.1f} km")
+            st.markdown("---")
+            
+            st.subheader("Revision Surgery Statistics (2020-2024)")
+            col1, col2 = st.columns(2)
+            col1.metric("Total Revision Surgeries", f"{selected_hospital_details['Revision Surgeries (N)']:.0f}")
+            col2.metric("Revision Surgery Rate", f"{selected_hospital_details['Revision Surgeries (%)']:.1f}%")
+            
+            hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index(ascending=False)
+
+            st.subheader("Bariatric Procedures by Year")
+            bariatric_cols = ['ABL', 'ANN', 'BPG', 'REV', 'SLE']
+            bariatric_df = hospital_annual_data[bariatric_cols]
+            if not bariatric_df.empty and bariatric_df.sum().sum() > 0:
+                st.bar_chart(bariatric_df)
+                st.dataframe(bariatric_df)
+            else:
+                st.info("No bariatric procedure data available for this hospital.")
+
+            st.subheader("Surgical Approaches by Year")
+            approach_cols = ['COE', 'LAP', 'ROB']
+            approach_df = hospital_annual_data[approach_cols]
+            if not approach_df.empty and approach_df.sum().sum() > 0:
+                st.bar_chart(approach_df)
+                st.dataframe(approach_df)
+            else:
+                st.info("No surgical approach data available for this hospital.")
 
 elif st.session_state.search_triggered:
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
