@@ -9,7 +9,7 @@ from streamlit_folium import st_folium
 # --- 1. App Configuration ---
 st.set_page_config(
     page_title="Navira - Hospital Explorer",
-    page_icon="🏥",
+    page_icon="�",
     layout="wide"
 )
 
@@ -21,12 +21,13 @@ if "user_coords" not in st.session_state:
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
-def load_data(path="flat_denormalized_data.csv"):
+def load_data(path="final_flat_data.csv"): # <-- Make sure this matches the name of your new CSV file
     """
-    Loads the new FLAT denormalized hospital data and performs robust cleaning.
+    Loads the final FLAT denormalized hospital data with pre-calculated totals.
     """
     try:
         df = pd.read_csv(path)
+        # Rename columns to be more user-friendly
         df.rename(columns={
             'id': 'ID',
             'rs': 'Hospital Name',
@@ -34,15 +35,13 @@ def load_data(path="flat_denormalized_data.csv"):
             'ville': 'City',
             'latitude': 'latitude',
             'longitude': 'longitude',
-            'redo_n': 'Redo Surgeries (N)',
-            'redo_pct': 'Redo Surgeries (%)'
+            'revision_surgeries_n': 'Revision Surgeries (N)',
+            'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
 
-        # Convert coordinates to numeric, coercing errors to NaN (Not a Number)
+        # Robustly clean coordinate data
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
         df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
-
-        # Drop rows with invalid coordinates
         df.dropna(subset=['latitude', 'longitude'], inplace=True)
         df = df[df['latitude'].between(-90, 90)]
         df = df[df['longitude'].between(-180, 180)]
@@ -118,14 +117,23 @@ else:
 
 # --- 7. Display Results ---
 if not filtered_df.empty:
+    # Create a dataframe with unique hospitals for the main list and map
     unique_hospitals_df = filtered_df.drop_duplicates(subset=['ID']).copy()
+
+    # Get the 2024 data to map to the unique hospitals list
+    data_2024 = filtered_df[filtered_df['annee'] == 2024]
+    total_2024 = data_2024.set_index('ID')['total_procedures_year']
+    unique_hospitals_df['Total Procedures (2024)'] = unique_hospitals_df['ID'].map(total_2024).fillna(0).astype(int)
+
+    # Rename the period total column for display
+    unique_hospitals_df.rename(columns={'total_procedures_period': 'Total Procedures (2020-2024)'}, inplace=True)
+
 
     st.header(f"🗺️ Map of {len(unique_hospitals_df)} Found Hospitals")
     
     m = folium.Map(location=st.session_state["user_coords"], zoom_start=9)
     folium.Marker(
-        location=st.session_state["user_coords"],
-        popup="Your Location",
+        location=st.session_state["user_coords"], popup="Your Location",
         icon=folium.Icon(icon="user", prefix="fa", color="red")
     ).add_to(m)
     marker_cluster = MarkerCluster().add_to(m)
@@ -142,15 +150,14 @@ if not filtered_df.empty:
             popup=folium.Popup(popup_html, max_width=300),
             icon=folium.Icon(icon="hospital-o", prefix="fa", color="blue")
         ).add_to(marker_cluster)
-
     st_folium(m, width="100%", height=500, center=st.session_state["user_coords"], zoom=9)
 
+
     st.header("📋 Hospital Details")
-    display_cols = ['Hospital Name', 'City', 'Status', 'Distance (km)', 'Redo Surgeries (N)', 'Redo Surgeries (%)']
+    display_cols = ['Hospital Name', 'City', 'Status', 'Distance (km)', 'Total Procedures (2024)', 'Total Procedures (2020-2024)']
     
-    # --- FIX #1: Hide the index column on the dataframe ---
     st.dataframe(
-        unique_hospitals_df[display_cols].style.format({'Distance (km)': "{:.1f}", 'Redo Surgeries (%)': "{:.1f}"}), 
+        unique_hospitals_df[display_cols], 
         hide_index=True
     )
 
@@ -161,13 +168,21 @@ if not filtered_df.empty:
     )
 
     if hospital_to_view:
+        selected_hospital_details = unique_hospitals_df[unique_hospitals_df['Hospital Name'] == hospital_to_view].iloc[0]
+        
+        st.subheader("Revision Surgery Statistics (2020-2024)")
+        col1, col2 = st.columns(2)
+        col1.metric("Total Revision Surgeries", f"{selected_hospital_details['Revision Surgeries (N)']:.0f}")
+        col2.metric("Revision Surgery Rate", f"{selected_hospital_details['Revision Surgeries (%)']:.1f}%")
+        
+        st.subheader("Annual Procedure Counts")
         hospital_annual_data = filtered_df[filtered_df['Hospital Name'] == hospital_to_view].copy()
         
         annual_cols = ['annee', 'ABL', 'ANN', 'BPG', 'REV', 'SLE', 'COE', 'LAP', 'ROB']
         display_annual = hospital_annual_data[annual_cols].rename(columns={'annee': 'Year'}).set_index('Year')
         
-        # --- FIX #2: Sort the annual data by year in descending order ---
         st.table(display_annual.sort_index(ascending=False))
 
 elif st.session_state["search_triggered"]:
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
+�
