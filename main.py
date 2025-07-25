@@ -21,6 +21,20 @@ if "selected_hospital_id" not in st.session_state:
 if "address" not in st.session_state:
     st.session_state.address = ""
 
+# --- MAPPING DICTIONARIES FOR READABILITY ---
+BARIATRIC_PROCEDURE_NAMES = {
+    'ABL': 'Gastric Band Removal',
+    'ANN': 'Adjustable Gastric Band',
+    'BPG': 'Bypass Gastric',
+    'REV': 'Conversion Surgery',
+    'SLE': 'Sleeve Gastrectomy'
+}
+
+SURGICAL_APPROACH_NAMES = {
+    'COE': 'Open Surgery',
+    'LAP': 'Laparoscopy',
+    'ROB': 'Robotic Assistance'
+}
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
@@ -37,7 +51,6 @@ def load_data(path="flattened_denormalized_v2.csv"):
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
 
-        # Remove duplicate rows from the source data
         df.drop_duplicates(subset=['ID', 'annee'], keep='first', inplace=True)
         
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
@@ -91,7 +104,7 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v10")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v11")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception as e:
@@ -152,16 +165,12 @@ if not filtered_df.empty:
         if distances.min() < 0.1:
             st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
 
-    # --- THIS IS THE FIX ---
-    # Before displaying details, check if the selected hospital is still in the filtered dataframe.
-    # If not, reset the selection to avoid an error.
     if st.session_state.selected_hospital_id and st.session_state.selected_hospital_id not in filtered_df['ID'].values:
         st.session_state.selected_hospital_id = None
 
     if st.session_state.selected_hospital_id:
         selected_hospital_all_data = filtered_df[filtered_df['ID'] == st.session_state.selected_hospital_id]
         
-        # This check prevents the error if the dataframe is unexpectedly empty
         if not selected_hospital_all_data.empty:
             selected_hospital_details = selected_hospital_all_data.iloc[0]
 
@@ -182,8 +191,8 @@ if not filtered_df.empty:
             hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index(ascending=False)
 
             st.subheader("Bariatric Procedures by Year")
-            bariatric_cols = ['ABL', 'ANN', 'BPG', 'REV', 'SLE']
-            bariatric_df = hospital_annual_data[bariatric_cols]
+            # --- FIX: Use the dictionary to get readable names ---
+            bariatric_df = hospital_annual_data[BARIATRIC_PROCEDURE_NAMES.keys()].rename(columns=BARIATRIC_PROCEDURE_NAMES)
             if not bariatric_df.empty and bariatric_df.sum().sum() > 0:
                 st.bar_chart(bariatric_df)
                 st.dataframe(bariatric_df)
@@ -191,15 +200,6 @@ if not filtered_df.empty:
                 st.info("No bariatric procedure data available for this hospital.")
 
             st.subheader("Surgical Approaches by Year")
-            approach_cols = ['COE', 'LAP', 'ROB']
-            approach_df = hospital_annual_data[approach_cols]
-            if not approach_df.empty and approach_df.sum().sum() > 0:
-                st.bar_chart(approach_df)
-                st.dataframe(approach_df)
-            else:
-                st.info("No surgical approach data available for this hospital.")
-
-elif st.session_state.search_triggered:
-    st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
-else:
-    st.info("Enter your address in the sidebar and click 'Search Hospitals' to begin.")
+            # --- FIX: Use the dictionary to get readable names ---
+            approach_df = hospital_annual_data[SURGICAL_APPROACH_NAMES.keys()].rename(columns=SURGICAL_APPROACH_NAMES)
+            if not approach_df.empty and approach_df.sum().sum() >
