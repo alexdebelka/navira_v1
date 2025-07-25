@@ -14,6 +14,10 @@ st.set_page_config(
 )
 
 # --- 2. Session State Initialization ---
+# This will store the ID of the hospital clicked on the map
+if "selected_hospital_id" not in st.session_state:
+    st.session_state.selected_hospital_id = None
+
 if "search_triggered" not in st.session_state:
     st.session_state.search_triggered = False
 
@@ -55,12 +59,14 @@ with st.sidebar:
     if st.button("🔎 Search Hospitals"):
         if address:
             st.session_state.search_triggered = True
+            st.session_state.selected_hospital_id = None # Reset selection on new search
         else:
             st.warning("Please enter an address first.")
             st.session_state.search_triggered = False
 
     if st.button("🔄 Reset Search"):
         st.session_state.search_triggered = False
+        st.session_state.selected_hospital_id = None
         st.experimental_rerun()
 
 # --- 5. Main Page UI ---
@@ -73,16 +79,14 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v3")
-        enriched_address = address.strip()
-        if enriched_address.isdigit() and len(enriched_address) == 5:
-            enriched_address += ", France"
-        location = geolocator.geocode(enriched_address, timeout=10)
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v4")
+        location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception:
         return None
 
 filtered_df = pd.DataFrame()
+user_coords = None
 if st.session_state.search_triggered:
     user_coords = geocode_address(address)
     if user_coords:
@@ -102,56 +106,57 @@ if st.session_state.search_triggered:
 if not filtered_df.empty:
     unique_hospitals_df = filtered_df.drop_duplicates(subset=['ID']).copy()
 
-    data_2024 = filtered_df[filtered_df['annee'] == 2024].drop_duplicates(subset=['ID'])
-    total_2024 = data_2024.set_index('ID')['total_procedures_year']
-    unique_hospitals_df['Total Procedures (2024)'] = unique_hospitals_df['ID'].map(total_2024).fillna(0).astype(int)
-    unique_hospitals_df.rename(columns={'total_procedures_period': 'Total Procedures (2020-2024)'}, inplace=True)
-
     st.header(f"🗺️ Map of {len(unique_hospitals_df)} Found Hospitals")
+    st.info("Click on a blue hospital marker on the map to see its detailed statistics below.")
     
     m = folium.Map(location=user_coords, zoom_start=9)
     folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to(m)
     marker_cluster = MarkerCluster().add_to(m)
     for idx, row in unique_hospitals_df.iterrows():
-        popup_html = f"<b>{row['Hospital Name']}</b><br><b>City:</b> {row['City']}<br><b>Status:</b> {row['Status']}<br><b>Distance:</b> {row['Distance (km)']:.1f} km"
-        folium.Marker(location=[row['latitude'], row['longitude']], popup=folium.Popup(popup_html, max_width=300), icon=folium.Icon(icon="hospital-o", prefix="fa", color="blue")).add_to(marker_cluster)
-    st_folium(m, width="100%", height=500, center=user_coords, zoom=9)
-
-    # --- IMPROVEMENT #1: Display Hospital Details in Expanders ---
-    st.header("📋 Hospital Details")
-    for index, row in unique_hospitals_df.iterrows():
-        with st.expander(f"{row['Hospital Name']} - {row['City']}"):
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Distance", f"{row['Distance (km)']:.1f} km")
-            col2.metric("Status", row['Status'])
-            col3.metric("Procedures in 2024", f"{row['Total Procedures (2024)']}")
-            col4.metric("Procedures 2020-2024", f"{row['Total Procedures (2020-2024)']}")
-
-    st.header("📊 Detailed Annual Procedure Data")
-    hospital_to_view = st.selectbox(
-        "Select a hospital to view its annual data",
-        options=unique_hospitals_df['Hospital Name'].tolist()
-    )
-
-    if hospital_to_view:
-        selected_hospital_details = unique_hospitals_df[unique_hospitals_df['Hospital Name'] == hospital_to_view].iloc[0]
+        # We will pass the hospital ID in the popup to identify it upon click
+        popup_content = f"<b>{row['Hospital Name']}</b><br>City: {row['City']}<div id='hospital_id' style='display: none;'>{row['ID']}</div>"
+        folium.Marker(
+            location=[row['latitude'], row['longitude']], 
+            popup=folium.Popup(popup_content, max_width=300), 
+            icon=folium.Icon(icon="hospital-o", prefix="fa", color="blue")
+        ).add_to(marker_cluster)
         
+    # Capture the map's state, including the last clicked marker
+    map_data = st_folium(m, width="100%", height=500, center=user_coords, zoom=9)
+
+    # --- NEW LOGIC: Check if a marker was clicked ---
+    if map_data and map_data.get("last_object_clicked_popup"):
+        # A bit of string manipulation to extract the ID from the popup's HTML
+        popup_html = map_data["last_object_clicked_popup"]
+        start_str = "<div id='hospital_id' style='display: none;'>"
+        end_str = "</div>"
+        start_index = popup_html.find(start_str)
+        if start_index != -1:
+            start_index += len(start_str)
+            end_index = popup_html.find(end_str, start_index)
+            clicked_id = popup_html[start_index:end_index]
+            st.session_state.selected_hospital_id = clicked_id
+
+    # --- NEW DISPLAY: Show details only for the selected hospital ---
+    if st.session_state.selected_hospital_id:
+        # Find the full data for the selected hospital
+        selected_hospital_all_data = filtered_df[filtered_df['ID'] == st.session_state.selected_hospital_id]
+        selected_hospital_details = selected_hospital_all_data.drop_duplicates(subset=['ID']).iloc[0]
+
+        st.header(f"📊 Detailed Data for: {selected_hospital_details['Hospital Name']}")
+
         st.subheader("Revision Surgery Statistics (2020-2024)")
         col1, col2 = st.columns(2)
         col1.metric("Total Revision Surgeries", f"{selected_hospital_details['Revision Surgeries (N)']:.0f}")
         col2.metric("Revision Surgery Rate", f"{selected_hospital_details['Revision Surgeries (%)']:.1f}%")
         
-        hospital_annual_data = filtered_df[filtered_df['Hospital Name'] == hospital_to_view].copy()
-        hospital_annual_data.set_index('annee', inplace=True)
-        hospital_annual_data.sort_index(ascending=False, inplace=True)
+        hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index(ascending=False)
 
         st.subheader("Bariatric Procedures by Year")
         bariatric_cols = ['ABL', 'ANN', 'BPG', 'REV', 'SLE']
         bariatric_df = hospital_annual_data[bariatric_cols]
-        
         if not bariatric_df.empty and bariatric_df.sum().sum() > 0:
             st.bar_chart(bariatric_df)
-            # --- IMPROVEMENT #2: Add the data table below the chart ---
             st.dataframe(bariatric_df)
         else:
             st.info("No bariatric procedure data available for this hospital.")
@@ -159,10 +164,8 @@ if not filtered_df.empty:
         st.subheader("Surgical Approaches by Year")
         approach_cols = ['COE', 'LAP', 'ROB']
         approach_df = hospital_annual_data[approach_cols]
-        
         if not approach_df.empty and approach_df.sum().sum() > 0:
             st.bar_chart(approach_df)
-            # --- IMPROVEMENT #2: Add the data table below the chart ---
             st.dataframe(approach_df)
         else:
             st.info("No surgical approach data available for this hospital.")
