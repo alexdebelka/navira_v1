@@ -21,7 +21,7 @@ if "user_coords" not in st.session_state:
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
-def load_data(path="final_flat_data.csv"): # <-- Make sure this matches the name of your new CSV file
+def load_data(path="flattened_denormalized_v2.csv"): # <-- Make sure this matches the name of your new CSV file
     """
     Loads the final FLAT denormalized hospital data with pre-calculated totals.
     """
