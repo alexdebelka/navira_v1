@@ -25,7 +25,7 @@ if "address" not in st.session_state:
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
-def load_data(path="final_flat_data.csv"):
+def load_data(path="flattened_denormalized_v2.csv"):
     """
     Loads the final FLAT denormalized hospital data with pre-calculated totals.
     """
