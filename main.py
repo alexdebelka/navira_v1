@@ -22,18 +22,19 @@ if "address" not in st.session_state:
     st.session_state.address = ""
 
 # --- MAPPING DICTIONARIES FOR READABILITY ---
+# FIX: Shortened labels to prevent them from being cut off in the chart legend.
 BARIATRIC_PROCEDURE_NAMES = {
     'ABL': 'Gastric Banding',
-    'ANN': 'Ring Adjustment/Removal',
+    'ANN': 'Ring Adjustment',
     'BPG': 'Bypass Gastric',
     'REV': 'Revision Surgery',
-    'SLE': 'Sleeve Gastrectomy'
+    'SLE': 'Sleeve' # Was 'Sleeve Gastrectomy'
 }
 
 SURGICAL_APPROACH_NAMES = {
-    'COE': 'Open Coelioscopy',
+    'COE': 'Coelioscopy', # Was 'Open Coelioscopy'
     'LAP': 'Laparoscopy',
-    'ROB': 'Robotic Assistance'
+    'ROB': 'Robotic' # Was 'Robotic Assistance'
 }
 
 # --- 3. Load and Prepare Data ---
@@ -51,7 +52,7 @@ def load_data(path="flattened_denormalized_v2.csv"):
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
 
-        # --- FIX: Ensure all procedure columns are clean and numeric for charting ---
+        # Ensure all procedure columns are clean and numeric for charting
         procedure_cols = list(BARIATRIC_PROCEDURE_NAMES.keys()) + list(SURGICAL_APPROACH_NAMES.keys())
         for col in procedure_cols:
             if col in df.columns:
@@ -110,7 +111,7 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v12")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v13")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception as e:
