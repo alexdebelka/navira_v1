@@ -22,26 +22,25 @@ if "address" not in st.session_state:
     st.session_state.address = ""
 
 # --- MAPPING DICTIONARIES FOR READABILITY ---
-# FIX: Shortened labels to prevent them from being cut off in the chart legend.
 BARIATRIC_PROCEDURE_NAMES = {
     'ABL': 'Gastric Banding',
     'ANN': 'Ring Adjustment',
     'BPG': 'Bypass Gastric',
     'REV': 'Revision Surgery',
-    'SLE': 'Sleeve' # Was 'Sleeve Gastrectomy'
+    'SLE': 'Sleeve'
 }
 
 SURGICAL_APPROACH_NAMES = {
-    'COE': 'Coelioscopy', # Was 'Open Coelioscopy'
+    'COE': 'Coelioscopy',
     'LAP': 'Laparoscopy',
-    'ROB': 'Robotic' # Was 'Robotic Assistance'
+    'ROB': 'Robotic'
 }
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
 def load_data(path="flattened_denormalized_v2.csv"):
     """
-    Loads and cleans the final FLAT denormalized hospital data.
+    Loads and cleans the final FLAT denormalized hospital data with robust type conversion.
     """
     try:
         df = pd.read_csv(path)
@@ -52,16 +51,23 @@ def load_data(path="flattened_denormalized_v2.csv"):
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
 
-        # Ensure all procedure columns are clean and numeric for charting
-        procedure_cols = list(BARIATRIC_PROCEDURE_NAMES.keys()) + list(SURGICAL_APPROACH_NAMES.keys())
-        for col in procedure_cols:
+        # --- FIX: Robustly convert all expected numeric columns to prevent chart errors ---
+        numeric_int_cols = [
+            'Revision Surgeries (N)', 'total_procedures_period', 'annee', 'total_procedures_year'
+        ] + list(BARIATRIC_PROCEDURE_NAMES.keys()) + list(SURGICAL_APPROACH_NAMES.keys())
+        
+        numeric_float_cols = ['latitude', 'longitude', 'Revision Surgeries (%)']
+
+        for col in numeric_int_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
         
+        for col in numeric_float_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
         df.drop_duplicates(subset=['ID', 'annee'], keep='first', inplace=True)
         
-        df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
-        df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
         df.dropna(subset=['latitude', 'longitude'], inplace=True)
         df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
         return df
@@ -111,7 +117,7 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v13")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v14")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception as e:
