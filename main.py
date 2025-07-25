@@ -14,7 +14,6 @@ st.set_page_config(
 )
 
 # --- 2. Session State Initialization ---
-# Initialize all session state variables we will use
 if "search_triggered" not in st.session_state:
     st.session_state.search_triggered = False
 if "selected_hospital_id" not in st.session_state:
@@ -27,22 +26,24 @@ if "address" not in st.session_state:
 @st.cache_data
 def load_data(path="flattened_denormalized_v2.csv"):
     """
-    Loads the final FLAT denormalized hospital data.
+    Loads and cleans the final FLAT denormalized hospital data.
     """
     try:
         df = pd.read_csv(path)
-        # Rename columns for better readability
         df.rename(columns={
             'id': 'ID', 'rs': 'Hospital Name', 'statut': 'Status', 'ville': 'City',
             'latitude': 'latitude', 'longitude': 'longitude',
             'revision_surgeries_n': 'Revision Surgeries (N)',
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
-        # Ensure geographic coordinates are numeric and valid
+
+        # --- FIX: Remove duplicate rows from the source data ---
+        # This ensures each hospital has only one entry per year.
+        df.drop_duplicates(subset=['ID', 'annee'], keep='first', inplace=True)
+        
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
         df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
         df.dropna(subset=['latitude', 'longitude'], inplace=True)
-        # Filter out invalid coordinates
         df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
         return df
     except FileNotFoundError:
@@ -62,24 +63,20 @@ with st.sidebar:
     radius_km = st.slider("📏 Search Radius (km)", min_value=5, max_value=500, value=50, step=5)
 
     st.header("⚙️ Filter Results")
-    # Dynamically create status filter options
     unique_statuses = ['All'] + sorted(df['Status'].dropna().unique().tolist())
     selected_status = st.selectbox("Filter by Hospital Status", unique_statuses)
 
-    # Search and Reset buttons
     if st.button("🔎 Search Hospitals"):
         if address_input:
-            # Save the input to session state and trigger the search
             st.session_state.address = address_input
             st.session_state.search_triggered = True
-            st.session_state.selected_hospital_id = None # Reset selection on new search
+            st.session_state.selected_hospital_id = None
             st.rerun()
         else:
             st.warning("Please enter an address first.")
             st.session_state.search_triggered = False
 
     if st.button("🔄 Reset Search"):
-        # Clear all relevant state variables to start fresh
         st.session_state.search_triggered = False
         st.session_state.selected_hospital_id = None
         st.session_state.address = ""
@@ -93,13 +90,9 @@ st.markdown("---")
 # --- 6. Geocoding and Filtering Logic ---
 @st.cache_data(show_spinner="Geocoding address...")
 def geocode_address(address):
-    """
-    Converts a string address to latitude and longitude coordinates.
-    """
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v8")
-        # Appending ", France" improves geocoding accuracy for French addresses
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v9")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception as e:
@@ -109,41 +102,33 @@ def geocode_address(address):
 filtered_df = pd.DataFrame()
 user_coords = None
 
-# Perform search and filtering only if the search button was clicked
 if st.session_state.search_triggered:
     user_coords = geocode_address(st.session_state.address)
     if user_coords:
         temp_df = df.copy()
-        # Calculate distance for each hospital from the user's location
         temp_df['Distance (km)'] = temp_df.apply(
             lambda row: geodesic(user_coords, (row['latitude'], row['longitude'])).km, axis=1
         )
-        # Filter by radius and status
         temp_df = temp_df[temp_df['Distance (km)'] <= radius_km]
         if selected_status != 'All':
             temp_df = temp_df[temp_df['Status'] == selected_status]
         
         filtered_df = temp_df.sort_values('Distance (km)')
     else:
-        # Handle cases where the address could not be found
         if st.session_state.address:
             st.error("Address not found. Please try a different address or format (e.g., 'City, Postal Code').")
         st.session_state.search_triggered = False
 
 # --- 7. Display Results ---
 if not filtered_df.empty:
-    # Get a list of unique hospitals for the map to avoid duplicate markers
     unique_hospitals_df = filtered_df.drop_duplicates(subset=['ID']).copy()
 
     st.header(f"🗺️ Map of {len(unique_hospitals_df)} Found Hospitals")
     st.info("Click on a blue hospital marker on the map to see its detailed statistics below.")
     
-    # Create the map
     m = folium.Map(location=user_coords, zoom_start=9)
-    # Add a marker for the user's location
     folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to(m)
     
-    # Use a marker cluster for better performance with many markers
     marker_cluster = MarkerCluster().add_to(m)
     for idx, row in unique_hospitals_df.iterrows():
         popup_content = f"""
@@ -158,32 +143,30 @@ if not filtered_df.empty:
             icon=folium.Icon(icon="hospital-o", prefix="fa", color="blue")
         ).add_to(marker_cluster)
         
-    # Render the map in Streamlit
     map_data = st_folium(m, width="100%", height=500)
 
-    # --- THIS IS THE FIX ---
-    # Check if a marker on the map was clicked by using its coordinates
     if map_data and map_data.get("last_object_clicked"):
-        # Get the coordinates of the clicked marker
         clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])
-        
-        # Find the closest hospital in our dataframe to the clicked coordinates.
         distances = unique_hospitals_df.apply(
             lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1
         )
-        
-        # If the closest hospital is within 100 meters, we can be sure it's the one clicked.
         if distances.min() < 0.1:
             st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
-    # --- END OF FIX ---
 
-    # Display detailed data if a hospital is selected
     if st.session_state.selected_hospital_id:
         selected_hospital_all_data = filtered_df[filtered_df['ID'] == st.session_state.selected_hospital_id]
-        selected_hospital_details = selected_hospital_all_data.drop_duplicates(subset=['ID']).iloc[0]
+        selected_hospital_details = selected_hospital_all_data.iloc[0]
 
         st.header(f"📊 Detailed Data for: {selected_hospital_details['Hospital Name']}")
 
+        # --- NEW: Added a details section for immediate feedback ---
+        st.subheader("Hospital Information")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("City", selected_hospital_details['City'])
+        col2.metric("Status", selected_hospital_details['Status'])
+        col3.metric("Distance from you", f"{selected_hospital_details['Distance (km)']:.1f} km")
+        st.markdown("---")
+        
         st.subheader("Revision Surgery Statistics (2020-2024)")
         col1, col2 = st.columns(2)
         col1.metric("Total Revision Surgeries", f"{selected_hospital_details['Revision Surgeries (N)']:.0f}")
