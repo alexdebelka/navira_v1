@@ -202,4 +202,4 @@ if not filtered_df.empty:
             st.subheader("Surgical Approaches by Year")
             # --- FIX: Use the dictionary to get readable names ---
             approach_df = hospital_annual_data[SURGICAL_APPROACH_NAMES.keys()].rename(columns=SURGICAL_APPROACH_NAMES)
-            if not approach_df.empty and approach_df.sum().sum() >
+            if not approach_df.empty and approach_df.sum().sum()
