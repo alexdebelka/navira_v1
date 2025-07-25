@@ -185,4 +185,4 @@ if not filtered_df.empty:
 
 elif st.session_state["search_triggered"]:
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
-�
+
