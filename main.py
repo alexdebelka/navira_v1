@@ -73,7 +73,7 @@ with st.sidebar:
             st.session_state.address = address_input
             st.session_state.search_triggered = True
             st.session_state.selected_hospital_id = None # Reset selection on new search
-            st.rerun() # FIX: Replaced st.experimental_rerun() with st.rerun()
+            st.rerun()
         else:
             st.warning("Please enter an address first.")
             st.session_state.search_triggered = False
@@ -83,7 +83,7 @@ with st.sidebar:
         st.session_state.search_triggered = False
         st.session_state.selected_hospital_id = None
         st.session_state.address = ""
-        st.rerun() # FIX: Replaced st.experimental_rerun() with st.rerun()
+        st.rerun()
 
 # --- 5. Main Page UI ---
 st.title("🏥 Navira - French Hospital Explorer")
@@ -98,7 +98,7 @@ def geocode_address(address):
     """
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v7")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v8")
         # Appending ", France" improves geocoding accuracy for French addresses
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
@@ -159,18 +159,23 @@ if not filtered_df.empty:
         ).add_to(marker_cluster)
         
     # Render the map in Streamlit
-    map_data = st_folium(m, width="100%", height=500, returned_objects=[])
+    map_data = st_folium(m, width="100%", height=500)
 
-    # Check if a hospital marker was clicked on the map
-    if map_data and map_data.get("last_object_clicked_popup"):
-        # This is a robust way to get the hospital name from the popup
-        popup_html = map_data["last_object_clicked_popup"]
-        hospital_name_from_popup = popup_html.split('<b>')[1].split('</b>')[0]
+    # --- THIS IS THE FIX ---
+    # Check if a marker on the map was clicked by using its coordinates
+    if map_data and map_data.get("last_object_clicked"):
+        # Get the coordinates of the clicked marker
+        clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])
         
-        # Find the ID of the clicked hospital
-        clicked_hospital_series = unique_hospitals_df[unique_hospitals_df['Hospital Name'] == hospital_name_from_popup]
-        if not clicked_hospital_series.empty:
-            st.session_state.selected_hospital_id = clicked_hospital_series.iloc[0]['ID']
+        # Find the closest hospital in our dataframe to the clicked coordinates.
+        distances = unique_hospitals_df.apply(
+            lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1
+        )
+        
+        # If the closest hospital is within 100 meters, we can be sure it's the one clicked.
+        if distances.min() < 0.1:
+            st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
+    # --- END OF FIX ---
 
     # Display detailed data if a hospital is selected
     if st.session_state.selected_hospital_id:
