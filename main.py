@@ -50,21 +50,19 @@ def load_data(path="flattened_v3.csv"):
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
 
-        numeric_int_cols = [
+        # --- DEFINITIVE FIX: Robustly convert all numeric columns ---
+        numeric_cols = [
             'Revision Surgeries (N)', 'total_procedures_period', 'annee',
-            'total_procedures_year', 'university', 'cso', 'LAB_SOFFCO'
+            'total_procedures_year', 'university', 'cso', 'LAB_SOFFCO',
+            'latitude', 'longitude', 'Revision Surgeries (%)'
         ] + list(BARIATRIC_PROCEDURE_NAMES.keys()) + list(SURGICAL_APPROACH_NAMES.keys())
-        
-        numeric_float_cols = ['latitude', 'longitude', 'Revision Surgeries (%)']
 
-        for col in numeric_int_cols:
+        for col in numeric_cols:
             if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-        
-        for col in numeric_float_cols:
-            if col in df.columns:
+                # Force column to numeric, coercing errors to NaN, then fill with 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        
+
+        # Ensure text columns are strings
         for col in ['lib_dep', 'lib_reg']:
              if col in df.columns:
                 df[col] = df[col].astype(str).fillna('N/A')
@@ -83,12 +81,10 @@ def load_data(path="flattened_v3.csv"):
 
 df = load_data()
 
-# --- 4. Main Page UI ---
+# --- 4. Main Page UI & Search Controls ---
 st.title("🏥 Navira - French Hospital Explorer")
 st.markdown("Find specialized hospitals based on your location and chosen criteria. Created in collaboration with Avicenne Hospital, Bobigny.")
 
-# --- 5. Search Controls on Main Page ---
-# Use columns to create a centered, search-page feel
 _, center_col, _ = st.columns([1, 2, 1])
 with center_col:
     with st.form(key="search_form"):
@@ -98,13 +94,11 @@ with center_col:
             placeholder="e.g., 75019 or Paris"
         )
         
-        # Place filters in an expander to keep the UI clean
         with st.expander("Advanced Filters"):
             radius_km = st.slider("📏 Search Radius (km)", min_value=5, max_value=500, value=50, step=5)
             unique_statuses = ['All'] + sorted(df['Status'].dropna().unique().tolist())
             selected_status = st.selectbox("Filter by Hospital Status", unique_statuses)
         
-        # Search and Reset buttons side-by-side
         search_col, reset_col = st.columns(2)
         with search_col:
             submitted = st.form_submit_button("🔎 Search Hospitals", use_container_width=True)
@@ -124,17 +118,15 @@ with center_col:
             st.session_state.search_triggered = False
             st.session_state.selected_hospital_id = None
             st.session_state.address = ""
-            # No rerun needed here, the form submission handles it.
 
 st.markdown("---")
 
-
-# --- 6. Geocoding and Filtering Logic ---
+# --- 5. Geocoding and Filtering Logic ---
 @st.cache_data(show_spinner="Geocoding address...")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v22")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v24")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception as e:
@@ -161,7 +153,7 @@ if st.session_state.search_triggered:
             st.error("Address not found. Please try a different address or format (e.g., 'City, Postal Code').")
         st.session_state.search_triggered = False
 
-# --- 7. Display Results ---
+# --- 6. Display Results ---
 if st.session_state.search_triggered and not filtered_df.empty:
     unique_hospitals_df = filtered_df.drop_duplicates(subset=['ID']).copy()
 
@@ -241,7 +233,7 @@ if st.session_state.search_triggered and not filtered_df.empty:
             hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index(ascending=False)
 
             st.subheader("Bariatric Procedures by Year")
-            bariatric_df = hospital_annual_data[list(BARIATRIC_PROCEDURE_NAMES.keys())].rename(columns=BARIATRIC_PROCEDURE_NAMES).astype(float)
+            bariatric_df = hospital_annual_data[list(BARIATRIC_PROCEDURE_NAMES.keys())].rename(columns=BARIATRIC_PROCEDURE_NAMES)
             if not bariatric_df.empty and bariatric_df.sum().sum() > 0:
                 st.bar_chart(bariatric_df)
                 st.dataframe(bariatric_df)
@@ -249,7 +241,7 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 st.info("No bariatric procedure data available for this hospital.")
 
             st.subheader("Surgical Approaches by Year")
-            approach_df = hospital_annual_data[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES).astype(float)
+            approach_df = hospital_annual_data[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES)
             if not approach_df.empty and approach_df.sum().sum() > 0:
                 st.bar_chart(approach_df)
                 st.dataframe(approach_df)
@@ -258,4 +250,3 @@ if st.session_state.search_triggered and not filtered_df.empty:
 
 elif st.session_state.search_triggered:
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
-
