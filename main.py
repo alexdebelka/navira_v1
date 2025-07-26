@@ -155,98 +155,120 @@ if st.session_state.search_triggered:
 
 # --- 6. Display Results ---
 if st.session_state.search_triggered and not filtered_df.empty:
+    # Create a dataframe with only the unique hospitals for the map
     unique_hospitals_df = filtered_df.drop_duplicates(subset=['ID']).copy()
 
-    st.header(f"🗺️ Map of {len(unique_hospitals_df)} Found Hospitals")
-    st.info("Click on a blue hospital marker on the map to see its detailed statistics below.")
-    
-    m = folium.Map(location=user_coords, zoom_start=9)
-    folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to(m)
-    
-    marker_cluster = MarkerCluster().add_to(m)
-    for idx, row in unique_hospitals_df.iterrows():
-        popup_content = f"<b>{row['Hospital Name']}</b><br>City: {row['City']}"
+    st.header(f"Found {len(unique_hospitals_df)} Hospitals")
+    st.info("Click a hospital on the map to view its detailed statistics.")
+
+    # --- Create a two-column layout for the results ---
+    map_col, details_col = st.columns([6, 4]) # Map gets 60% of width, details 40%
+
+    with map_col:
+        st.subheader("🗺️ Map of Hospitals")
+
+        # Create the map centered on the user's location
+        m = folium.Map(location=user_coords, zoom_start=9)
+
+        # Add a marker for the user's location
         folium.Marker(
-            location=[row['latitude'], row['longitude']],
-            popup=folium.Popup(popup_content, max_width=300),
-            icon=folium.Icon(icon="hospital-o", prefix="fa", color="blue")
-        ).add_to(marker_cluster)
-        
-    map_data = st_folium(m, width="100%", height=500)
+            location=user_coords,
+            popup="Your Location",
+            icon=folium.Icon(icon="user", prefix="fa", color="red")
+        ).add_to(m)
 
-    if map_data and map_data.get("last_object_clicked"):
-        clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])
-        distances = unique_hospitals_df.apply(
-            lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1
-        )
-        if distances.min() < 0.1:
-            st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
+        # Use MarkerCluster for performance with many markers
+        marker_cluster = MarkerCluster().add_to(m)
+        for idx, row in unique_hospitals_df.iterrows():
+            popup_content = f"<b>{row['Hospital Name']}</b><br>City: {row['City']}"
+            folium.Marker(
+                location=[row['latitude'], row['longitude']],
+                popup=folium.Popup(popup_content, max_width=300),
+                icon=folium.Icon(icon="hospital-o", prefix="fa", color="blue")
+            ).add_to(marker_cluster)
 
-    if st.session_state.selected_hospital_id and st.session_state.selected_hospital_id not in filtered_df['ID'].values:
-        st.session_state.selected_hospital_id = None
+        # Render the map in Streamlit
+        map_data = st_folium(m, width="100%", height=500, key="folium_map")
 
-    if st.session_state.selected_hospital_id:
-        selected_hospital_all_data = filtered_df[filtered_df['ID'] == st.session_state.selected_hospital_id]
-        
-        if not selected_hospital_all_data.empty:
-            selected_hospital_details = selected_hospital_all_data.iloc[0]
+        # --- Logic to handle map clicks ---
+        if map_data and map_data.get("last_object_clicked"):
+            clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])
+            # Find the closest hospital to the clicked point (to account for small inaccuracies)
+            distances = unique_hospitals_df.apply(
+                lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1
+            )
+            if distances.min() < 0.1: # If the click was very close to a known hospital
+                st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
 
-            st.header(f"📊 Detailed Data for: {selected_hospital_details['Hospital Name']}")
+    # --- Display the details in the second column ---
+    with details_col:
+        st.subheader("📊 Hospital Details")
 
-            st.subheader("Hospital Information")
-            col1, col2, col3 = st.columns(3)
-            col1.markdown(f"**City:** {selected_hospital_details['City']}")
-            col2.markdown(f"**Status:** {selected_hospital_details['Status']}")
-            col3.markdown(f"**Distance:** {selected_hospital_details['Distance (km)']:.1f} km")
-            
-            st.subheader("Labels & Affiliations")
-            labels_col, geo_col = st.columns(2)
+        # Check if a hospital has been selected
+        if not st.session_state.selected_hospital_id:
+            st.info("Click a hospital marker on the map to see its data here.")
+        else:
+            # Ensure the selected hospital is still valid with current filters
+            if st.session_state.selected_hospital_id not in filtered_df['ID'].values:
+                st.session_state.selected_hospital_id = None
+                st.warning("The previously selected hospital is no longer in the filtered list.")
+            else:
+                # Get all data for the selected hospital (including all years)
+                selected_hospital_all_data = filtered_df[filtered_df['ID'] == st.session_state.selected_hospital_id]
+                selected_hospital_details = selected_hospital_all_data.iloc[0] # Get the primary details from the first row
 
-            with labels_col:
+                st.markdown(f"#### {selected_hospital_details['Hospital Name']}")
+
+                # --- Hospital Information ---
+                st.markdown(f"**City:** {selected_hospital_details['City']}")
+                st.markdown(f"**Status:** {selected_hospital_details['Status']}")
+                st.markdown(f"**Distance:** {selected_hospital_details['Distance (km)']:.1f} km")
+
+                st.markdown("---")
+
+                # --- Labels & Affiliations ---
+                st.markdown("**Labels & Affiliations**")
                 has_label = False
-                if selected_hospital_details['LAB_SOFFCO'] == 1:
-                    st.success("✅ Centre of Excellence (Bariatric French Society)")
+                if selected_hospital_details.get('LAB_SOFFCO') == 1:
+                    st.success("✅ Centre of Excellence (SOFFCO)")
                     has_label = True
-                if selected_hospital_details['cso'] == 1:
+                if selected_hospital_details.get('cso') == 1:
                     st.success("✅ Centre of Excellence (Health Ministry)")
                     has_label = True
-                
                 if not has_label:
                     st.warning("No official Centre of Excellence labels.")
 
-                if selected_hospital_details['university'] == 1:
+                if selected_hospital_details.get('university') == 1:
                     st.info("🎓 Academic Affiliation")
                 else:
-                    st.warning("No affiliation with an academic entity.")
+                    st.warning("No academic affiliation.")
 
-            with geo_col:
-                st.write(f"**Department:** {selected_hospital_details['lib_dep']} ({selected_hospital_details['code_dep']})")
-                st.write(f"**Region:** {selected_hospital_details['lib_reg']} ({selected_hospital_details['code_reg']})")
+                st.markdown("---")
 
-            st.markdown("---")
-            
-            st.subheader("Revision Surgery Statistics (2020-2024)")
-            col1, col2 = st.columns(2)
-            col1.metric("Total Revision Surgeries", f"{selected_hospital_details['Revision Surgeries (N)']:.0f}")
-            col2.metric("Revision Surgery Rate", f"{selected_hospital_details['Revision Surgeries (%)']:.1f}%")
-            
-            hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index(ascending=False)
+                # --- Revision Surgery Stats ---
+                st.markdown("**Revision Surgery Statistics (2020-2024)**")
+                st.metric("Total Revision Surgeries", f"{selected_hospital_details['Revision Surgeries (N)']:.0f}")
+                st.metric("Revision Surgery Rate", f"{selected_hospital_details['Revision Surgeries (%)']:.1f}%")
 
-            st.subheader("Bariatric Procedures by Year")
-            bariatric_df = hospital_annual_data[list(BARIATRIC_PROCEDURE_NAMES.keys())].rename(columns=BARIATRIC_PROCEDURE_NAMES)
-            if not bariatric_df.empty and bariatric_df.sum().sum() > 0:
-                st.bar_chart(bariatric_df)
-                st.dataframe(bariatric_df)
-            else:
-                st.info("No bariatric procedure data available for this hospital.")
+                # Prepare annual data for charts
+                hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index(ascending=False)
 
-            st.subheader("Surgical Approaches by Year")
-            approach_df = hospital_annual_data[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES)
-            if not approach_df.empty and approach_df.sum().sum() > 0:
-                st.bar_chart(approach_df)
-                st.dataframe(approach_df)
-            else:
-                st.info("No surgical approach data available for this hospital.")
+                # --- Bariatric Procedures Chart ---
+                st.markdown("**Bariatric Procedures by Year**")
+                bariatric_df = hospital_annual_data[list(BARIATRIC_PROCEDURE_NAMES.keys())].rename(columns=BARIATRIC_PROCEDURE_NAMES)
+                if not bariatric_df.empty and bariatric_df.sum().sum() > 0:
+                    st.bar_chart(bariatric_df)
+                else:
+                    st.info("No bariatric procedure data available.")
 
+                # --- Surgical Approaches Chart ---
+                st.markdown("**Surgical Approaches by Year**")
+                approach_df = hospital_annual_data[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES)
+                if not approach_df.empty and approach_df.sum().sum() > 0:
+                    st.bar_chart(approach_df)
+                else:
+                    st.info("No surgical approach data available.")
+
+# Handle the case where the search is triggered but no results are found
 elif st.session_state.search_triggered:
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
