@@ -8,7 +8,7 @@ from streamlit_folium import st_folium
 
 # --- 1. App Configuration ---
 st.set_page_config(
-    page_title="Navira - Where Care Finds Its Path",
+    page_title="Navira - Hospital Explorer",
     page_icon="🏥",
     layout="wide"
 )
@@ -50,7 +50,6 @@ def load_data(path="flattened_v3.csv"):
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
 
-        # --- FIX: More robustly convert all numeric columns to prevent any chart errors ---
         numeric_int_cols = [
             'Revision Surgeries (N)', 'total_procedures_period', 'annee',
             'total_procedures_year', 'university', 'cso', 'LAB_SOFFCO'
@@ -84,24 +83,33 @@ def load_data(path="flattened_v3.csv"):
 
 df = load_data()
 
-# --- 4. Sidebar for User Input and Filters ---
-with st.sidebar:
-    st.header("🔍 Search Controls")
-    # --- FIX: Use a form for 'Enter to Submit' functionality ---
+# --- 4. Main Page UI ---
+st.title("🏥 Navira - French Hospital Explorer")
+st.markdown("Find specialized hospitals based on your location and chosen criteria. Created in collaboration with Avicenne Hospital, Bobigny.")
+
+# --- 5. Search Controls on Main Page ---
+# Use columns to create a centered, search-page feel
+_, center_col, _ = st.columns([1, 2, 1])
+with center_col:
     with st.form(key="search_form"):
         address_input = st.text_input(
             "📍 Enter your address or postal code",
             value=st.session_state.address,
             placeholder="e.g., 75019 or Paris"
         )
-        radius_km = st.slider("📏 Search Radius (km)", min_value=5, max_value=500, value=50, step=5)
-
-        st.header("⚙️ Filter Results")
-        unique_statuses = ['All'] + sorted(df['Status'].dropna().unique().tolist())
-        selected_status = st.selectbox("Filter by Hospital Status", unique_statuses)
         
-        # This button submits the form
-        submitted = st.form_submit_button("🔎 Search Hospitals")
+        # Place filters in an expander to keep the UI clean
+        with st.expander("Advanced Filters"):
+            radius_km = st.slider("📏 Search Radius (km)", min_value=5, max_value=500, value=50, step=5)
+            unique_statuses = ['All'] + sorted(df['Status'].dropna().unique().tolist())
+            selected_status = st.selectbox("Filter by Hospital Status", unique_statuses)
+        
+        # Search and Reset buttons side-by-side
+        search_col, reset_col = st.columns(2)
+        with search_col:
+            submitted = st.form_submit_button("🔎 Search Hospitals", use_container_width=True)
+        with reset_col:
+            reset_clicked = st.form_submit_button("🔄 Reset", use_container_width=True)
 
         if submitted:
             if address_input:
@@ -111,25 +119,22 @@ with st.sidebar:
             else:
                 st.warning("Please enter an address first.")
                 st.session_state.search_triggered = False
+        
+        if reset_clicked:
+            st.session_state.search_triggered = False
+            st.session_state.selected_hospital_id = None
+            st.session_state.address = ""
+            # No rerun needed here, the form submission handles it.
 
-    # Reset button is outside the form to have its own action
-    if st.button("🔄 Reset Search"):
-        st.session_state.search_triggered = False
-        st.session_state.selected_hospital_id = None
-        st.session_state.address = ""
-        st.rerun()
-
-# --- 5. Main Page UI ---
-st.title("🏥 Navira - French Hospital Explorer")
-st.markdown("Find specialized hospitals based on your location and chosen criteria. Created in collaboration with Avicenne Hospital, Bobigny.")
 st.markdown("---")
+
 
 # --- 6. Geocoding and Filtering Logic ---
 @st.cache_data(show_spinner="Geocoding address...")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v19")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v22")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception as e:
@@ -157,7 +162,7 @@ if st.session_state.search_triggered:
         st.session_state.search_triggered = False
 
 # --- 7. Display Results ---
-if not filtered_df.empty:
+if st.session_state.search_triggered and not filtered_df.empty:
     unique_hospitals_df = filtered_df.drop_duplicates(subset=['ID']).copy()
 
     st.header(f"🗺️ Map of {len(unique_hospitals_df)} Found Hospitals")
@@ -253,5 +258,4 @@ if not filtered_df.empty:
 
 elif st.session_state.search_triggered:
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
-else:
-    st.info("Enter your address in the sidebar and click 'Search Hospitals' to begin.")
+
