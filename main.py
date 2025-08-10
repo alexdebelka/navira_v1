@@ -284,6 +284,7 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 else:
                     st.info("No bariatric procedure data available.")
 
+                # --- Surgical Approaches Chart ---
                 st.markdown("**Surgical Approaches by Year**")
                 approach_df = hospital_annual_data[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES)
                 approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach', value_name='Count')
@@ -298,12 +299,14 @@ if st.session_state.search_triggered and not filtered_df.empty:
                         color='Approach:N',
                         tooltip=['annee', 'Approach', 'Count', alt.Tooltip('Percentage:Q', format='.1f')]
                     )
+                    
                     text = bar.mark_text(
                         align='center', baseline='bottom', dy=-5, color='black'
                     ).encode(
-                        # <<< THIS IS THE FIX
+                        # <<< THIS IS THE CORRECTED LINE
                         text=alt.Expression("format(datum.Percentage, '.1f') + '%'")
                     )
+                    
                     st.altair_chart(bar + text, use_container_width=True)
                 else:
                     st.info("No surgical approach data available.")
