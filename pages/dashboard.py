@@ -73,13 +73,12 @@ national_averages = st.session_state.get('national_averages', {})
 # Find all data for the selected hospital
 if not filtered_df.empty and selected_hospital_id in filtered_df['ID'].values:
     selected_hospital_all_data = filtered_df[filtered_df['ID'] == selected_hospital_id]
-    selected_hospital_details = selected_hospital_all_data.iloc[0]
 else:
     selected_hospital_all_data = df[df['ID'] == selected_hospital_id]
-    if selected_hospital_all_data.empty:
-        st.error("Could not find data for the selected hospital.")
-        st.stop()
-    selected_hospital_details = selected_hospital_all_data.iloc[0]
+if selected_hospital_all_data.empty:
+    st.error("Could not find data for the selected hospital.")
+    st.stop()
+selected_hospital_details = selected_hospital_all_data.iloc[0]
 
 # --- Display Hospital Details ---
 st.markdown(f"## {selected_hospital_details['Hospital Name']}")
@@ -94,34 +93,31 @@ metric_col1, metric_col2 = st.columns(2)
 with metric_col1:
     st.markdown("##### Surgery Statistics (2020-2024)")
     
-    # <<< THIS ENTIRE BLOCK IS THE FIX
-    # Total Surgeries Metric
     total_proc = selected_hospital_details.get('total_procedures_period', 0)
-    avg_total = national_averages.get('total_surgeries', 0)
+    avg_total = national_averages.get('total_procedures_period', 0)
     delta_total = total_proc - avg_total
     st.metric(
         label="Total Surgeries (All Types)",
         value=f"{total_proc:.0f}",
-        delta=f"{delta_total:.0f} vs. National Avg ({avg_total:.0f})",
-        delta_color="normal"  # Use "normal" to keep color neutral grey
+        delta=f"{delta_total:+.0f} vs. National Avg ({avg_total:.0f})",
+        delta_color="normal"
     )
 
-    # Revision Surgeries Metric
+    # FIX: Correctly display delta for revision surgeries
     total_rev = selected_hospital_details.get('Revision Surgeries (N)', 0)
-    avg_rev = national_averages.get('revision_surgeries', 0)
+    avg_rev = national_averages.get('Revision Surgeries (N)', 0)
     delta_rev = total_rev - avg_rev
-    # For revisions, a lower number is better, so we use "inverse"
     st.metric(
         label="Total Revision Surgeries",
         value=f"{total_rev:.0f}",
-        delta=f"{delta_rev:.0f} vs. National Avg ({avg_rev:.0f})",
-        delta_color="inverse"
+        delta=f"{delta_rev:+.0f} vs. National Avg ({avg_rev:.0f})",
+        delta_color="inverse" # "inverse" correctly shows green for negative (good) and red for positive (bad)
     )
 
 with metric_col2:
     st.markdown("##### Labels & Affiliations")
     if selected_hospital_details.get('university') == 1:
-        st.success("🎓 University Hospital (Academic Affiliation)")
+        st.success("🎓 University Hospital")
     else:
         st.warning("➖ No University Affiliation")
     if selected_hospital_details.get('LAB_SOFFCO') == 1:
@@ -136,25 +132,19 @@ with metric_col2:
 st.markdown("---")
 st.header("Annual Statistics")
 
-hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index()
+hospital_annual_data = selected_hospital_all_data.set_index('annee')
 
 # --- Bariatric Procedures Chart ---
 st.markdown("##### Bariatric Procedures by Year")
-bariatric_df = hospital_annual_data[list(BARIATRIC_PROCEDURE_NAMES.keys())].rename(columns=BARIATRIC_PROCEDURE_NAMES)
+bariatric_df = hospital_annual_data[[key for key in BARIATRIC_PROCEDURE_NAMES.keys() if key in hospital_annual_data.columns]].rename(columns=BARIATRIC_PROCEDURE_NAMES)
 bariatric_summary = bariatric_df.sum()
 summary_texts = []
-avg_procedures = national_averages.get('procedures', {})
-for name, count in bariatric_summary.items():
+for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
+    count = bariatric_summary.get(proc_name, 0)
     if count > 0:
-        # We need to get the total count for this procedure across all hospitals for the average
-        avg_count_total = sum([h.get(name, 0) for h in avg_procedures.values()])
-        num_hospitals = len(df['ID'].unique())
-        avg_count = avg_procedures.get(name, 0) / num_hospitals if num_hospitals > 0 else 0
-        
-        summary_texts.append(f"**{name}**: {int(count)} <span style='color:grey; font-style: italic;'>(Avg: {avg_count:.1f})</span>")
-
+        avg_count = national_averages.get(proc_code, 0)
+        summary_texts.append(f"**{proc_name}**: {int(count)} <span style='color:grey; font-style: italic;'>(Avg: {avg_count:.1f})</span>")
 if summary_texts: st.markdown(" | ".join(summary_texts), unsafe_allow_html=True)
-
 bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedure', value_name='Count')
 if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
     bariatric_chart = alt.Chart(bariatric_df_melted).mark_bar().encode(
@@ -170,22 +160,18 @@ st.markdown("---")
 
 # --- Surgical Approaches Chart ---
 st.markdown("##### Surgical Approaches by Year")
-approach_df = hospital_annual_data[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES)
+approach_df = hospital_annual_data[[key for key in SURGICAL_APPROACH_NAMES.keys() if key in hospital_annual_data.columns]].rename(columns=SURGICAL_APPROACH_NAMES)
 approach_summary = approach_df.sum()
 total_approaches = approach_summary.sum()
 summary_texts_approach = []
-avg_approaches = national_averages.get('approaches', {})
+avg_approaches_pct = national_averages.get('approaches_pct', {})
 if total_approaches > 0:
     for name, count in approach_summary.items():
         if count > 0:
             percentage = (count / total_approaches) * 100
-            avg_data = avg_approaches.get(name, {'count': 0, 'percentage': 0})
-            num_hospitals = len(df['ID'].unique())
-            avg_count = avg_data['count'] / num_hospitals if num_hospitals > 0 else 0
-            
-            summary_texts_approach.append(f"**{name}**: {int(count)} ({percentage:.1f}%) <span style='color:grey; font-style: italic;'>(Avg: {avg_count:.1f}, {avg_data['percentage']:.1f}%)</span>")
+            avg_pct = avg_approaches_pct.get(name, 0)
+            summary_texts_approach.append(f"**{name}**: {int(count)} ({percentage:.1f}%) <span style='color:grey; font-style: italic;'>(Nat. Avg: {avg_pct:.1f}%)</span>")
 if summary_texts_approach: st.markdown(" | ".join(summary_texts_approach), unsafe_allow_html=True)
-
 approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach', value_name='Count')
 if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
     bar = alt.Chart(approach_df_melted).mark_bar().encode(
