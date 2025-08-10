@@ -292,7 +292,6 @@ if st.session_state.search_triggered and not filtered_df.empty:
                     total_per_year = approach_df_melted.groupby('annee')['Count'].transform('sum')
                     approach_df_melted['Percentage'] = (approach_df_melted['Count'] / total_per_year.replace(0, 1) * 100)
                     
-                    # <<< FINAL FIX: Pre-format the text label in pandas >>>
                     approach_df_melted['PercentageText'] = approach_df_melted['Percentage'].apply(lambda x: f'{x:.1f}%')
 
                     base = alt.Chart(approach_df_melted)
@@ -307,11 +306,12 @@ if st.session_state.search_triggered and not filtered_df.empty:
                     text = base.mark_text(
                         align='center',
                         baseline='bottom',
-                        dy=-5
+                        # <<< THIS IS THE CHANGE
+                        dy=-8  # Increased negative value to push text above the bar
                     ).encode(
                         x=alt.X('annee:O'),
                         y=alt.Y('Count:Q'),
-                        text=alt.Text('PercentageText:N'), # Use the new pre-formatted column
+                        text=alt.Text('PercentageText:N'),
                         color=alt.value('black')
                     )
 
