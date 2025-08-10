@@ -34,8 +34,8 @@ BARIATRIC_PROCEDURE_NAMES = {
 
 # CHANGE: Updated the Surgical Approach names
 SURGICAL_APPROACH_NAMES = {
-    'COE': 'Coelioscopy',
     'LAP': 'Open Surgery', # Was 'Laparoscopy'
+    'COE': 'Coelioscopy',
     'ROB': 'Robotic'
 }
 
@@ -54,11 +54,13 @@ def load_data(path="flattened_v3.csv"):
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
 
-        # Define status mapping
+        # FIX: Standardize the 'Status' column from the CSV to match filter logic.
+        # The .str.strip() is crucial to remove hidden whitespace.
+        df['Status'] = df['Status'].str.strip().str.lower()
         status_mapping = {
-            'Privé non lucratif': 'private-non-profit',
-            'Public': 'public',
-            'Privé': 'private-for-profit'
+            'private not-for-profit': 'private-non-profit',
+            'public': 'public',
+            'private for profit': 'private-for-profit'
         }
         df['Status'] = df['Status'].map(status_mapping)
 
@@ -80,6 +82,7 @@ def load_data(path="flattened_v3.csv"):
 
         df.drop_duplicates(subset=['ID', 'annee'], keep='first', inplace=True)
         df.dropna(subset=['latitude', 'longitude'], inplace=True)
+        # Filter out invalid coordinates like -9999
         df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
         return df
     except FileNotFoundError:
@@ -116,15 +119,15 @@ with center_col:
             with col2:
                 is_private_for_profit = st.checkbox("Private For-Profit", value=True)
 
-            st.markdown("**Labels & Affiliations**")
             # CHANGE: Added new advanced filters for affiliations
+            st.markdown("**Labels & Affiliations**")
             col3, col4, col5 = st.columns(3)
             with col3:
                 is_university = st.checkbox("University Hospital")
             with col4:
-                is_soffco = st.checkbox("SOFFCO Centre")
+                is_soffco = st.checkbox("Centre of Excellence (SOFFCO)")
             with col5:
-                is_health_ministry = st.checkbox("Health Ministry Centre")
+                is_health_ministry = st.checkbox("Centre of Excellence (Health Ministry)")
         
         search_col, reset_col = st.columns(2)
         with search_col:
@@ -153,7 +156,7 @@ st.markdown("---")
 def geocode_address(address):
     if not address: return None
     try:
-        geolocator = Nominatim(user_agent="navira_streamlit_app_v24")
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v25")
         location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
         return (location.latitude, location.longitude) if location else None
     except Exception as e:
@@ -216,11 +219,9 @@ if st.session_state.search_triggered and not filtered_df.empty:
 
         marker_cluster = MarkerCluster().add_to(m)
         for idx, row in unique_hospitals_df.iterrows():
-            # CHANGE: Added status to the popup for clarity
             popup_content = f"<b>{row['Hospital Name']}</b><br>City: {row['City']}<br>Status: {row['Status']}"
             
-            # CHANGE: Icon color is now conditional
-            color = "blue"
+            color = "blue" # Default for public
             if row['Status'] == 'private-non-profit':
                 color = "lightblue"
             elif row['Status'] == 'private-for-profit':
@@ -253,6 +254,7 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 st.warning("The previously selected hospital is no longer in the filtered list.")
             else:
                 selected_hospital_all_data = filtered_df[filtered_df['ID'] == st.session_state.selected_hospital_id]
+                # Use the first row for static details, but use all data for charts
                 selected_hospital_details = selected_hospital_all_data.iloc[0]
 
                 st.markdown(f"#### {selected_hospital_details['Hospital Name']}")
@@ -260,8 +262,7 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 st.markdown(f"**Status:** {selected_hospital_details['Status']}")
                 st.markdown(f"**Distance:** {selected_hospital_details['Distance (km)']:.1f} km")
                 st.markdown("---")
-                
-                # --- General & Revision Surgery Stats ---
+
                 # CHANGE: Display total surgeries first, then revision surgeries
                 st.markdown("**Surgery Statistics (2020-2024)**")
                 total_proc = selected_hospital_details.get('total_procedures_period', 0)
@@ -269,7 +270,7 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 st.metric("Total Revision Surgeries", f"{selected_hospital_details['Revision Surgeries (N)']:.0f}")
 
                 st.markdown("---")
-
+                
                 # --- Labels & Affiliations ---
                 st.markdown("**Labels & Affiliations**")
                 if selected_hospital_details.get('university') == 1:
@@ -281,7 +282,7 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 
                 st.markdown("---")
                 
-                # Prepare annual data for charts
+                # Prepare annual data for charts, ensuring 'annee' is the index
                 hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index()
 
                 # --- Bariatric Procedures Chart ---
@@ -308,9 +309,10 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach', value_name='Count')
 
                 if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
-                    # Calculate percentages
+                    # Calculate percentages per year
                     total_per_year = approach_df_melted.groupby('annee')['Count'].transform('sum')
-                    approach_df_melted['Percentage'] = (approach_df_melted['Count'] / total_per_year * 100)
+                    # Avoid division by zero if a year has a total count of 0
+                    approach_df_melted['Percentage'] = (approach_df_melted['Count'] / total_per_year.replace(0, 1) * 100)
 
                     bar = alt.Chart(approach_df_melted).mark_bar().encode(
                         x=alt.X('annee:O', title='Year', axis=alt.Axis(labelAngle=0)),
@@ -319,9 +321,9 @@ if st.session_state.search_triggered and not filtered_df.empty:
                         tooltip=['annee', 'Approach', 'Count', alt.Tooltip('Percentage:Q', format='.1f')]
                     )
                     text = bar.mark_text(
-                        align='center', baseline='bottom', dy=-4, color='black'
+                        align='center', baseline='bottom', dy=-5, color='black'
                     ).encode(
-                        text=alt.Text('Percentage:Q', format='.1f', formatType='number')
+                        text=alt.Text('Percentage:Q', format='~s') + '%'
                     )
                     st.altair_chart(bar + text, use_container_width=True)
                 else:
