@@ -19,21 +19,58 @@ SURGICAL_APPROACH_NAMES = {
     'LAP': 'Open Surgery', 'COE': 'Coelioscopy', 'ROB': 'Robotic'
 }
 
+# <<< FIX: The load_data function is now included in this file >>>
+@st.cache_data
+def load_data(path="flattened_v3.csv"):
+    try:
+        df = pd.read_csv(path)
+        df.rename(columns={
+            'id': 'ID', 'rs': 'Hospital Name', 'statut': 'Status', 'ville': 'City',
+            'revision_surgeries_n': 'Revision Surgeries (N)', 'revision_surgeries_pct': 'Revision Surgeries (%)'
+        }, inplace=True)
+        df['Status'] = df['Status'].astype(str).str.strip().str.lower()
+        status_mapping = {
+            'private not-for-profit': 'private-non-profit', 'public': 'public', 'private for profit': 'private-for-profit'
+        }
+        df['Status'] = df['Status'].map(status_mapping)
+        numeric_cols = [
+            'Revision Surgeries (N)', 'total_procedures_period', 'annee', 'total_procedures_year',
+            'university', 'cso', 'LAB_SOFFCO', 'latitude', 'longitude', 'Revision Surgeries (%)'
+        ] + list(BARIATRIC_PROCEDURE_NAMES.keys()) + list(SURGICAL_APPROACH_NAMES.keys())
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        for col in ['lib_dep', 'lib_reg']:
+            if col in df.columns:
+                df[col] = df[col].astype(str).fillna('N/A')
+        df.drop_duplicates(subset=['ID', 'annee'], keep='first', inplace=True)
+        df.dropna(subset=['latitude', 'longitude'], inplace=True)
+        df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
+        return df
+    except FileNotFoundError:
+        st.error(f"Fatal Error: Data file '{path}' not found.")
+        st.stop()
+    except Exception as e:
+        st.error(f"An error occurred loading data: {e}")
+        st.stop()
+
+
 st.title("📊 Hospital Details Dashboard")
 
-# --- Safely check for selected hospital and filtered data ---
+# --- Safely check for selected hospital ---
 if "selected_hospital_id" not in st.session_state or st.session_state.selected_hospital_id is None:
     st.warning("Please select a hospital from the main '🏥 Navira - French Hospital Explorer' page first.", icon="👈")
     st.stop()
     
-# FIX: Check if filtered_df exists in session state before using it to prevent KeyError
-if 'filtered_df' not in st.session_state:
-    st.warning("Please perform a search on the main page before viewing a dashboard.", icon="👈")
-    st.stop()
+# <<< FIX: Safely load the main dataframe if it's not in the session state >>>
+if 'df' not in st.session_state:
+    st.session_state.df = load_data()
+
 
 # --- Load data from session state ---
 df = st.session_state.df
-filtered_df = st.session_state.filtered_df
+# Use .get() for filtered_df for extra safety
+filtered_df = st.session_state.get('filtered_df', pd.DataFrame())
 selected_hospital_id = st.session_state.selected_hospital_id
 
 # Find all data for the selected hospital
@@ -47,6 +84,7 @@ else:
         st.error("Could not find data for the selected hospital. Please select another.")
         st.stop()
     selected_hospital_details = selected_hospital_all_data.iloc[0]
+
 
 # --- Display Hospital Details ---
 st.markdown(f"## {selected_hospital_details['Hospital Name']}")
