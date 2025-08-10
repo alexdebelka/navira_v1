@@ -1,3 +1,4 @@
+# main.py
 import streamlit as st
 import pandas as pd
 import folium
@@ -18,6 +19,10 @@ if "selected_hospital_id" not in st.session_state:
     st.session_state.selected_hospital_id = None
 if "address" not in st.session_state:
     st.session_state.address = ""
+# Initialize filtered_df to avoid errors on first run
+if "filtered_df" not in st.session_state:
+    st.session_state.filtered_df = pd.DataFrame()
+
 
 # --- MAPPING DICTIONARIES (kept for consistency if needed) ---
 BARIATRIC_PROCEDURE_NAMES = {
@@ -101,6 +106,8 @@ with center_col:
             st.session_state.search_triggered = False
             st.session_state.selected_hospital_id = None
             st.session_state.address = ""
+            st.session_state.filtered_df = pd.DataFrame()
+
 
 st.markdown("---")
 
@@ -116,7 +123,7 @@ def geocode_address(address):
         st.error(f"Geocoding failed: {e}")
         return None
 
-if st.session_state.search_triggered:
+if st.session_state.get('search_triggered', False):
     user_coords = geocode_address(st.session_state.address)
     if user_coords:
         temp_df = df.copy()
@@ -134,15 +141,13 @@ if st.session_state.search_triggered:
     else:
         if st.session_state.address: st.error("Address not found. Please try a different address.")
         st.session_state.search_triggered = False
-else:
-    st.session_state.filtered_df = pd.DataFrame()
+
 
 # --- 6. Display Results: Map and List ---
-if st.session_state.search_triggered and not st.session_state.filtered_df.empty:
+if st.session_state.get('search_triggered', False) and not st.session_state.filtered_df.empty:
     unique_hospitals_df = st.session_state.filtered_df.drop_duplicates(subset=['ID']).copy()
     st.header(f"Found {len(unique_hospitals_df)} Hospitals")
     
-    # --- Map Display ---
     m = folium.Map(location=user_coords, zoom_start=9, tiles="CartoDB positron")
     folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to(m)
     marker_cluster = MarkerCluster().add_to(m)
@@ -151,15 +156,15 @@ if st.session_state.search_triggered and not st.session_state.filtered_df.empty:
         folium.Marker(location=[row['latitude'], row['longitude']], popup=f"<b>{row['Hospital Name']}</b>", icon=folium.Icon(icon="hospital-o", prefix="fa", color=color)).add_to(marker_cluster)
     map_data = st_folium(m, width="100%", height=500, key="folium_map")
 
-    # --- Handle Map Click ---
+    # Handle Map Click to automatically switch page
     if map_data and map_data.get("last_object_clicked"):
         clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])
         distances = unique_hospitals_df.apply(lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1)
         if distances.min() < 0.1:
             st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
-            st.info(f"Selected: {unique_hospitals_df.loc[distances.idxmin()]['Hospital Name']}. Navigate to the 'Dashboard' page from the sidebar to see details.")
+            st.switch_page("pages/dashboard.py")
 
-    # --- List of Hospitals ---
+    # List of Hospitals
     st.subheader("Hospital List")
     for idx, row in unique_hospitals_df.iterrows():
         col1, col2, col3 = st.columns([4, 2, 2])
@@ -167,7 +172,7 @@ if st.session_state.search_triggered and not st.session_state.filtered_df.empty:
         col2.markdown(f"*{row['Distance (km)']:.1f} km*")
         if col3.button("View Details", key=f"details_{row['ID']}"):
             st.session_state.selected_hospital_id = row['ID']
-            st.info(f"Selected: {row['Hospital Name']}. Navigate to the 'Dashboard' page from the sidebar to see details.")
+            st.switch_page("pages/dashboard.py")
 
-elif st.session_state.search_triggered:
+elif st.session_state.get('search_triggered', False):
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
