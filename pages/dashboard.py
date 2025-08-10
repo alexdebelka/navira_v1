@@ -21,7 +21,7 @@ SURGICAL_APPROACH_NAMES = {
 
 # --- Load Data Function (as a fallback) ---
 @st.cache_data
-def load_data(path="flattened_v3.csv"):
+def load_data(path="data/flattened_v3.csv"):
     try:
         df = pd.read_csv(path)
         df.rename(columns={
