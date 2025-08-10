@@ -18,7 +18,6 @@ if "selected_hospital_id" not in st.session_state:
     st.session_state.selected_hospital_id = None
 if "address" not in st.session_state:
     st.session_state.address = ""
-# FIX: Initialize filtered_df to prevent KeyError on first run
 if "filtered_df" not in st.session_state:
     st.session_state.filtered_df = pd.DataFrame()
 
@@ -34,7 +33,7 @@ SURGICAL_APPROACH_NAMES = {
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
-def load_data(path="data/flattened_v3.csv"):
+def load_data(path="flattened_v3.csv"):
     try:
         df = pd.read_csv(path)
         df.rename(columns={
@@ -56,7 +55,8 @@ def load_data(path="data/flattened_v3.csv"):
         for col in ['lib_dep', 'lib_reg']:
             if col in df.columns:
                 df[col] = df[col].astype(str).fillna('N/A')
-        df.drop_duplicates(subset=['ID', 'annee'], keep='first', inplace=True)
+        # We use drop_duplicates on ID only for national average calculation
+        # The main df keeps all year data
         df.dropna(subset=['latitude', 'longitude'], inplace=True)
         df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
         return df
@@ -69,6 +69,45 @@ def load_data(path="data/flattened_v3.csv"):
 
 df = load_data()
 st.session_state.df = df
+
+# --- NEW: Function to Calculate National Averages ---
+@st.cache_data
+def calculate_national_averages(dataf):
+    # Use only the most recent entry for each hospital to calculate averages
+    unique_hospitals = dataf.drop_duplicates(subset=['ID'], keep='first')
+    
+    averages = {
+        'total_surgeries': unique_hospitals['total_procedures_period'].mean(),
+        'revision_surgeries': unique_hospitals['Revision Surgeries (N)'].mean(),
+        'procedures': {},
+        'approaches': {}
+    }
+    
+    # Calculate average for each bariatric procedure
+    for key, name in BARIATRIC_PROCEDURE_NAMES.items():
+        if key in unique_hospitals.columns:
+            averages['procedures'][name] = unique_hospitals[key].sum()
+            
+    # Calculate average for each surgical approach
+    approach_sums = {}
+    for key, name in SURGICAL_APPROACH_NAMES.items():
+        if key in unique_hospitals.columns:
+            approach_sums[name] = unique_hospitals[key].sum()
+    
+    total_approaches = sum(approach_sums.values())
+    if total_approaches > 0:
+        for name, count in approach_sums.items():
+            averages['approaches'][name] = {
+                'count': count,
+                'percentage': (count / total_approaches) * 100
+            }
+            
+    return averages
+
+# Calculate and store averages in session state if not already done
+if 'national_averages' not in st.session_state:
+    st.session_state.national_averages = calculate_national_averages(df)
+
 
 # --- 4. Main Page UI & Search Controls ---
 st.title("🏥 Navira - French Hospital Explorer")
@@ -153,7 +192,6 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
         folium.Marker(location=[row['latitude'], row['longitude']], popup=f"<b>{row['Hospital Name']}</b>", icon=folium.Icon(icon="hospital-o", prefix="fa", color=color)).add_to(marker_cluster)
     map_data = st_folium(m, width="100%", height=500, key="folium_map")
 
-    # FIX: Handle Map Click to automatically switch page
     if map_data and map_data.get("last_object_clicked"):
         clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])
         distances = unique_hospitals_df.apply(lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1)
@@ -166,7 +204,6 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
         col1, col2, col3 = st.columns([4, 2, 2])
         col1.markdown(f"**{row['Hospital Name']}** ({row['City']})")
         col2.markdown(f"*{row['Distance (km)']:.1f} km*")
-        # FIX: Handle Button Click to automatically switch page
         if col3.button("View Details", key=f"details_{row['ID']}"):
             st.session_state.selected_hospital_id = row['ID']
             st.switch_page("pages/dashboard.py")
