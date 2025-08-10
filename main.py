@@ -21,7 +21,6 @@ if "address" not in st.session_state:
 if "filtered_df" not in st.session_state:
     st.session_state.filtered_df = pd.DataFrame()
 
-
 # --- MAPPING DICTIONARIES ---
 BARIATRIC_PROCEDURE_NAMES = {
     'SLE': 'Sleeve Gastrectomy', 'BPG': 'Gastric Bypass', 'ANN': 'Band Removal',
@@ -33,7 +32,7 @@ SURGICAL_APPROACH_NAMES = {
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
-def load_data(path="data/flattened_v3.csv"):
+def load_data(path="flattened_v3.csv"):
     try:
         df = pd.read_csv(path)
         df.rename(columns={
@@ -55,8 +54,6 @@ def load_data(path="data/flattened_v3.csv"):
         for col in ['lib_dep', 'lib_reg']:
             if col in df.columns:
                 df[col] = df[col].astype(str).fillna('N/A')
-        # We use drop_duplicates on ID only for national average calculation
-        # The main df keeps all year data
         df.dropna(subset=['latitude', 'longitude'], inplace=True)
         df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
         return df
@@ -70,49 +67,36 @@ def load_data(path="data/flattened_v3.csv"):
 df = load_data()
 st.session_state.df = df
 
-# --- NEW: Function to Calculate National Averages ---
+# --- CORRECTED: Function to Calculate National Averages ---
 @st.cache_data
 def calculate_national_averages(dataf):
-    # Use only the most recent entry for each hospital to calculate averages
-    unique_hospitals = dataf.drop_duplicates(subset=['ID'], keep='first')
+    # First, sum up all procedures for each unique hospital over the years
+    hospital_sums = dataf.groupby('ID').agg({
+         'total_procedures_period': 'first',
+         'Revision Surgeries (N)': 'first',
+         **{proc: 'sum' for proc in BARIATRIC_PROCEDURE_NAMES.keys()},
+         **{app: 'sum' for app in SURGICAL_APPROACH_NAMES.keys()}
+    })
     
-    averages = {
-        'total_surgeries': unique_hospitals['total_procedures_period'].mean(),
-        'revision_surgeries': unique_hospitals['Revision Surgeries (N)'].mean(),
-        'procedures': {},
-        'approaches': {}
-    }
+    # Now, calculate the mean of these totals across all hospitals
+    averages = hospital_sums.mean().to_dict()
     
-    # Calculate average for each bariatric procedure
-    for key, name in BARIATRIC_PROCEDURE_NAMES.items():
-        if key in unique_hospitals.columns:
-            averages['procedures'][name] = unique_hospitals[key].sum()
-            
-    # Calculate average for each surgical approach
-    approach_sums = {}
-    for key, name in SURGICAL_APPROACH_NAMES.items():
-        if key in unique_hospitals.columns:
-            approach_sums[name] = unique_hospitals[key].sum()
-    
-    total_approaches = sum(approach_sums.values())
+    # Calculate overall percentages for surgical approaches
+    total_approaches = sum(averages.get(app, 0) for app in SURGICAL_APPROACH_NAMES.keys())
+    averages['approaches_pct'] = {}
     if total_approaches > 0:
-        for name, count in approach_sums.items():
-            averages['approaches'][name] = {
-                'count': count,
-                'percentage': (count / total_approaches) * 100
-            }
+        for app_code, app_name in SURGICAL_APPROACH_NAMES.items():
+            avg_count = averages.get(app_code, 0)
+            averages['approaches_pct'][app_name] = (avg_count / total_approaches) * 100 if total_approaches else 0
             
     return averages
 
-# Calculate and store averages in session state if not already done
 if 'national_averages' not in st.session_state:
     st.session_state.national_averages = calculate_national_averages(df)
-
 
 # --- 4. Main Page UI & Search Controls ---
 st.title("🏥 Navira - French Hospital Explorer")
 st.markdown("Find specialized hospitals based on your location and criteria. Created in collaboration with Avicenne Hospital, Bobigny.")
-
 _, center_col, _ = st.columns([1, 2, 1])
 with center_col:
     with st.form(key="search_form"):
@@ -128,11 +112,9 @@ with center_col:
             is_university = col3.checkbox("University Hospital")
             is_soffco = col4.checkbox("Centre of Excellence (SOFFCO)")
             is_health_ministry = col5.checkbox("Centre of Excellence (Health Ministry)")
-        
         search_col, reset_col = st.columns(2)
         submitted = search_col.form_submit_button("🔎 Search Hospitals", use_container_width=True)
         reset_clicked = reset_col.form_submit_button("🔄 Reset", use_container_width=True)
-
         if submitted and address_input:
             st.session_state.address = address_input
             st.session_state.search_triggered = True
@@ -145,7 +127,6 @@ with center_col:
             st.session_state.selected_hospital_id = None
             st.session_state.address = ""
             st.session_state.filtered_df = pd.DataFrame()
-
 st.markdown("---")
 
 # --- 5. Geocoding and Filtering Logic ---
@@ -159,7 +140,6 @@ def geocode_address(address):
     except Exception as e:
         st.error(f"Geocoding failed: {e}")
         return None
-
 if st.session_state.get('search_triggered', False):
     user_coords = geocode_address(st.session_state.address)
     if user_coords:
@@ -183,7 +163,6 @@ if st.session_state.get('search_triggered', False):
 if st.session_state.get('search_triggered', False) and not st.session_state.filtered_df.empty:
     unique_hospitals_df = st.session_state.filtered_df.drop_duplicates(subset=['ID']).copy()
     st.header(f"Found {len(unique_hospitals_df)} Hospitals")
-    
     m = folium.Map(location=user_coords, zoom_start=9, tiles="CartoDB positron")
     folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to(m)
     marker_cluster = MarkerCluster().add_to(m)
@@ -191,14 +170,12 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
         color = "blue" if row['Status'] == 'public' else "lightblue" if row['Status'] == 'private-non-profit' else "green"
         folium.Marker(location=[row['latitude'], row['longitude']], popup=f"<b>{row['Hospital Name']}</b>", icon=folium.Icon(icon="hospital-o", prefix="fa", color=color)).add_to(marker_cluster)
     map_data = st_folium(m, width="100%", height=500, key="folium_map")
-
     if map_data and map_data.get("last_object_clicked"):
         clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])
         distances = unique_hospitals_df.apply(lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1)
         if distances.min() < 0.1:
             st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
             st.switch_page("pages/dashboard.py")
-
     st.subheader("Hospital List")
     for idx, row in unique_hospitals_df.iterrows():
         col1, col2, col3 = st.columns([4, 2, 2])
@@ -207,6 +184,5 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
         if col3.button("View Details", key=f"details_{row['ID']}"):
             st.session_state.selected_hospital_id = row['ID']
             st.switch_page("pages/dashboard.py")
-
 elif st.session_state.get('search_triggered', False):
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
