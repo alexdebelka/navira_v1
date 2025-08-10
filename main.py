@@ -269,8 +269,16 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 
                 hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index()
 
+                # --- Bariatric Procedures Chart ---
                 st.markdown("**Bariatric Procedures by Year**")
                 bariatric_df = hospital_annual_data[list(BARIATRIC_PROCEDURE_NAMES.keys())].rename(columns=BARIATRIC_PROCEDURE_NAMES)
+                
+                # CHANGE: Calculate and display summary above the chart
+                bariatric_summary = bariatric_df.sum()
+                summary_texts = [f"**{name}**: {int(count)}" for name, count in bariatric_summary.items() if count > 0]
+                if summary_texts:
+                    st.markdown(" | ".join(summary_texts))
+
                 bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedure', value_name='Count')
                 
                 if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
@@ -284,38 +292,35 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 else:
                     st.info("No bariatric procedure data available.")
 
+                st.markdown("---")
+
+                # --- Surgical Approaches Chart ---
                 st.markdown("**Surgical Approaches by Year**")
                 approach_df = hospital_annual_data[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES)
+
+                # CHANGE: Calculate and display summary with percentages above the chart
+                approach_summary = approach_df.sum()
+                total_approaches = approach_summary.sum()
+                summary_texts_approach = []
+                if total_approaches > 0:
+                    for name, count in approach_summary.items():
+                        if count > 0:
+                            percentage = (count / total_approaches) * 100
+                            summary_texts_approach.append(f"**{name}**: {int(count)} ({percentage:.1f}%)")
+                if summary_texts_approach:
+                    st.markdown(" | ".join(summary_texts_approach))
+
                 approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach', value_name='Count')
 
                 if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
-                    total_per_year = approach_df_melted.groupby('annee')['Count'].transform('sum')
-                    approach_df_melted['Percentage'] = (approach_df_melted['Count'] / total_per_year.replace(0, 1) * 100)
-                    
-                    approach_df_melted['PercentageText'] = approach_df_melted['Percentage'].apply(lambda x: f'{x:.1f}%')
-
-                    base = alt.Chart(approach_df_melted)
-                    
-                    bar = base.mark_bar().encode(
+                    # CHANGE: Removed the text layer from the chart
+                    bar = alt.Chart(approach_df_melted).mark_bar().encode(
                         x=alt.X('annee:O', title='Year', axis=alt.Axis(labelAngle=0)),
                         y=alt.Y('Count:Q', title='Number of Surgeries'),
                         color='Approach:N',
-                        tooltip=['annee', 'Approach', 'Count', alt.Tooltip('Percentage:Q', format='.1f')]
+                        tooltip=['annee', 'Approach', 'Count']
                     )
-
-                    text = base.mark_text(
-                        align='center',
-                        baseline='bottom',
-                        # <<< THIS IS THE CHANGE
-                        dy=-8  # Increased negative value to push text above the bar
-                    ).encode(
-                        x=alt.X('annee:O'),
-                        y=alt.Y('Count:Q'),
-                        text=alt.Text('PercentageText:N'),
-                        color=alt.value('black')
-                    )
-
-                    st.altair_chart((bar + text).interactive(), use_container_width=True)
+                    st.altair_chart(bar.interactive(), use_container_width=True)
                 else:
                     st.info("No surgical approach data available.")
 
