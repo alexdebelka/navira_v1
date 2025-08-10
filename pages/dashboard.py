@@ -21,7 +21,7 @@ SURGICAL_APPROACH_NAMES = {
 
 # --- Load Data Function (as a fallback) ---
 @st.cache_data
-def load_data(path="data/flattened_v3.csv"):
+def load_data(path="flattened_v3.csv"):
     try:
         df = pd.read_csv(path)
         df.rename(columns={
@@ -103,7 +103,6 @@ with metric_col1:
         delta_color="normal"
     )
 
-    # FIX: Correctly display delta for revision surgeries
     total_rev = selected_hospital_details.get('Revision Surgeries (N)', 0)
     avg_rev = national_averages.get('Revision Surgeries (N)', 0)
     delta_rev = total_rev - avg_rev
@@ -111,7 +110,7 @@ with metric_col1:
         label="Total Revision Surgeries",
         value=f"{total_rev:.0f}",
         delta=f"{delta_rev:+.0f} vs. National Avg ({avg_rev:.0f})",
-        delta_color="inverse" # "inverse" correctly shows green for negative (good) and red for positive (bad)
+        delta_color="off" # Use "off" for a neutral color and no arrow
     )
 
 with metric_col2:
@@ -145,6 +144,7 @@ for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
         avg_count = national_averages.get(proc_code, 0)
         summary_texts.append(f"**{proc_name}**: {int(count)} <span style='color:grey; font-style: italic;'>(Avg: {avg_count:.1f})</span>")
 if summary_texts: st.markdown(" | ".join(summary_texts), unsafe_allow_html=True)
+
 bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedure', value_name='Count')
 if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
     bariatric_chart = alt.Chart(bariatric_df_melted).mark_bar().encode(
@@ -172,6 +172,7 @@ if total_approaches > 0:
             avg_pct = avg_approaches_pct.get(name, 0)
             summary_texts_approach.append(f"**{name}**: {int(count)} ({percentage:.1f}%) <span style='color:grey; font-style: italic;'>(Nat. Avg: {avg_pct:.1f}%)</span>")
 if summary_texts_approach: st.markdown(" | ".join(summary_texts_approach), unsafe_allow_html=True)
+
 approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach', value_name='Count')
 if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
     bar = alt.Chart(approach_df_melted).mark_bar().encode(
