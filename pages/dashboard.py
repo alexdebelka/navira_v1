@@ -99,7 +99,7 @@ with metric_col1:
     st.metric(
         label="Total Surgeries (All Types)",
         value=f"{total_proc:.0f}",
-        delta=f"{delta_total:+.0f} vs. National Avg ({avg_total:.0f})",
+        delta=f"{delta_total:+.0f} vs. National Avg (={avg_total:.0f})",
         delta_color="normal"
     )
 
@@ -109,8 +109,8 @@ with metric_col1:
     st.metric(
         label="Total Revision Surgeries",
         value=f"{total_rev:.0f}",
-        delta=f"{delta_rev:+.0f} vs. National Avg ({avg_rev:.0f})",
-        delta_color="off" # Use "off" for a neutral color and no arrow
+        delta=f"{delta_rev:+.0f} vs. National Avg (={avg_rev:.0f})",
+        delta_color="normal" # Use "off" for a neutral color and no arrow
     )
 
 with metric_col2:
