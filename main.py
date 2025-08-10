@@ -284,7 +284,6 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 else:
                     st.info("No bariatric procedure data available.")
 
-                # --- Surgical Approaches Chart ---
                 st.markdown("**Surgical Approaches by Year**")
                 approach_df = hospital_annual_data[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES)
                 approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach', value_name='Count')
@@ -293,24 +292,38 @@ if st.session_state.search_triggered and not filtered_df.empty:
                     total_per_year = approach_df_melted.groupby('annee')['Count'].transform('sum')
                     approach_df_melted['Percentage'] = (approach_df_melted['Count'] / total_per_year.replace(0, 1) * 100)
 
-                    bar = alt.Chart(approach_df_melted).mark_bar().encode(
+                    # --- DEBUG: Show the data table with percentages ---
+                    # You can comment out or delete the line below once you confirm it's working
+                    st.write("Debug Data with Percentages:")
+                    st.dataframe(approach_df_melted)
+                    
+                    # --- FIX: More robust chart definition ---
+                    # Create a base chart
+                    base = alt.Chart(approach_df_melted)
+                    
+                    # Create the bar layer
+                    bar = base.mark_bar().encode(
                         x=alt.X('annee:O', title='Year', axis=alt.Axis(labelAngle=0)),
                         y=alt.Y('Count:Q', title='Number of Surgeries'),
                         color='Approach:N',
                         tooltip=['annee', 'Approach', 'Count', alt.Tooltip('Percentage:Q', format='.1f')]
                     )
-                    
-                    text = bar.mark_text(
-                        align='center', baseline='bottom', dy=-5, color='black'
+
+                    # Create the text layer explicitly
+                    text = base.mark_text(
+                        align='center',
+                        baseline='bottom',
+                        dy=-5  # Nudge text up
                     ).encode(
-                        # <<< THIS IS THE CORRECTED LINE
-                        text=alt.Expression("format(datum.Percentage, '.1f') + '%'")
+                        x=alt.X('annee:O'),
+                        y=alt.Y('Count:Q'),
+                        text=alt.Expression("format(datum.Percentage, '.1f') + '%'"),
+                        color=alt.value('black') # Explicitly set text color
                     )
-                    
-                    st.altair_chart(bar + text, use_container_width=True)
+
+                    st.altair_chart((bar + text).interactive(), use_container_width=True)
                 else:
                     st.info("No surgical approach data available.")
-
 
 elif st.session_state.search_triggered:
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
