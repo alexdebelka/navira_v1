@@ -33,7 +33,7 @@ SURGICAL_APPROACH_NAMES = {
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
-def load_data(path="flattened_v3.csv"):
+def load_data(path="data/flattened_v3.csv"):
     try:
         df = pd.read_csv(path)
         df.rename(columns={
