@@ -142,7 +142,7 @@ for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
     count = bariatric_summary.get(proc_name, 0)
     if count > 0:
         avg_count = national_averages.get(proc_code, 0)
-        summary_texts.append(f"**{proc_name}**: {int(count)} <span style='color:grey; font-style: italic;'>(Avg: {avg_count:.1f})</span>")
+        summary_texts.append(f"**{proc_name}**: {int(count)} <span style='color:grey; font-style: italic;'>(National Average: {avg_count:.1f})</span>")
 if summary_texts: st.markdown(" | ".join(summary_texts), unsafe_allow_html=True)
 
 bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedure', value_name='Count')
@@ -170,7 +170,7 @@ if total_approaches > 0:
         if count > 0:
             percentage = (count / total_approaches) * 100
             avg_pct = avg_approaches_pct.get(name, 0)
-            summary_texts_approach.append(f"**{name}**: {int(count)} ({percentage:.1f}%) <span style='color:grey; font-style: italic;'>(Nat. Avg: {avg_pct:.1f}%)</span>")
+            summary_texts_approach.append(f"**{name}**: {int(count)} ({percentage:.1f}%) <span style='color:grey; font-style: italic;'>(National Average: {avg_pct:.1f}%)</span>")
 if summary_texts_approach: st.markdown(" | ".join(summary_texts_approach), unsafe_allow_html=True)
 
 approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach', value_name='Count')
