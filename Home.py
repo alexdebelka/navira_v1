@@ -1,3 +1,4 @@
+# Home.py
 import streamlit as st
 import pandas as pd
 import folium
@@ -5,6 +6,7 @@ from folium.plugins import MarkerCluster
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 from streamlit_folium import st_folium
+from streamlit_option_menu import option_menu
 
 # --- 1. App Configuration ---
 st.set_page_config(
@@ -13,6 +15,16 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- HIDE THE DEFAULT SIDEBAR ---
+st.markdown("""
+    <style>
+        [data-testid="stSidebarNav"] {
+            display: none;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+
 # --- 2. Session State Initialization ---
 if "selected_hospital_id" not in st.session_state:
     st.session_state.selected_hospital_id = None
@@ -20,6 +32,7 @@ if "address" not in st.session_state:
     st.session_state.address = ""
 if "filtered_df" not in st.session_state:
     st.session_state.filtered_df = pd.DataFrame()
+
 
 # --- MAPPING DICTIONARIES ---
 BARIATRIC_PROCEDURE_NAMES = {
@@ -32,7 +45,7 @@ SURGICAL_APPROACH_NAMES = {
 
 # --- 3. Load and Prepare Data ---
 @st.cache_data
-def load_data(path="data/flattened_v3.csv"):
+def load_data(path="flattened_v3.csv"):
     try:
         df = pd.read_csv(path)
         df.rename(columns={
@@ -40,9 +53,7 @@ def load_data(path="data/flattened_v3.csv"):
             'revision_surgeries_n': 'Revision Surgeries (N)', 'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
         df['Status'] = df['Status'].astype(str).str.strip().str.lower()
-        status_mapping = {
-            'private not-for-profit': 'private-non-profit', 'public': 'public', 'private for profit': 'private-for-profit'
-        }
+        status_mapping = {'private not-for-profit': 'private-non-profit', 'public': 'public', 'private for profit': 'private-for-profit'}
         df['Status'] = df['Status'].map(status_mapping)
         numeric_cols = [
             'Revision Surgeries (N)', 'total_procedures_period', 'annee', 'total_procedures_year',
@@ -51,52 +62,58 @@ def load_data(path="data/flattened_v3.csv"):
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        for col in ['lib_dep', 'lib_reg']:
-            if col in df.columns:
-                df[col] = df[col].astype(str).fillna('N/A')
         df.dropna(subset=['latitude', 'longitude'], inplace=True)
         df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
         return df
     except FileNotFoundError:
         st.error(f"Fatal Error: Data file '{path}' not found.")
         st.stop()
-    except Exception as e:
-        st.error(f"An error occurred loading data: {e}")
-        st.stop()
 
 df = load_data()
 st.session_state.df = df
 
-# --- CORRECTED: Function to Calculate National Averages ---
 @st.cache_data
 def calculate_national_averages(dataf):
-    # First, sum up all procedures for each unique hospital over the years
     hospital_sums = dataf.groupby('ID').agg({
-         'total_procedures_period': 'first',
-         'Revision Surgeries (N)': 'first',
+         'total_procedures_period': 'first', 'Revision Surgeries (N)': 'first',
          **{proc: 'sum' for proc in BARIATRIC_PROCEDURE_NAMES.keys()},
          **{app: 'sum' for app in SURGICAL_APPROACH_NAMES.keys()}
     })
-    
-    # Now, calculate the mean of these totals across all hospitals
     averages = hospital_sums.mean().to_dict()
-    
-    # Calculate overall percentages for surgical approaches
     total_approaches = sum(averages.get(app, 0) for app in SURGICAL_APPROACH_NAMES.keys())
     averages['approaches_pct'] = {}
     if total_approaches > 0:
         for app_code, app_name in SURGICAL_APPROACH_NAMES.items():
             avg_count = averages.get(app_code, 0)
             averages['approaches_pct'][app_name] = (avg_count / total_approaches) * 100 if total_approaches else 0
-            
     return averages
 
 if 'national_averages' not in st.session_state:
     st.session_state.national_averages = calculate_national_averages(df)
 
-# --- 4. Main Page UI & Search Controls ---
+# --- 4. TOP NAVIGATION HEADER ---
+selected = option_menu(
+    menu_title=None,
+    options=["Home", "Hospital Dashboard"],
+    icons=["house", "clipboard2-data"],
+    menu_icon="cast",
+    default_index=0,
+    orientation="horizontal",
+)
+
+if selected == "Hospital Dashboard":
+    # If user clicks dashboard, check if a hospital has been selected, otherwise prompt them
+    if st.session_state.selected_hospital_id:
+        st.switch_page("pages/Hospital_Dashboard.py")
+    else:
+        st.warning("Please select a hospital from the map or list below before viewing the dashboard.")
+
+# --- 5. Main Page UI & Search Controls ---
 st.title("🏥 Navira - French Hospital Explorer")
-st.markdown("Find specialized hospitals based on your location and criteria. Created in collaboration with Avicenne Hospital, Bobigny.")
+# ... (The rest of your home page code remains the same)
+
+# --- (The rest of your `main.py`/`Home.py` code follows here) ---
+# I'm including the rest of the file for completeness.
 _, center_col, _ = st.columns([1, 2, 1])
 with center_col:
     with st.form(key="search_form"):
@@ -112,9 +129,11 @@ with center_col:
             is_university = col3.checkbox("University Hospital")
             is_soffco = col4.checkbox("Centre of Excellence (SOFFCO)")
             is_health_ministry = col5.checkbox("Centre of Excellence (Health Ministry)")
+        
         search_col, reset_col = st.columns(2)
         submitted = search_col.form_submit_button("🔎 Search Hospitals", use_container_width=True)
         reset_clicked = reset_col.form_submit_button("🔄 Reset", use_container_width=True)
+
         if submitted and address_input:
             st.session_state.address = address_input
             st.session_state.search_triggered = True
@@ -128,8 +147,6 @@ with center_col:
             st.session_state.address = ""
             st.session_state.filtered_df = pd.DataFrame()
 st.markdown("---")
-
-# --- 5. Geocoding and Filtering Logic ---
 @st.cache_data(show_spinner="Geocoding address...")
 def geocode_address(address):
     if not address: return None
@@ -158,8 +175,6 @@ if st.session_state.get('search_triggered', False):
     else:
         if st.session_state.address: st.error("Address not found. Please try a different address.")
         st.session_state.search_triggered = False
-
-# --- 6. Display Results: Map and List ---
 if st.session_state.get('search_triggered', False) and not st.session_state.filtered_df.empty:
     unique_hospitals_df = st.session_state.filtered_df.drop_duplicates(subset=['ID']).copy()
     st.header(f"Found {len(unique_hospitals_df)} Hospitals")
@@ -175,7 +190,7 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
         distances = unique_hospitals_df.apply(lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1)
         if distances.min() < 0.1:
             st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
-            st.switch_page("pages/dashboard.py")
+            st.switch_page("pages/Hospital_Dashboard.py")
     st.subheader("Hospital List")
     for idx, row in unique_hospitals_df.iterrows():
         col1, col2, col3 = st.columns([4, 2, 2])
@@ -183,6 +198,6 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
         col2.markdown(f"*{row['Distance (km)']:.1f} km*")
         if col3.button("View Details", key=f"details_{row['ID']}"):
             st.session_state.selected_hospital_id = row['ID']
-            st.switch_page("pages/dashboard.py")
+            st.switch_page("pages/Hospital_Dashboard.py")
 elif st.session_state.get('search_triggered', False):
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
