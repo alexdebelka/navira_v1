@@ -12,15 +12,14 @@ st.set_page_config(
     layout="wide",
 )
 
-# <<< FIX: Initialize the session state key at the very start >>>
+# --- State Initialization & Navigation (DO NOT CHANGE) ---
 if "selected_hospital_id" not in st.session_state:
     st.session_state.selected_hospital_id = None
 
-# <<< FIX: Navigation logic now safely checks the initialized key >>>
 if st.session_state.selected_hospital_id is not None:
     st.switch_page("pages/dashboard.py")
 
-# --- Data Loading Function ---
+# --- Data Loading Function (Restored to simpler version) ---
 @st.cache_data
 def load_data(path):
     try:
@@ -30,21 +29,9 @@ def load_data(path):
             'revision_surgeries_n': 'Revision Surgeries (N)',
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
-        
-        agg_functions = {
-            'Hospital Name': 'first', 'Status': 'first', 'City': 'first',
-            'latitude': 'first', 'longitude': 'first', 'lib_dep': 'first', 'lib_reg': 'first',
-            'total_procedures_period': 'first',
-            'Revision Surgeries (N)': 'first',
-            'Revision Surgeries (%)': 'first',
-            'university': 'max', 'cso': 'max', 'LAB_SOFFCO': 'max'
-        }
-        
-        hospital_df = df.groupby('ID').agg(agg_functions).reset_index()
-        return df, hospital_df
-
+        return df
     except FileNotFoundError:
-        st.error(f"Fatal Error: Data file not found at '{path}'. Please ensure the file is in the 'data' directory.")
+        st.error(f"Fatal Error: Data file not found at '{path}'.")
         st.stop()
     except Exception as e:
         st.error(f"An error occurred loading data: {e}")
@@ -55,9 +42,12 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 file_path = os.path.join(script_dir, 'data', 'flattened_v3.csv')
 
 # --- Load Data ---
-full_df, hospitals_df = load_data(file_path)
+full_df = load_data(file_path)
+st.session_state.df = full_df # Store full data for the dashboard page
 
-st.session_state.df = full_df
+# <<< FIX: Create a simple, unique list of hospitals for the main page display >>>
+hospitals_df = full_df.sort_values('annee', ascending=False).drop_duplicates(subset=['ID'], keep='first')
+
 
 # --- UI ---
 st.title("🏥 Navira - French Hospital Explorer")
