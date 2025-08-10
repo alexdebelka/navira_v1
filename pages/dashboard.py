@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
+import os
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -19,11 +20,12 @@ SURGICAL_APPROACH_NAMES = {
     'LAP': 'Open Surgery', 'COE': 'Coelioscopy', 'ROB': 'Robotic'
 }
 
-# <<< FIX: The load_data function is now included in this file >>>
+# <<< FIX: The load_data function is updated to use a comma separator >>>
 @st.cache_data
-def load_data(path="flattened_v3.csv"):
+def load_data(path): # Removed default path here
     try:
-        df = pd.read_csv(path)
+        # Use sep=',' because your CSV file is comma-separated
+        df = pd.read_csv(path, sep=',')
         df.rename(columns={
             'id': 'ID', 'rs': 'Hospital Name', 'statut': 'Status', 'ville': 'City',
             'revision_surgeries_n': 'Revision Surgeries (N)', 'revision_surgeries_pct': 'Revision Surgeries (%)'
@@ -48,11 +50,17 @@ def load_data(path="flattened_v3.csv"):
         df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
         return df
     except FileNotFoundError:
-        st.error(f"Fatal Error: Data file '{path}' not found.")
+        st.error(f"Fatal Error: Data file not found at the constructed path: '{path}'")
         st.stop()
     except Exception as e:
         st.error(f"An error occurred loading data: {e}")
         st.stop()
+
+# <<< FIX: Construct the correct, absolute path to your data file >>>
+# This gets the directory of the current script (pages/)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# This goes up one level ('..') to the main project folder, then into the 'data' folder
+file_path = os.path.join(script_dir, '..', 'data', 'flattened_v3.csv')
 
 
 st.title("📊 Hospital Details Dashboard")
@@ -61,10 +69,10 @@ st.title("📊 Hospital Details Dashboard")
 if "selected_hospital_id" not in st.session_state or st.session_state.selected_hospital_id is None:
     st.warning("Please select a hospital from the main '🏥 Navira - French Hospital Explorer' page first.", icon="👈")
     st.stop()
-    
-# <<< FIX: Safely load the main dataframe if it's not in the session state >>>
+
+# <<< FIX: Load the main dataframe using the correct path if it's not in the session state >>>
 if 'df' not in st.session_state:
-    st.session_state.df = load_data()
+    st.session_state.df = load_data(file_path) # Pass the correct path to the function
 
 
 # --- Load data from session state ---
