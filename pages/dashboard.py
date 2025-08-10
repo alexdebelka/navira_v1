@@ -4,6 +4,22 @@ import pandas as pd
 import altair as alt
 import os
 
+# In pages/dashboard.py
+
+st.title("📊 Hospital Details Dashboard")
+
+# <<< ADD THIS BUTTON >>>
+if st.button("⬅️ Back to Map"):
+    st.session_state.selected_hospital_id = None
+    st.switch_page("main.py")
+
+# --- Safely check for selected hospital ---
+if "selected_hospital_id" not in st.session_state or st.session_state.selected_hospital_id is None:
+    # This part is now mostly for safety in case of direct navigation
+    st.warning("Please select a hospital from the main '🏥 Navira - French Hospital Explorer' page first.", icon="👈")
+    st.stop()
+
+
 # --- Page Configuration ---
 st.set_page_config(
     page_title="Hospital Dashboard",
