@@ -103,7 +103,7 @@ selected = option_menu(
 
 if selected == "Hospital Dashboard":
     if st.session_state.selected_hospital_id:
-        st.switch_page("pages/Hospital_Dashboard.py")
+        st.switch_page("pages/dashboard.py")
     else:
         st.warning("Please select a hospital from the map or list below before viewing the dashboard.")
 
@@ -191,7 +191,7 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
         distances = unique_hospitals_df.apply(lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1)
         if distances.min() < 0.1:
             st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
-            st.switch_page("pages/Hospital_Dashboard.py")
+            st.switch_page("pages/dashboard.py")
     st.subheader("Hospital List")
     for idx, row in unique_hospitals_df.iterrows():
         col1, col2, col3 = st.columns([4, 2, 2])
