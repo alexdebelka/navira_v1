@@ -1,15 +1,27 @@
-# pages/dashboard.py
 import streamlit as st
 import pandas as pd
-import altair as alt
-import os
+import folium
+from folium.plugins import MarkerCluster
+from geopy.geocoders import Nominatim
+from geopy.distance import geodesic
+from streamlit_folium import st_folium
 
-# --- Page Configuration ---
+# --- 1. App Configuration ---
 st.set_page_config(
-    page_title="Hospital Dashboard",
-    page_icon="📊",
+    page_title="Navira - Hospital Explorer",
+    page_icon="🏥",
     layout="wide"
 )
+
+# --- 2. Session State Initialization ---
+if "selected_hospital_id" not in st.session_state:
+    st.session_state.selected_hospital_id = None
+if "address" not in st.session_state:
+    st.session_state.address = ""
+# FIX: Initialize filtered_df to prevent KeyError on first run
+if "filtered_df" not in st.session_state:
+    st.session_state.filtered_df = pd.DataFrame()
+
 
 # --- MAPPING DICTIONARIES ---
 BARIATRIC_PROCEDURE_NAMES = {
@@ -20,10 +32,11 @@ SURGICAL_APPROACH_NAMES = {
     'LAP': 'Open Surgery', 'COE': 'Coelioscopy', 'ROB': 'Robotic'
 }
 
+# --- 3. Load and Prepare Data ---
 @st.cache_data
-def load_data(path):
+def load_data(path="flattened_v3.csv"):
     try:
-        df = pd.read_csv(path, sep=',')
+        df = pd.read_csv(path)
         df.rename(columns={
             'id': 'ID', 'rs': 'Hospital Name', 'statut': 'Status', 'ville': 'City',
             'revision_surgeries_n': 'Revision Surgeries (N)', 'revision_surgeries_pct': 'Revision Surgeries (%)'
@@ -48,121 +61,115 @@ def load_data(path):
         df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
         return df
     except FileNotFoundError:
-        st.error(f"Fatal Error: Data file not found at path: '{path}'")
+        st.error(f"Fatal Error: Data file '{path}' not found.")
         st.stop()
     except Exception as e:
         st.error(f"An error occurred loading data: {e}")
         st.stop()
 
-# --- Build the correct file path ---
-script_dir = os.path.dirname(os.path.abspath(__file__))
-file_path = os.path.join(script_dir, '..', 'data', 'flattened_v3.csv')
+df = load_data()
+st.session_state.df = df
 
-st.title("📊 Hospital Details Dashboard")
+# --- 4. Main Page UI & Search Controls ---
+st.title("🏥 Navira - French Hospital Explorer")
+st.markdown("Find specialized hospitals based on your location and criteria. Created in collaboration with Avicenne Hospital, Bobigny.")
 
-# --- Safely check for selected hospital ---
-if "selected_hospital_id" not in st.session_state or st.session_state.selected_hospital_id is None:
-    st.warning("Please select a hospital from the main '🏥 Navira - French Hospital Explorer' page first.", icon="👈")
-    st.stop()
+_, center_col, _ = st.columns([1, 2, 1])
+with center_col:
+    with st.form(key="search_form"):
+        address_input = st.text_input("📍 Enter your address or postal code", value=st.session_state.address, placeholder="e.g., 75019 or Paris")
+        with st.expander("Advanced Filters"):
+            radius_km = st.slider("📏 Search Radius (km)", 5, 300, 50, 5)
+            st.markdown("**Establishment Type**")
+            col1, col2 = st.columns(2)
+            is_public_non_profit = col1.checkbox("Public / Non-Profit", True)
+            is_private_for_profit = col2.checkbox("Private For-Profit", True)
+            st.markdown("**Labels & Affiliations**")
+            col3, col4, col5 = st.columns(3)
+            is_university = col3.checkbox("University Hospital")
+            is_soffco = col4.checkbox("Centre of Excellence (SOFFCO)")
+            is_health_ministry = col5.checkbox("Centre of Excellence (Health Ministry)")
+        
+        search_col, reset_col = st.columns(2)
+        submitted = search_col.form_submit_button("🔎 Search Hospitals", use_container_width=True)
+        reset_clicked = reset_col.form_submit_button("🔄 Reset", use_container_width=True)
 
-# --- Load the main dataframe if it's not in the session state ---
-if 'df' not in st.session_state:
-    st.session_state.df = load_data(file_path)
-
-# --- Get data for the selected hospital ---
-df = st.session_state.df
-selected_hospital_id = st.session_state.selected_hospital_id
-
-# <<< FIX: This whole section is improved to avoid the ValueError >>>
-# Get all annual data for the selected hospital (for charts)
-selected_hospital_all_data = df[df['ID'] == selected_hospital_id]
-
-if selected_hospital_all_data.empty:
-    st.error("Could not find data for the selected hospital. Please select another.")
-    st.stop()
-
-# For the details, we only need one row. We'll use the first row found.
-# The labels and totals are the same for every year in your data.
-selected_hospital_details = selected_hospital_all_data.iloc[0]
-# <<< END OF FIX SECTION >>>
-
-# --- Display Hospital Details ---
-st.markdown(f"## {selected_hospital_details['Hospital Name']}")
-col1, col2, col3 = st.columns(3)
-col1.markdown(f"**City:** {selected_hospital_details['City']}")
-col2.markdown(f"**Status:** {selected_hospital_details['Status']}")
-if 'Distance (km)' in selected_hospital_details and pd.notna(selected_hospital_details['Distance (km)']):
-    col3.markdown(f"**Distance:** {selected_hospital_details['Distance (km)']:.1f} km")
-st.markdown("---")
-
-metric_col1, metric_col2 = st.columns(2)
-with metric_col1:
-    st.markdown("##### Surgery Statistics (2020-2024)")
-    total_proc = selected_hospital_details.get('total_procedures_period', 0)
-    st.metric("Total Surgeries (All Types)", f"{int(total_proc):,}")
-    st.metric("Total Revision Surgeries", f"{int(selected_hospital_details['Revision Surgeries (N)']):,}")
-
-with metric_col2:
-    st.markdown("##### Labels & Affiliations")
-    # Now these `if` statements will only see one value at a time
-    if selected_hospital_details['university'] == 1:
-        st.success("🎓 University Hospital (Academic Affiliation)")
-    else:
-        st.info("➖ No University Affiliation")
-    if selected_hospital_details['LAB_SOFFCO'] == 1:
-        st.success("✅ Centre of Excellence (SOFFCO)")
-    else:
-        st.info("➖ No SOFFCO Centre Label")
-    if selected_hospital_details['cso'] == 1:
-        st.success("✅ Centre of Excellence (Health Ministry)")
-    else:
-        st.info("➖ No Health Ministry Centre Label")
-
-st.markdown("---")
-st.header("Annual Statistics")
-
-hospital_annual_data_for_charts = selected_hospital_all_data.set_index('annee').sort_index()
-
-# --- Bariatric Procedures Chart ---
-st.markdown("##### Bariatric Procedures by Year")
-bariatric_df = hospital_annual_data_for_charts[list(BARIATRIC_PROCEDURE_NAMES.keys())].rename(columns=BARIATRIC_PROCEDURE_NAMES)
-bariatric_summary = bariatric_df.sum()
-summary_texts = [f"**{name}**: {int(count)}" for name, count in bariatric_summary.items() if count > 0]
-if summary_texts: st.markdown(" | ".join(summary_texts))
-
-bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedure', value_name='Count')
-if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
-    bariatric_chart = alt.Chart(bariatric_df_melted).mark_bar().encode(
-        x=alt.X('annee:O', title='Year', axis=alt.Axis(labelAngle=0)),
-        y=alt.Y('Count:Q', title='Number of Procedures'),
-        color='Procedure:N', tooltip=['annee', 'Procedure', 'Count']
-    ).interactive()
-    st.altair_chart(bariatric_chart, use_container_width=True)
-else:
-    st.info("No bariatric procedure data available.")
+        if submitted and address_input:
+            st.session_state.address = address_input
+            st.session_state.search_triggered = True
+            st.session_state.selected_hospital_id = None
+        elif submitted:
+            st.warning("Please enter an address first.")
+            st.session_state.search_triggered = False
+        if reset_clicked:
+            st.session_state.search_triggered = False
+            st.session_state.selected_hospital_id = None
+            st.session_state.address = ""
+            st.session_state.filtered_df = pd.DataFrame()
 
 st.markdown("---")
 
-# --- Surgical Approaches Chart ---
-st.markdown("##### Surgical Approaches by Year")
-approach_df = hospital_annual_data_for_charts[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES)
-approach_summary = approach_df.sum()
-total_approaches = approach_summary.sum()
-summary_texts_approach = []
-if total_approaches > 0:
-    for name, count in approach_summary.items():
-        if count > 0:
-            percentage = (count / total_approaches) * 100
-            summary_texts_approach.append(f"**{name}**: {int(count)} ({percentage:.1f}%)")
-if summary_texts_approach: st.markdown(" | ".join(summary_texts_approach))
+# --- 5. Geocoding and Filtering Logic ---
+@st.cache_data(show_spinner="Geocoding address...")
+def geocode_address(address):
+    if not address: return None
+    try:
+        geolocator = Nominatim(user_agent="navira_streamlit_app_v26")
+        location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
+        return (location.latitude, location.longitude) if location else None
+    except Exception as e:
+        st.error(f"Geocoding failed: {e}")
+        return None
 
-approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach', value_name='Count')
-if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
-    bar = alt.Chart(approach_df_melted).mark_bar().encode(
-        x=alt.X('annee:O', title='Year', axis=alt.Axis(labelAngle=0)),
-        y=alt.Y('Count:Q', title='Number of Surgeries'),
-        color='Approach:N', tooltip=['annee', 'Approach', 'Count']
-    )
-    st.altair_chart(bar.interactive(), use_container_width=True)
-else:
-    st.info("No surgical approach data available.")
+if st.session_state.get('search_triggered', False):
+    user_coords = geocode_address(st.session_state.address)
+    if user_coords:
+        temp_df = df.copy()
+        temp_df['Distance (km)'] = temp_df.apply(lambda row: geodesic(user_coords, (row['latitude'], row['longitude'])).km, axis=1)
+        temp_df = temp_df[temp_df['Distance (km)'] <= radius_km]
+        selected_statuses = []
+        if is_public_non_profit: selected_statuses.extend(['public', 'private-non-profit'])
+        if is_private_for_profit: selected_statuses.append('private-for-profit')
+        temp_df = temp_df[temp_df['Status'].isin(selected_statuses)]
+        if is_university: temp_df = temp_df[temp_df['university'] == 1]
+        if is_soffco: temp_df = temp_df[temp_df['LAB_SOFFCO'] == 1]
+        if is_health_ministry: temp_df = temp_df[temp_df['cso'] == 1]
+        filtered_df = temp_df.sort_values('Distance (km)')
+        st.session_state.filtered_df = filtered_df
+    else:
+        if st.session_state.address: st.error("Address not found. Please try a different address.")
+        st.session_state.search_triggered = False
+
+# --- 6. Display Results: Map and List ---
+if st.session_state.get('search_triggered', False) and not st.session_state.filtered_df.empty:
+    unique_hospitals_df = st.session_state.filtered_df.drop_duplicates(subset=['ID']).copy()
+    st.header(f"Found {len(unique_hospitals_df)} Hospitals")
+    
+    m = folium.Map(location=user_coords, zoom_start=9, tiles="CartoDB positron")
+    folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to(m)
+    marker_cluster = MarkerCluster().add_to(m)
+    for idx, row in unique_hospitals_df.iterrows():
+        color = "blue" if row['Status'] == 'public' else "lightblue" if row['Status'] == 'private-non-profit' else "green"
+        folium.Marker(location=[row['latitude'], row['longitude']], popup=f"<b>{row['Hospital Name']}</b>", icon=folium.Icon(icon="hospital-o", prefix="fa", color=color)).add_to(marker_cluster)
+    map_data = st_folium(m, width="100%", height=500, key="folium_map")
+
+    # FIX: Handle Map Click to automatically switch page
+    if map_data and map_data.get("last_object_clicked"):
+        clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])
+        distances = unique_hospitals_df.apply(lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1)
+        if distances.min() < 0.1:
+            st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
+            st.switch_page("pages/dashboard.py")
+
+    st.subheader("Hospital List")
+    for idx, row in unique_hospitals_df.iterrows():
+        col1, col2, col3 = st.columns([4, 2, 2])
+        col1.markdown(f"**{row['Hospital Name']}** ({row['City']})")
+        col2.markdown(f"*{row['Distance (km)']:.1f} km*")
+        # FIX: Handle Button Click to automatically switch page
+        if col3.button("View Details", key=f"details_{row['ID']}"):
+            st.session_state.selected_hospital_id = row['ID']
+            st.switch_page("pages/dashboard.py")
+
+elif st.session_state.get('search_triggered', False):
+    st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
