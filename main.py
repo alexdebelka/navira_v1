@@ -200,5 +200,6 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
         if col3.button("View Details", key=f"details_{row['ID']}"):
             st.session_state.selected_hospital_id = row['ID']
             st.switch_page("pages/dashboard.py")
+        st.markdown("---")
 elif st.session_state.get('search_triggered', False):
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
