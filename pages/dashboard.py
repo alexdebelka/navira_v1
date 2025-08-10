@@ -21,18 +21,20 @@ SURGICAL_APPROACH_NAMES = {
 
 st.title("📊 Hospital Details Dashboard")
 
-# --- Check for selected hospital ---
+# --- Safely check for selected hospital and filtered data ---
 if "selected_hospital_id" not in st.session_state or st.session_state.selected_hospital_id is None:
     st.warning("Please select a hospital from the main '🏥 Navira - French Hospital Explorer' page first.", icon="👈")
     st.stop()
-
-# --- Load data from session state ---
-if "df" not in st.session_state:
-    st.error("Data not found. Please go back to the main page and perform a search.")
+    
+# FIX: Check if filtered_df exists in session state before using it
+if 'filtered_df' not in st.session_state:
+    st.warning("Please perform a search on the main page before viewing a dashboard.", icon="👈")
     st.stop()
 
+
+# --- Load data from session state ---
 df = st.session_state.df
-filtered_df = st.session_state.get('filtered_df', pd.DataFrame())
+filtered_df = st.session_state.filtered_df
 selected_hospital_id = st.session_state.selected_hospital_id
 
 # Find all data for the selected hospital
@@ -40,6 +42,7 @@ if not filtered_df.empty and selected_hospital_id in filtered_df['ID'].values:
     selected_hospital_all_data = filtered_df[filtered_df['ID'] == selected_hospital_id]
     selected_hospital_details = selected_hospital_all_data.iloc[0]
 else:
+    # Fallback for page refresh
     selected_hospital_all_data = df[df['ID'] == selected_hospital_id]
     if selected_hospital_all_data.empty:
         st.error("Could not find data for the selected hospital. Please select another.")
@@ -104,11 +107,8 @@ else:
 st.markdown("---")
 
 # --- Surgical Approaches Chart ---
-# <<< THIS ENTIRE BLOCK IS THE FIX
 st.markdown("##### Surgical Approaches by Year")
 approach_df = hospital_annual_data[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES)
-
-# Calculate and display summary with percentages above the chart
 approach_summary = approach_df.sum()
 total_approaches = approach_summary.sum()
 summary_texts_approach = []
@@ -120,14 +120,11 @@ if total_approaches > 0:
 if summary_texts_approach: st.markdown(" | ".join(summary_texts_approach))
 
 approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach', value_name='Count')
-
 if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
-    # Create the chart without any text labels on the bars
     bar = alt.Chart(approach_df_melted).mark_bar().encode(
         x=alt.X('annee:O', title='Year', axis=alt.Axis(labelAngle=0)),
         y=alt.Y('Count:Q', title='Number of Surgeries'),
-        color='Approach:N',
-        tooltip=['annee', 'Approach', 'Count']
+        color='Approach:N', tooltip=['annee', 'Approach', 'Count']
     )
     st.altair_chart(bar.interactive(), use_container_width=True)
 else:
