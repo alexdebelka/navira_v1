@@ -68,7 +68,7 @@ if 'df' not in st.session_state:
 df = st.session_state.df
 filtered_df = st.session_state.get('filtered_df', pd.DataFrame())
 selected_hospital_id = st.session_state.selected_hospital_id
-national_averages = st.session_state.get('national_averages', {}) # Get averages
+national_averages = st.session_state.get('national_averages', {})
 
 # Find all data for the selected hospital
 if not filtered_df.empty and selected_hospital_id in filtered_df['ID'].values:
@@ -93,13 +93,30 @@ st.markdown("---")
 metric_col1, metric_col2 = st.columns(2)
 with metric_col1:
     st.markdown("##### Surgery Statistics (2020-2024)")
+    
+    # <<< THIS ENTIRE BLOCK IS THE FIX
+    # Total Surgeries Metric
     total_proc = selected_hospital_details.get('total_procedures_period', 0)
     avg_total = national_averages.get('total_surgeries', 0)
-    st.metric("Total Surgeries (All Types)", f"{total_proc:.0f}", f"National Average: {avg_total:.0f}")
+    delta_total = total_proc - avg_total
+    st.metric(
+        label="Total Surgeries (All Types)",
+        value=f"{total_proc:.0f}",
+        delta=f"{delta_total:.0f} vs. National Avg ({avg_total:.0f})",
+        delta_color="normal"  # Use "normal" to keep color neutral grey
+    )
 
+    # Revision Surgeries Metric
     total_rev = selected_hospital_details.get('Revision Surgeries (N)', 0)
     avg_rev = national_averages.get('revision_surgeries', 0)
-    st.metric("Total Revision Surgeries", f"{total_rev:.0f}", f"National Average: {avg_rev:.0f}")
+    delta_rev = total_rev - avg_rev
+    # For revisions, a lower number is better, so we use "inverse"
+    st.metric(
+        label="Total Revision Surgeries",
+        value=f"{total_rev:.0f}",
+        delta=f"{delta_rev:.0f} vs. National Avg ({avg_rev:.0f})",
+        delta_color="inverse"
+    )
 
 with metric_col2:
     st.markdown("##### Labels & Affiliations")
@@ -129,8 +146,13 @@ summary_texts = []
 avg_procedures = national_averages.get('procedures', {})
 for name, count in bariatric_summary.items():
     if count > 0:
-        avg_count = avg_procedures.get(name, 0)
-        summary_texts.append(f"**{name}**: {int(count)} <span style='color:grey; font-style: italic;'>(Avg: {int(avg_count)})</span>")
+        # We need to get the total count for this procedure across all hospitals for the average
+        avg_count_total = sum([h.get(name, 0) for h in avg_procedures.values()])
+        num_hospitals = len(df['ID'].unique())
+        avg_count = avg_procedures.get(name, 0) / num_hospitals if num_hospitals > 0 else 0
+        
+        summary_texts.append(f"**{name}**: {int(count)} <span style='color:grey; font-style: italic;'>(Avg: {avg_count:.1f})</span>")
+
 if summary_texts: st.markdown(" | ".join(summary_texts), unsafe_allow_html=True)
 
 bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedure', value_name='Count')
@@ -158,7 +180,10 @@ if total_approaches > 0:
         if count > 0:
             percentage = (count / total_approaches) * 100
             avg_data = avg_approaches.get(name, {'count': 0, 'percentage': 0})
-            summary_texts_approach.append(f"**{name}**: {int(count)} ({percentage:.1f}%) <span style='color:grey; font-style: italic;'>(Avg: {int(avg_data['count'])}, {avg_data['percentage']:.1f}%)</span>")
+            num_hospitals = len(df['ID'].unique())
+            avg_count = avg_data['count'] / num_hospitals if num_hospitals > 0 else 0
+            
+            summary_texts_approach.append(f"**{name}**: {int(count)} ({percentage:.1f}%) <span style='color:grey; font-style: italic;'>(Avg: {avg_count:.1f}, {avg_data['percentage']:.1f}%)</span>")
 if summary_texts_approach: st.markdown(" | ".join(summary_texts_approach), unsafe_allow_html=True)
 
 approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach', value_name='Count')
