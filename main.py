@@ -23,18 +23,16 @@ if "address" not in st.session_state:
     st.session_state.address = ""
 
 # --- MAPPING DICTIONARIES ---
-# CHANGE: Updated the Bariatric Procedure names as requested
 BARIATRIC_PROCEDURE_NAMES = {
     'SLE': 'Sleeve Gastrectomy',
     'BPG': 'Gastric Bypass',
     'ANN': 'Band Removal',
-    'REV': 'Other', # Was 'Revision Surgery'
-    'ABL': 'Gastric Banding' # Kept for completeness
+    'REV': 'Other',
+    'ABL': 'Gastric Banding'
 }
 
-# CHANGE: Updated the Surgical Approach names
 SURGICAL_APPROACH_NAMES = {
-    'LAP': 'Open Surgery', # Was 'Laparoscopy'
+    'LAP': 'Open Surgery',
     'COE': 'Coelioscopy',
     'ROB': 'Robotic'
 }
@@ -47,15 +45,13 @@ def load_data(path="flattened_v3.csv"):
     """
     try:
         df = pd.read_csv(path)
-        # Rename original columns for clarity
         df.rename(columns={
             'id': 'ID', 'rs': 'Hospital Name', 'statut': 'Status', 'ville': 'City',
             'revision_surgeries_n': 'Revision Surgeries (N)',
             'revision_surgeries_pct': 'Revision Surgeries (%)'
         }, inplace=True)
 
-        # FIX: Standardize the 'Status' column from the CSV to match filter logic.
-        # The .str.strip() is crucial to remove hidden whitespace.
+        df['Status'] = df['Status'].astype(str)
         df['Status'] = df['Status'].str.strip().str.lower()
         status_mapping = {
             'private not-for-profit': 'private-non-profit',
@@ -64,7 +60,6 @@ def load_data(path="flattened_v3.csv"):
         }
         df['Status'] = df['Status'].map(status_mapping)
 
-        # Robustly convert all numeric columns
         numeric_cols = [
             'Revision Surgeries (N)', 'total_procedures_period', 'annee',
             'total_procedures_year', 'university', 'cso', 'LAB_SOFFCO',
@@ -75,14 +70,12 @@ def load_data(path="flattened_v3.csv"):
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-        # Ensure text columns are strings
         for col in ['lib_dep', 'lib_reg']:
             if col in df.columns:
                 df[col] = df[col].astype(str).fillna('N/A')
 
         df.drop_duplicates(subset=['ID', 'annee'], keep='first', inplace=True)
         df.dropna(subset=['latitude', 'longitude'], inplace=True)
-        # Filter out invalid coordinates like -9999
         df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
         return df
     except FileNotFoundError:
@@ -108,10 +101,8 @@ with center_col:
         )
         
         with st.expander("Advanced Filters"):
-            # CHANGE: Radius slider max value reduced to 300km
             radius_km = st.slider("📏 Search Radius (km)", min_value=5, max_value=300, value=50, step=5)
 
-            # CHANGE: Status filter updated to group public and non-profit
             st.markdown("**Establishment Type**")
             col1, col2 = st.columns(2)
             with col1:
@@ -119,7 +110,6 @@ with center_col:
             with col2:
                 is_private_for_profit = st.checkbox("Private For-Profit", value=True)
 
-            # CHANGE: Added new advanced filters for affiliations
             st.markdown("**Labels & Affiliations**")
             col3, col4, col5 = st.columns(3)
             with col3:
@@ -175,7 +165,6 @@ if st.session_state.search_triggered:
         )
         temp_df = temp_df[temp_df['Distance (km)'] <= radius_km]
 
-        # CHANGE: Apply new filter logic
         selected_statuses = []
         if is_public_non_profit:
             selected_statuses.extend(['public', 'private-non-profit'])
@@ -208,7 +197,6 @@ if st.session_state.search_triggered and not filtered_df.empty:
     with map_col:
         st.subheader("🗺️ Map of Hospitals")
 
-        # CHANGE: Map tile changed to 'CartoDB positron' for softer colors
         m = folium.Map(location=user_coords, zoom_start=9, tiles="CartoDB positron")
 
         folium.Marker(
@@ -221,7 +209,7 @@ if st.session_state.search_triggered and not filtered_df.empty:
         for idx, row in unique_hospitals_df.iterrows():
             popup_content = f"<b>{row['Hospital Name']}</b><br>City: {row['City']}<br>Status: {row['Status']}"
             
-            color = "blue" # Default for public
+            color = "blue"
             if row['Status'] == 'private-non-profit':
                 color = "lightblue"
             elif row['Status'] == 'private-for-profit':
@@ -254,7 +242,6 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 st.warning("The previously selected hospital is no longer in the filtered list.")
             else:
                 selected_hospital_all_data = filtered_df[filtered_df['ID'] == st.session_state.selected_hospital_id]
-                # Use the first row for static details, but use all data for charts
                 selected_hospital_details = selected_hospital_all_data.iloc[0]
 
                 st.markdown(f"#### {selected_hospital_details['Hospital Name']}")
@@ -262,16 +249,14 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 st.markdown(f"**Status:** {selected_hospital_details['Status']}")
                 st.markdown(f"**Distance:** {selected_hospital_details['Distance (km)']:.1f} km")
                 st.markdown("---")
-
-                # CHANGE: Display total surgeries first, then revision surgeries
+                
                 st.markdown("**Surgery Statistics (2020-2024)**")
                 total_proc = selected_hospital_details.get('total_procedures_period', 0)
                 st.metric("Total Surgeries (All Types)", f"{total_proc:.0f}")
                 st.metric("Total Revision Surgeries", f"{selected_hospital_details['Revision Surgeries (N)']:.0f}")
 
                 st.markdown("---")
-                
-                # --- Labels & Affiliations ---
+
                 st.markdown("**Labels & Affiliations**")
                 if selected_hospital_details.get('university') == 1:
                     st.success("🎓 University Hospital (Academic Affiliation)")
@@ -282,11 +267,8 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 
                 st.markdown("---")
                 
-                # Prepare annual data for charts, ensuring 'annee' is the index
                 hospital_annual_data = selected_hospital_all_data.set_index('annee').sort_index()
 
-                # --- Bariatric Procedures Chart ---
-                # CHANGE: Using Altair for more control (horizontal labels, better names)
                 st.markdown("**Bariatric Procedures by Year**")
                 bariatric_df = hospital_annual_data[list(BARIATRIC_PROCEDURE_NAMES.keys())].rename(columns=BARIATRIC_PROCEDURE_NAMES)
                 bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedure', value_name='Count')
@@ -302,16 +284,12 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 else:
                     st.info("No bariatric procedure data available.")
 
-                # --- Surgical Approaches Chart ---
-                # CHANGE: Using Altair to add percentage labels
                 st.markdown("**Surgical Approaches by Year**")
                 approach_df = hospital_annual_data[list(SURGICAL_APPROACH_NAMES.keys())].rename(columns=SURGICAL_APPROACH_NAMES)
                 approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach', value_name='Count')
 
                 if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
-                    # Calculate percentages per year
                     total_per_year = approach_df_melted.groupby('annee')['Count'].transform('sum')
-                    # Avoid division by zero if a year has a total count of 0
                     approach_df_melted['Percentage'] = (approach_df_melted['Count'] / total_per_year.replace(0, 1) * 100)
 
                     bar = alt.Chart(approach_df_melted).mark_bar().encode(
@@ -323,7 +301,8 @@ if st.session_state.search_triggered and not filtered_df.empty:
                     text = bar.mark_text(
                         align='center', baseline='bottom', dy=-5, color='black'
                     ).encode(
-                        text=alt.Text('Percentage:Q', format='~s') + '%'
+                        # <<< THIS IS THE FIX
+                        text=alt.Expression("format(datum.Percentage, '.1f') + '%'")
                     )
                     st.altair_chart(bar + text, use_container_width=True)
                 else:
