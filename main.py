@@ -291,17 +291,12 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
                     total_per_year = approach_df_melted.groupby('annee')['Count'].transform('sum')
                     approach_df_melted['Percentage'] = (approach_df_melted['Count'] / total_per_year.replace(0, 1) * 100)
-
-                    # --- DEBUG: Show the data table with percentages ---
-                    # You can comment out or delete the line below once you confirm it's working
-                    st.write("Debug Data with Percentages:")
-                    st.dataframe(approach_df_melted)
                     
-                    # --- FIX: More robust chart definition ---
-                    # Create a base chart
+                    # <<< FINAL FIX: Pre-format the text label in pandas >>>
+                    approach_df_melted['PercentageText'] = approach_df_melted['Percentage'].apply(lambda x: f'{x:.1f}%')
+
                     base = alt.Chart(approach_df_melted)
                     
-                    # Create the bar layer
                     bar = base.mark_bar().encode(
                         x=alt.X('annee:O', title='Year', axis=alt.Axis(labelAngle=0)),
                         y=alt.Y('Count:Q', title='Number of Surgeries'),
@@ -309,16 +304,15 @@ if st.session_state.search_triggered and not filtered_df.empty:
                         tooltip=['annee', 'Approach', 'Count', alt.Tooltip('Percentage:Q', format='.1f')]
                     )
 
-                    # Create the text layer explicitly
                     text = base.mark_text(
                         align='center',
                         baseline='bottom',
-                        dy=-5  # Nudge text up
+                        dy=-5
                     ).encode(
                         x=alt.X('annee:O'),
                         y=alt.Y('Count:Q'),
-                        text=alt.Expression("format(datum.Percentage, '.1f') + '%'"),
-                        color=alt.value('black') # Explicitly set text color
+                        text=alt.Text('PercentageText:N'), # Use the new pre-formatted column
+                        color=alt.value('black')
                     )
 
                     st.altair_chart((bar + text).interactive(), use_container_width=True)
