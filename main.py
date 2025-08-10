@@ -12,10 +12,13 @@ st.set_page_config(
     layout="wide",
 )
 
-# <<< FIX: Use .get() for a more robust check to prevent KeyError >>>
-if st.session_state.get("selected_hospital_id"):
-    st.switch_page("pages/dashboard.py")
+# <<< FIX: Initialize the session state key at the very start >>>
+if "selected_hospital_id" not in st.session_state:
+    st.session_state.selected_hospital_id = None
 
+# <<< FIX: Navigation logic now safely checks the initialized key >>>
+if st.session_state.selected_hospital_id is not None:
+    st.switch_page("pages/dashboard.py")
 
 # --- Data Loading Function ---
 @st.cache_data
