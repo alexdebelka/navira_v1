@@ -26,11 +26,10 @@ if "selected_hospital_id" not in st.session_state or st.session_state.selected_h
     st.warning("Please select a hospital from the main '🏥 Navira - French Hospital Explorer' page first.", icon="👈")
     st.stop()
     
-# FIX: Check if filtered_df exists in session state before using it
+# FIX: Check if filtered_df exists in session state before using it to prevent KeyError
 if 'filtered_df' not in st.session_state:
     st.warning("Please perform a search on the main page before viewing a dashboard.", icon="👈")
     st.stop()
-
 
 # --- Load data from session state ---
 df = st.session_state.df
@@ -48,7 +47,6 @@ else:
         st.error("Could not find data for the selected hospital. Please select another.")
         st.stop()
     selected_hospital_details = selected_hospital_all_data.iloc[0]
-
 
 # --- Display Hospital Details ---
 st.markdown(f"## {selected_hospital_details['Hospital Name']}")
