@@ -3,3 +3,4 @@ pandas
 folium
 geopy
 streamlit-folium
+haversine>=2.8
