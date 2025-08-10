@@ -1,4 +1,3 @@
-# main.py
 import streamlit as st
 import pandas as pd
 import folium
@@ -19,12 +18,12 @@ if "selected_hospital_id" not in st.session_state:
     st.session_state.selected_hospital_id = None
 if "address" not in st.session_state:
     st.session_state.address = ""
-# Initialize filtered_df to avoid errors on first run
+# FIX: Initialize filtered_df to prevent KeyError on first run
 if "filtered_df" not in st.session_state:
     st.session_state.filtered_df = pd.DataFrame()
 
 
-# --- MAPPING DICTIONARIES (kept for consistency if needed) ---
+# --- MAPPING DICTIONARIES ---
 BARIATRIC_PROCEDURE_NAMES = {
     'SLE': 'Sleeve Gastrectomy', 'BPG': 'Gastric Bypass', 'ANN': 'Band Removal',
     'REV': 'Other', 'ABL': 'Gastric Banding'
@@ -69,7 +68,7 @@ def load_data(path="flattened_v3.csv"):
         st.stop()
 
 df = load_data()
-st.session_state.df = df # Store dataframe in session state to be accessible by other pages
+st.session_state.df = df
 
 # --- 4. Main Page UI & Search Controls ---
 st.title("🏥 Navira - French Hospital Explorer")
@@ -108,7 +107,6 @@ with center_col:
             st.session_state.address = ""
             st.session_state.filtered_df = pd.DataFrame()
 
-
 st.markdown("---")
 
 # --- 5. Geocoding and Filtering Logic ---
@@ -142,7 +140,6 @@ if st.session_state.get('search_triggered', False):
         if st.session_state.address: st.error("Address not found. Please try a different address.")
         st.session_state.search_triggered = False
 
-
 # --- 6. Display Results: Map and List ---
 if st.session_state.get('search_triggered', False) and not st.session_state.filtered_df.empty:
     unique_hospitals_df = st.session_state.filtered_df.drop_duplicates(subset=['ID']).copy()
@@ -156,7 +153,7 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
         folium.Marker(location=[row['latitude'], row['longitude']], popup=f"<b>{row['Hospital Name']}</b>", icon=folium.Icon(icon="hospital-o", prefix="fa", color=color)).add_to(marker_cluster)
     map_data = st_folium(m, width="100%", height=500, key="folium_map")
 
-    # Handle Map Click to automatically switch page
+    # FIX: Handle Map Click to automatically switch page
     if map_data and map_data.get("last_object_clicked"):
         clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])
         distances = unique_hospitals_df.apply(lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1)
@@ -164,12 +161,12 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
             st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
             st.switch_page("pages/dashboard.py")
 
-    # List of Hospitals
     st.subheader("Hospital List")
     for idx, row in unique_hospitals_df.iterrows():
         col1, col2, col3 = st.columns([4, 2, 2])
         col1.markdown(f"**{row['Hospital Name']}** ({row['City']})")
         col2.markdown(f"*{row['Distance (km)']:.1f} km*")
+        # FIX: Handle Button Click to automatically switch page
         if col3.button("View Details", key=f"details_{row['ID']}"):
             st.session_state.selected_hospital_id = row['ID']
             st.switch_page("pages/dashboard.py")
