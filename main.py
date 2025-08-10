@@ -199,6 +199,6 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
         col2.markdown(f"*{row['Distance (km)']:.1f} km*")
         if col3.button("View Details", key=f"details_{row['ID']}"):
             st.session_state.selected_hospital_id = row['ID']
-            st.switch_page("pages/Hospital_Dashboard.py")
+            st.switch_page("pages/dashboard.py")
 elif st.session_state.get('search_triggered', False):
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")
