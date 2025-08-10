@@ -1,4 +1,3 @@
-# Home.py
 import streamlit as st
 import pandas as pd
 import folium
@@ -24,7 +23,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-
 # --- 2. Session State Initialization ---
 if "selected_hospital_id" not in st.session_state:
     st.session_state.selected_hospital_id = None
@@ -32,7 +30,6 @@ if "address" not in st.session_state:
     st.session_state.address = ""
 if "filtered_df" not in st.session_state:
     st.session_state.filtered_df = pd.DataFrame()
-
 
 # --- MAPPING DICTIONARIES ---
 BARIATRIC_PROCEDURE_NAMES = {
@@ -69,9 +66,7 @@ def load_data(path="data/flattened_v3.csv"):
         st.error(f"Fatal Error: Data file '{path}' not found.")
         st.stop()
 
-df = load_data()
-st.session_state.df = df
-
+# --- Function to Calculate National Averages ---
 @st.cache_data
 def calculate_national_averages(dataf):
     hospital_sums = dataf.groupby('ID').agg({
@@ -88,10 +83,15 @@ def calculate_national_averages(dataf):
             averages['approaches_pct'][app_name] = (avg_count / total_approaches) * 100 if total_approaches else 0
     return averages
 
+# <<< FIX: Moved this block down, after load_data() is defined >>>
+df = load_data()
+st.session_state.df = df
+
 if 'national_averages' not in st.session_state:
     st.session_state.national_averages = calculate_national_averages(df)
+# <<< END OF FIX
 
-# --- 4. TOP NAVIGATION HEADER ---
+# --- TOP NAVIGATION HEADER ---
 selected = option_menu(
     menu_title=None,
     options=["Home", "Hospital Dashboard"],
@@ -102,18 +102,14 @@ selected = option_menu(
 )
 
 if selected == "Hospital Dashboard":
-    # If user clicks dashboard, check if a hospital has been selected, otherwise prompt them
     if st.session_state.selected_hospital_id:
         st.switch_page("pages/Hospital_Dashboard.py")
     else:
         st.warning("Please select a hospital from the map or list below before viewing the dashboard.")
 
-# --- 5. Main Page UI & Search Controls ---
+# --- Main Page UI ---
 st.title("🏥 Navira - French Hospital Explorer")
-# ... (The rest of your home page code remains the same)
 
-# --- (The rest of your `main.py`/`Home.py` code follows here) ---
-# I'm including the rest of the file for completeness.
 _, center_col, _ = st.columns([1, 2, 1])
 with center_col:
     with st.form(key="search_form"):
@@ -147,6 +143,8 @@ with center_col:
             st.session_state.address = ""
             st.session_state.filtered_df = pd.DataFrame()
 st.markdown("---")
+
+# --- Geocoding and Filtering Logic ---
 @st.cache_data(show_spinner="Geocoding address...")
 def geocode_address(address):
     if not address: return None
@@ -157,6 +155,7 @@ def geocode_address(address):
     except Exception as e:
         st.error(f"Geocoding failed: {e}")
         return None
+        
 if st.session_state.get('search_triggered', False):
     user_coords = geocode_address(st.session_state.address)
     if user_coords:
@@ -175,6 +174,8 @@ if st.session_state.get('search_triggered', False):
     else:
         if st.session_state.address: st.error("Address not found. Please try a different address.")
         st.session_state.search_triggered = False
+
+# --- Display Results: Map and List ---
 if st.session_state.get('search_triggered', False) and not st.session_state.filtered_df.empty:
     unique_hospitals_df = st.session_state.filtered_df.drop_duplicates(subset=['ID']).copy()
     st.header(f"Found {len(unique_hospitals_df)} Hospitals")
