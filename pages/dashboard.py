@@ -1,24 +1,7 @@
-# pages/dashboard.py
 import streamlit as st
 import pandas as pd
 import altair as alt
 import os
-
-# In pages/dashboard.py
-
-st.title("📊 Hospital Details Dashboard")
-
-# <<< ADD THIS BUTTON >>>
-if st.button("⬅️ Back to Map"):
-    st.session_state.selected_hospital_id = None
-    st.switch_page("main.py")
-
-# --- Safely check for selected hospital ---
-if "selected_hospital_id" not in st.session_state or st.session_state.selected_hospital_id is None:
-    # This part is now mostly for safety in case of direct navigation
-    st.warning("Please select a hospital from the main '🏥 Navira - French Hospital Explorer' page first.", icon="👈")
-    st.stop()
-
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -36,6 +19,7 @@ SURGICAL_APPROACH_NAMES = {
     'LAP': 'Open Surgery', 'COE': 'Coelioscopy', 'ROB': 'Robotic'
 }
 
+# This function doesn't need to change
 @st.cache_data
 def load_data(path):
     try:
@@ -76,39 +60,43 @@ file_path = os.path.join(script_dir, '..', 'data', 'flattened_v3.csv')
 
 st.title("📊 Hospital Details Dashboard")
 
+# <<< FIX: Added a back button to reset the state and switch pages >>>
+if st.button("⬅️ Back to Map"):
+    st.session_state.selected_hospital_id = None
+    st.switch_page("main.py")
+
 # --- Safely check for selected hospital ---
 if "selected_hospital_id" not in st.session_state or st.session_state.selected_hospital_id is None:
     st.warning("Please select a hospital from the main '🏥 Navira - French Hospital Explorer' page first.", icon="👈")
     st.stop()
 
 # --- Load the main dataframe if it's not in the session state ---
-if 'df' not in st.session_state:
+if 'df' not in st.session_state or st.session_state.df.empty:
     st.session_state.df = load_data(file_path)
 
 # --- Get data for the selected hospital ---
 df = st.session_state.df
 selected_hospital_id = st.session_state.selected_hospital_id
 
-# <<< FIX: This whole section is improved to avoid the ValueError >>>
-# Get all annual data for the selected hospital (for charts)
 selected_hospital_all_data = df[df['ID'] == selected_hospital_id]
 
 if selected_hospital_all_data.empty:
     st.error("Could not find data for the selected hospital. Please select another.")
     st.stop()
 
-# For the details, we only need one row. We'll use the first row found.
-# The labels and totals are the same for every year in your data.
 selected_hospital_details = selected_hospital_all_data.iloc[0]
-# <<< END OF FIX SECTION >>>
 
 # --- Display Hospital Details ---
 st.markdown(f"## {selected_hospital_details['Hospital Name']}")
 col1, col2, col3 = st.columns(3)
 col1.markdown(f"**City:** {selected_hospital_details['City']}")
 col2.markdown(f"**Status:** {selected_hospital_details['Status']}")
-if 'Distance (km)' in selected_hospital_details and pd.notna(selected_hospital_details['Distance (km)']):
-    col3.markdown(f"**Distance:** {selected_hospital_details['Distance (km)']:.1f} km")
+if 'Distance (km)' in st.session_state.get('filtered_df', {}) and pd.notna(selected_hospital_details['ID']):
+    filtered_df = st.session_state.filtered_df
+    distance_info = filtered_df[filtered_df['ID'] == selected_hospital_details['ID']]
+    if not distance_info.empty and 'Distance (km)' in distance_info.columns and pd.notna(distance_info['Distance (km)'].iloc[0]):
+        dist = distance_info['Distance (km)'].iloc[0]
+        col3.markdown(f"**Distance:** {dist:.1f} km")
 st.markdown("---")
 
 metric_col1, metric_col2 = st.columns(2)
@@ -120,7 +108,6 @@ with metric_col1:
 
 with metric_col2:
     st.markdown("##### Labels & Affiliations")
-    # Now these `if` statements will only see one value at a time
     if selected_hospital_details['university'] == 1:
         st.success("🎓 University Hospital (Academic Affiliation)")
     else:
