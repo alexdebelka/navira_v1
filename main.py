@@ -260,10 +260,18 @@ if st.session_state.search_triggered and not filtered_df.empty:
                 st.markdown("**Labels & Affiliations**")
                 if selected_hospital_details.get('university') == 1:
                     st.success("🎓 University Hospital (Academic Affiliation)")
+                else:
+                    st.warning("➖ No University Affiliation")
+
                 if selected_hospital_details.get('LAB_SOFFCO') == 1:
                     st.success("✅ Centre of Excellence (SOFFCO)")
+                else:
+                    st.warning("➖ No SOFFCO Centre Label")
+                
                 if selected_hospital_details.get('cso') == 1:
                     st.success("✅ Centre of Excellence (Health Ministry)")
+                else:
+                    st.warning("➖ No Health Ministry Centre Label")
                 
                 st.markdown("---")
                 
