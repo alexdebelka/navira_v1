@@ -106,7 +106,7 @@ if 'Distance (km)' in selected_hospital_details:
 st.markdown("---")
 metric_col1, metric_col2 = st.columns(2)
 with metric_col1:
-    st.markdown("##### Surgery Statistics (2020-2024)")
+    st.markdown("#### Surgery Statistics (2020-2024)")
     total_proc = selected_hospital_details.get('total_procedures_period', 0)
     avg_total = national_averages.get('total_procedures_period', 0)
     delta_total = total_proc - avg_total
@@ -116,7 +116,7 @@ with metric_col1:
     delta_rev = total_rev - avg_rev
     st.metric(label="Total Revision Surgeries", value=f"{total_rev:.0f}", delta=f"{delta_rev:+.0f} vs. National Average (={avg_rev:.0f})", delta_color="normal")
 with metric_col2:
-    st.markdown("##### Labels & Affiliations")
+    st.markdown("#### Labels & Affiliations")
     if selected_hospital_details.get('university') == 1: st.success("🎓 University Hospital")
     else: st.warning("➖ No University Affiliation")
     if selected_hospital_details.get('LAB_SOFFCO') == 1: st.success("✅ Centre of Excellence (SOFFCO)")
@@ -126,7 +126,7 @@ with metric_col2:
 st.markdown("---")
 st.header("Annual Statistics")
 hospital_annual_data = selected_hospital_all_data.set_index('annee')
-st.markdown("##### Bariatric Procedures by Year")
+st.markdown("#### Bariatric Procedures by Year")
 bariatric_df = hospital_annual_data[[key for key in BARIATRIC_PROCEDURE_NAMES.keys() if key in hospital_annual_data.columns]].rename(columns=BARIATRIC_PROCEDURE_NAMES)
 bariatric_summary = bariatric_df.sum()
 summary_texts = []
@@ -147,7 +147,7 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
 else:
     st.info("No bariatric procedure data available.")
 st.markdown("---")
-st.markdown("##### Surgical Approaches by Year")
+st.markdown("#### Surgical Approaches by Year")
 approach_df = hospital_annual_data[[key for key in SURGICAL_APPROACH_NAMES.keys() if key in hospital_annual_data.columns]].rename(columns=SURGICAL_APPROACH_NAMES)
 approach_summary = approach_df.sum()
 total_approaches = approach_summary.sum()
