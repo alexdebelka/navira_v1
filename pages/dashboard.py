@@ -67,7 +67,7 @@ selected = option_menu(
 )
 
 if selected == "Home":
-    st.switch_page("Home.py")
+    st.switch_page("main.py")
 
 
 # --- Safely check for selected hospital and data ---
