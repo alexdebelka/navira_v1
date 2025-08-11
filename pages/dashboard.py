@@ -173,6 +173,6 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
         width=700,
         height=400
     )
-    st.altair_chart(bar.interactive(), use_container_width=True)
+    st.altair_chart(bar, use_container_width=True)
 else:
     st.info("No surgical approach data available.")
