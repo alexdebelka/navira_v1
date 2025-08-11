@@ -107,43 +107,26 @@ st.markdown("---")
 metric_col1, metric_col2 = st.columns(2)
 with metric_col1:
     st.markdown("#### Surgery Statistics (2020-2024)")
-
-    # --- Calculations ---
-    # Hospital-specific data
     total_proc_hospital = selected_hospital_details.get('total_procedures_period', 0)
     total_rev_hospital = selected_hospital_details.get('Revision Surgeries (N)', 0)
-    
-    # Calculate hospital's revision percentage
     hospital_revision_pct = (total_rev_hospital / total_proc_hospital) * 100 if total_proc_hospital > 0 else 0
-
-    # National average calculations
-    # We group by hospital ('ID') first to get the unique total for each, then sum them up.
     national_total_procedures = df.drop_duplicates(subset=['ID'])['total_procedures_period'].sum()
     national_total_revisions = df.drop_duplicates(subset=['ID'])['Revision Surgeries (N)'].sum()
-    
-    # Calculate national average revision percentage
     national_revision_pct = (national_total_revisions / national_total_procedures) * 100 if national_total_procedures > 0 else 0
-
-    # National average for the delta comparison
     avg_total_proc = national_averages.get('total_procedures_period', 0)
     delta_total = total_proc_hospital - avg_total_proc
-
-    # --- Display Metrics ---
-    # Metric 1: Total Surgeries (no change here)
     st.metric(
         label="Total Surgeries (All Types)",
         value=f"{total_proc_hospital:.0f}",
         delta=f"{delta_total:+.0f} vs. National Average (={avg_total_proc:.0f})",
         delta_color="normal"
     )
-
     # Metric 2: Revision Surgeries (UPDATED)
     st.metric(
         label="Revision Surgeries",
         value=f"{total_rev_hospital:.0f}",
-        delta=f"{hospital_revision_pct:.1f}% of hospital's total",
-        delta_color="off", # Using "off" gives it a neutral grey color
-        help=f"The national average for revision surgeries is {national_revision_pct:.1f}%"
+        delta=f"{hospital_revision_pct:.1f}% of hospital's total surgeries vs. National Average: {national_revision_pct:.1f}%",
+        delta_color="normal"
     )
 with metric_col2:
     st.markdown("#### Labels & Affiliations")
