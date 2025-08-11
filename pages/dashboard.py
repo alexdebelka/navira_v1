@@ -140,7 +140,7 @@ bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedu
 if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
     bariatric_chart = alt.Chart(bariatric_df_melted).mark_bar().encode(
         x=alt.X('annee:O', title='Year', axis=alt.Axis(labelAngle=0)),
-        y=alt.Y('Count:Q', title='Number of Procedures'),
+        y=alt.Y('Count:Q', title='Number of Procedures', axis= None),
         color='Procedure:N', tooltip=['annee', 'Procedure', 'Count']
     ).interactive()
     st.altair_chart(bariatric_chart, use_container_width=True)
@@ -164,7 +164,7 @@ approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach'
 if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
     bar = alt.Chart(approach_df_melted).mark_bar().encode(
         x=alt.X('annee:O', title='Year', axis=alt.Axis(labelAngle=0)),
-        y=alt.Y('Count:Q', title='Number of Surgeries'),
+        y=alt.Y('Count:Q', title='Number of Surgeries', axis= None),
         color='Approach:N', tooltip=['annee', 'Approach', 'Count']
     )
     st.altair_chart(bar.interactive(), use_container_width=True)
