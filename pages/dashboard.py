@@ -142,7 +142,10 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
         x=alt.X('annee:O', title='Year', axis=alt.Axis(labelAngle=0)),
         y=alt.Y('Count:Q', title='Number of Procedures', axis= None),
         color='Procedure:N', tooltip=['annee', 'Procedure', 'Count']
-    ).interactive()
+    ).properties(
+        width=700,
+        height=400
+    )
     st.altair_chart(bariatric_chart, use_container_width=True)
 else:
     st.info("No bariatric procedure data available.")
