@@ -169,6 +169,9 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
         x=alt.X('annee:O', title='Year', axis=alt.Axis(labelAngle=0)),
         y=alt.Y('Count:Q', title='Number of Surgeries', axis= None),
         color='Approach:N', tooltip=['annee', 'Approach', 'Count']
+    ).properties(
+        width=700,
+        height=400
     )
     st.altair_chart(bar.interactive(), use_container_width=True)
 else:
