@@ -122,15 +122,15 @@ colD.metric("National Revision Rate (overall)", f"{national_revision_pct:.1f}%")
 st.markdown("---")
 
 # --- Hospital volume distribution ---
-st.subheader("Hospital Volume Distribution (Annual Interventions)")
-st.markdown("*Note: Only hospitals with ≥5 interventions per year are considered bariatric surgery centers*")
+st.subheader("Hospital Volume Distribution (Most Recent Year: 2024)")
+st.markdown("*Note: Only hospitals with ≥5 interventions per year are considered for this analysis*")
 
-# Calculate annual interventions per hospital (using total_procedures_period / 5 years)
-unique_hospitals = df.drop_duplicates(subset=['ID'])
-unique_hospitals['annual_interventions'] = unique_hospitals['total_procedures_period'] / 5
+# Get the most recent year's data (2024)
+latest_year = 2024
+latest_year_data = df[df['annee'] == latest_year].drop_duplicates(subset=['ID'])
 
 # Apply minimum cutoff of 5 interventions per year
-valid_hospitals = unique_hospitals[unique_hospitals['annual_interventions'] >= 5]
+valid_hospitals = latest_year_data[latest_year_data['total_procedures_year'] >= 5]
 total_valid_hospitals = len(valid_hospitals)
 
 # Define volume categories
@@ -144,7 +144,7 @@ def categorize_volume(annual_interventions):
     else:
         return "≥ 200"
 
-valid_hospitals['volume_category'] = valid_hospitals['annual_interventions'].apply(categorize_volume)
+valid_hospitals['volume_category'] = valid_hospitals['total_procedures_year'].apply(categorize_volume)
 volume_distribution = valid_hospitals['volume_category'].value_counts().reindex(['< 50', '50-100', '100-200', '≥ 200'])
 
 # Create distribution data
@@ -162,7 +162,7 @@ volume_df = pd.DataFrame(volume_data)
 
 # Display metrics
 col1, col2, col3 = st.columns(3)
-col1.metric("Total Valid Hospitals", f"{total_valid_hospitals}")
+col1.metric("Total Valid Hospitals (2024)", f"{total_valid_hospitals}")
 col2.metric("Hospitals < 50/year", f"{volume_data[0]['Number of Hospitals']} ({volume_data[0]['Percentage']}%)")
 col3.metric("Hospitals ≥ 200/year", f"{volume_data[3]['Number of Hospitals']} ({volume_data[3]['Percentage']}%)")
 
