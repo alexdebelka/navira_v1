@@ -126,7 +126,7 @@ st.subheader("Average Bariatric Procedures per Hospital")
 avg_proc_rows = []
 for code, name in BARIATRIC_PROCEDURE_NAMES.items():
     if code in national_averages:
-        avg_proc_rows.append({"Procedure": name, "Average per Hospital": national_averages.get(code, 0)})
+        avg_proc_rows.append({"Procedure": name, "Average per Hospital": round(national_averages.get(code, 0), 2)})
 avg_proc_df = pd.DataFrame(avg_proc_rows)
 if not avg_proc_df.empty:
     left, right = st.columns([2, 3])
@@ -136,7 +136,7 @@ if not avg_proc_df.empty:
         chart = alt.Chart(avg_proc_df).mark_bar().encode(
             x=alt.X('Average per Hospital:Q', title='Average Count'),
             y=alt.Y('Procedure:N', sort='-x', title='Procedure'),
-            tooltip=['Procedure', alt.Tooltip('Average per Hospital:Q', format='.1f')]
+            tooltip=['Procedure', alt.Tooltip('Average per Hospital:Q', format='.2f')]
         ).properties(height=300)
         st.altair_chart(chart, use_container_width=True)
 else:
@@ -147,13 +147,13 @@ st.markdown("---")
 # --- Average surgical approaches share ---
 st.subheader("Average Surgical Approaches Share (per Hospital)")
 approach_pct = national_averages.get('approaches_pct', {})
-approach_rows = [{"Approach": name, "Share (%)": pct} for name, pct in approach_pct.items()]
+approach_rows = [{"Approach": name, "Share (%)": round(pct, 2)} for name, pct in approach_pct.items()]
 approach_df = pd.DataFrame(approach_rows)
 if not approach_df.empty:
     c = alt.Chart(approach_df).mark_arc(innerRadius=60).encode(
         theta=alt.Theta(field='Share (%)', type='quantitative'),
         color=alt.Color(field='Approach', type='nominal'),
-        tooltip=['Approach', alt.Tooltip('Share (%):Q', format='.1f')]
+        tooltip=['Approach', alt.Tooltip('Share (%):Q', format='.2f')]
     ).properties(height=300)
     st.altair_chart(c, use_container_width=False)
     st.dataframe(approach_df, hide_index=True, use_container_width=True)
