@@ -184,6 +184,116 @@ with right:
 
 st.markdown("---")
 
+# --- Hospital characteristics distribution ---
+st.subheader("Hospital Characteristics Distribution (Most Recent Year: 2024)")
+
+# Get all hospitals from 2024 (not just valid ones for this analysis)
+all_2024_hospitals = df[df['annee'] == latest_year].drop_duplicates(subset=['ID'])
+total_hospitals_2024 = len(all_2024_hospitals)
+
+# Establishment type distribution
+status_distribution = all_2024_hospitals['Status'].value_counts()
+status_data = []
+for status, count in status_distribution.items():
+    percentage = (count / total_hospitals_2024) * 100
+    status_data.append({
+        'Category': 'Establishment Type',
+        'Type': status.replace('-', ' ').title(),
+        'Number of Hospitals': count,
+        'Percentage': round(percentage, 1)
+    })
+
+# Certification and affiliation distribution
+certification_data = []
+
+# University affiliation
+university_hospitals = all_2024_hospitals[all_2024_hospitals['university'] == 1]
+university_count = len(university_hospitals)
+university_pct = (university_count / total_hospitals_2024) * 100
+certification_data.append({
+    'Category': 'Certifications & Affiliations',
+    'Type': 'University Hospital',
+    'Number of Hospitals': university_count,
+    'Percentage': round(university_pct, 1)
+})
+
+# SOFFCO certification
+soffco_hospitals = all_2024_hospitals[all_2024_hospitals['LAB_SOFFCO'] == 1]
+soffco_count = len(soffco_hospitals)
+soffco_pct = (soffco_count / total_hospitals_2024) * 100
+certification_data.append({
+    'Category': 'Certifications & Affiliations',
+    'Type': 'Centre of Excellence (SOFFCO)',
+    'Number of Hospitals': soffco_count,
+    'Percentage': round(soffco_pct, 1)
+})
+
+# Health Ministry certification
+health_ministry_hospitals = all_2024_hospitals[all_2024_hospitals['cso'] == 1]
+health_ministry_count = len(health_ministry_hospitals)
+health_ministry_pct = (health_ministry_count / total_hospitals_2024) * 100
+certification_data.append({
+    'Category': 'Certifications & Affiliations',
+    'Type': 'Centre of Excellence (Health Ministry)',
+    'Number of Hospitals': health_ministry_count,
+    'Percentage': round(health_ministry_pct, 1)
+})
+
+# Hospitals with both certifications
+both_certifications = all_2024_hospitals[
+    (all_2024_hospitals['LAB_SOFFCO'] == 1) & 
+    (all_2024_hospitals['cso'] == 1)
+]
+both_count = len(both_certifications)
+both_pct = (both_count / total_hospitals_2024) * 100
+certification_data.append({
+    'Category': 'Certifications & Affiliations',
+    'Type': 'Both Certifications (SOFFCO + Health Ministry)',
+    'Number of Hospitals': both_count,
+    'Percentage': round(both_pct, 1)
+})
+
+# Display metrics
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Total Hospitals (2024)", f"{total_hospitals_2024}")
+col2.metric("Public Hospitals", f"{status_distribution.get('public', 0)} ({round((status_distribution.get('public', 0) / total_hospitals_2024) * 100, 1)}%)")
+col3.metric("University Hospitals", f"{university_count} ({university_pct:.1f}%)")
+col4.metric("SOFFCO Centers", f"{soffco_count} ({soffco_pct:.1f}%)")
+
+# Display tables
+st.markdown("**Establishment Type Distribution**")
+status_df = pd.DataFrame(status_data)
+st.dataframe(status_df[['Type', 'Number of Hospitals', 'Percentage']], hide_index=True, use_container_width=True)
+
+st.markdown("**Certifications & Affiliations Distribution**")
+cert_df = pd.DataFrame(certification_data)
+st.dataframe(cert_df[['Type', 'Number of Hospitals', 'Percentage']], hide_index=True, use_container_width=True)
+
+# Create charts
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("**Establishment Type Chart**")
+    status_chart = alt.Chart(status_df).mark_bar().encode(
+        x=alt.X('Type:N', title='Establishment Type'),
+        y=alt.Y('Number of Hospitals:Q', title='Number of Hospitals'),
+        color=alt.Color('Type:N'),
+        tooltip=['Type', 'Number of Hospitals', alt.Tooltip('Percentage:Q', format='.1f')]
+    ).properties(height=300)
+    st.altair_chart(status_chart, use_container_width=True)
+
+with col2:
+    st.markdown("**Certifications & Affiliations Chart**")
+    cert_chart = alt.Chart(cert_df).mark_bar().encode(
+        x=alt.X('Type:N', title='Certification Type'),
+        y=alt.Y('Number of Hospitals:Q', title='Number of Hospitals'),
+        color=alt.Color('Type:N'),
+        tooltip=['Type', 'Number of Hospitals', alt.Tooltip('Percentage:Q', format='.1f')]
+    ).properties(height=300)
+    st.altair_chart(cert_chart, use_container_width=True)
+
+st.markdown("---")
+
 # --- Average bariatric procedures per hospital ---
 st.subheader("Average Bariatric Procedures per Hospital")
 avg_proc_rows = []
