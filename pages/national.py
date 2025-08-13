@@ -121,6 +121,69 @@ colD.metric("National Revision Rate (overall)", f"{national_revision_pct:.1f}%")
 
 st.markdown("---")
 
+# --- Hospital volume distribution ---
+st.subheader("Hospital Volume Distribution (Annual Interventions)")
+st.markdown("*Note: Only hospitals with ≥5 interventions per year are considered bariatric surgery centers*")
+
+# Calculate annual interventions per hospital (using total_procedures_period / 5 years)
+unique_hospitals = df.drop_duplicates(subset=['ID'])
+unique_hospitals['annual_interventions'] = unique_hospitals['total_procedures_period'] / 5
+
+# Apply minimum cutoff of 5 interventions per year
+valid_hospitals = unique_hospitals[unique_hospitals['annual_interventions'] >= 5]
+total_valid_hospitals = len(valid_hospitals)
+
+# Define volume categories
+def categorize_volume(annual_interventions):
+    if annual_interventions < 50:
+        return "< 50"
+    elif annual_interventions < 100:
+        return "50-100"
+    elif annual_interventions < 200:
+        return "100-200"
+    else:
+        return "≥ 200"
+
+valid_hospitals['volume_category'] = valid_hospitals['annual_interventions'].apply(categorize_volume)
+volume_distribution = valid_hospitals['volume_category'].value_counts().reindex(['< 50', '50-100', '100-200', '≥ 200'])
+
+# Create distribution data
+volume_data = []
+for category in ['< 50', '50-100', '100-200', '≥ 200']:
+    count = volume_distribution.get(category, 0)
+    percentage = (count / total_valid_hospitals) * 100 if total_valid_hospitals > 0 else 0
+    volume_data.append({
+        'Volume Category': category,
+        'Number of Hospitals': count,
+        'Percentage': round(percentage, 1)
+    })
+
+volume_df = pd.DataFrame(volume_data)
+
+# Display metrics
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Valid Hospitals", f"{total_valid_hospitals}")
+col2.metric("Hospitals < 50/year", f"{volume_data[0]['Number of Hospitals']} ({volume_data[0]['Percentage']}%)")
+col3.metric("Hospitals ≥ 200/year", f"{volume_data[3]['Number of Hospitals']} ({volume_data[3]['Percentage']}%)")
+
+# Display table and chart
+left, right = st.columns([1, 1])
+with left:
+    st.markdown("**Volume Distribution Table**")
+    st.dataframe(volume_df, hide_index=True, use_container_width=True)
+
+with right:
+    st.markdown("**Volume Distribution Chart**")
+    chart = alt.Chart(volume_df).mark_bar().encode(
+        x=alt.X('Volume Category:N', title='Annual Interventions'),
+        y=alt.Y('Number of Hospitals:Q', title='Number of Hospitals'),
+        color=alt.Color('Volume Category:N'),
+        tooltip=['Volume Category', 'Number of Hospitals', alt.Tooltip('Percentage:Q', format='.1f')]
+    ).properties(height=300)
+    st.altair_chart(chart, use_container_width=True)
+
+st.markdown("---")
+
 # --- Average bariatric procedures per hospital ---
 st.subheader("Average Bariatric Procedures per Hospital")
 avg_proc_rows = []
