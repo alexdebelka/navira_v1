@@ -59,8 +59,8 @@ def load_data(path="data/flattened_v3.csv"):
 # --- TOP NAVIGATION HEADER ---
 selected = option_menu(
     menu_title=None,
-    options=["Home", "Hospital Dashboard"],
-    icons=["house", "clipboard2-data"],
+    options=["Home", "Hospital Dashboard", "National Overview"],
+    icons=["house", "clipboard2-data", "globe2"],
     menu_icon="cast",
     default_index=1, # This makes "Hospital Dashboard" the active tab
     orientation="horizontal",
@@ -68,6 +68,8 @@ selected = option_menu(
 
 if selected == "Home":
     st.switch_page("main.py")
+elif selected == "National Overview":
+    st.switch_page("pages/national.py")
 
 
 # --- Safely check for selected hospital and data ---

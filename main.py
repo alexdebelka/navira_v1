@@ -94,8 +94,8 @@ if 'national_averages' not in st.session_state:
 # --- TOP NAVIGATION HEADER ---
 selected = option_menu(
     menu_title=None,
-    options=["Home", "Hospital Dashboard"],
-    icons=["house", "clipboard2-data"],
+    options=["Home", "Hospital Dashboard", "National Overview"],
+    icons=["house", "clipboard2-data", "globe2"],
     menu_icon="cast",
     default_index=0,
     orientation="horizontal",
@@ -106,6 +106,8 @@ if selected == "Hospital Dashboard":
         st.switch_page("pages/dashboard.py")
     else:
         st.warning("Please select a hospital from the map or list below before viewing the dashboard.")
+elif selected == "National Overview":
+    st.switch_page("pages/national.py")
 
 # --- Main Page UI ---
 st.title("🏥 Navira - French Hospital Explorer")
