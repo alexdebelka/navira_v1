@@ -179,7 +179,7 @@ with right:
         y=alt.Y('Number of Hospitals:Q', title='Number of Hospitals'),
         color=alt.Color('Volume Category:N'),
         tooltip=['Volume Category', 'Number of Hospitals', alt.Tooltip('Percentage:Q', format='.1f')]
-    ).properties(height=300)
+    ).properties(height=300).configure_axisX(labelAngle=0)
     st.altair_chart(chart, use_container_width=True)
 
 st.markdown("---")
@@ -279,7 +279,7 @@ with col1:
         y=alt.Y('Number of Hospitals:Q', title='Number of Hospitals'),
         color=alt.Color('Type:N'),
         tooltip=['Type', 'Number of Hospitals', alt.Tooltip('Percentage:Q', format='.1f')]
-    ).properties(height=300)
+    ).properties(height=300).configure_axisX(labelAngle=0)
     st.altair_chart(status_chart, use_container_width=True)
 
 with col2:
@@ -289,7 +289,7 @@ with col2:
         y=alt.Y('Number of Hospitals:Q', title='Number of Hospitals'),
         color=alt.Color('Type:N'),
         tooltip=['Type', 'Number of Hospitals', alt.Tooltip('Percentage:Q', format='.1f')]
-    ).properties(height=300)
+    ).properties(height=300).configure_axisX(labelAngle=0)
     st.altair_chart(cert_chart, use_container_width=True)
 
 st.markdown("---")
@@ -310,7 +310,7 @@ if not avg_proc_df.empty:
             x=alt.X('Average per Hospital:Q', title='Average Count'),
             y=alt.Y('Procedure:N', sort='-x', title='Procedure'),
             tooltip=['Procedure', alt.Tooltip('Average per Hospital:Q', format='.2f')]
-        ).properties(height=300)
+        ).properties(height=300).configure_axisY(labelAngle=0)
         st.altair_chart(chart, use_container_width=True)
 else:
     st.info("No bariatric procedure data available.")
