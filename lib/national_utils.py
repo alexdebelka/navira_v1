@@ -9,8 +9,14 @@ from navira.data_loader import get_dataframes
 
 # --- MAPPING DICTIONARIES ---
 BARIATRIC_PROCEDURE_NAMES = {
-    'SLE': 'Sleeve Gastrectomy', 'BPG': 'Gastric Bypass', 'ANN': 'Gastric Banding',
-    'REV': 'Other', 'ABL': 'Band Removal'
+    'SLE': 'Sleeve Gastrectomy',
+    'BPG': 'Gastric Bypass',
+    'ANN': 'Gastric Banding',
+    'REV': 'Other',
+    'ABL': 'Band Removal',
+    'DBP': 'Bilio-pancreatic Diversion',
+    'GVC': 'Calibrated Vertical Gastroplasty',
+    'NDD': 'Not Defined',
 }
 
 SURGICAL_APPROACH_NAMES = {
