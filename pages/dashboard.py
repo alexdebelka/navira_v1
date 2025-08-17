@@ -122,6 +122,9 @@ bariatric_df = hospital_annual_data[[key for key in BARIATRIC_PROCEDURE_NAMES.ke
 bariatric_summary = bariatric_df.sum()
 summary_texts = []
 for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
+    # Skip Bilio-pancreatic Diversion in the textual summary, but keep it in charts
+    if proc_code == 'DBP':
+        continue
     count = bariatric_summary.get(proc_name, 0)
     if count > 0:
         avg_count = national_averages.get(proc_code, 0)
