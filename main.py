@@ -100,14 +100,21 @@ def calculate_national_averages(annual_df: pd.DataFrame):
     try:
         from navira.data_loader import get_dataframes as _get
         est, _ = _get()
-        rev_sum = est.get('revision_surgeries_n')
-        if rev_sum is not None and not rev_sum.empty:
+        if {'id','revision_surgeries_n'}.issubset(est.columns):
+            # Revisions per hospital (ensure one value per id)
+            rev_by_id = (
+                est.assign(id=est['id'].astype(str))
+                   .groupby('id')['revision_surgeries_n']
+                   .sum()
+            )
             # Total surgeries per hospital from annual
-            totals = annual_df.groupby('id')['total_procedures_year'].sum()
-            aligned = pd.concat([rev_sum, totals], axis=1).dropna()
-            aligned.columns = ['rev', 'tot']
-            pct_series = aligned.apply(lambda r: (r['rev'] / r['tot'] * 100) if r['tot'] > 0 else 0, axis=1)
-            averages['revision_pct_avg'] = float(pct_series.mean()) if not pct_series.empty else 0.0
+            totals = annual_df.assign(id=annual_df['id'].astype(str)).groupby('id')['total_procedures_year'].sum()
+            common = rev_by_id.index.intersection(totals.index)
+            if len(common) > 0:
+                pct_series = (rev_by_id.loc[common] / totals.loc[common] * 100).replace([pd.NA], 0).fillna(0)
+                averages['revision_pct_avg'] = float(pct_series.mean()) if not pct_series.empty else 0.0
+            else:
+                averages['revision_pct_avg'] = 0.0
         else:
             averages['revision_pct_avg'] = 0.0
     except Exception:
