@@ -38,10 +38,10 @@ selected = option_menu(
 )
 
 if selected == "Home":
-    st.switch_page("../main.py")
+    st.switch_page("main.py")
 elif selected == "Hospital Dashboard":
     if st.session_state.get('selected_hospital_id'):
-        st.switch_page("dashboard.py")
+        st.switch_page("pages/dashboard.py")
     else:
         st.warning("Please select a hospital from the Home page first.")
 
