@@ -25,7 +25,7 @@ st.markdown("""
 # --- MAPPING DICTIONARIES ---
 BARIATRIC_PROCEDURE_NAMES = {
     'SLE': 'Sleeve Gastrectomy', 'BPG': 'Gastric Bypass', 'ANN': 'Gastric Banding',
-    'REV': 'Other', 'ABL': 'Band Removal'
+    'REV': 'Other', 'ABL': 'Band Removal', 'DBP': 'Bilio-pancreatic Diversion', 'GVC': 'Calibrated Vertical Gastroplasty', 'NDD': 'Not Defined',
 }
 SURGICAL_APPROACH_NAMES = {
     'LAP': 'Open Surgery', 'COE': 'Coelioscopy', 'ROB': 'Robotic'
