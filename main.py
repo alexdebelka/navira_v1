@@ -6,6 +6,7 @@ from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 from streamlit_folium import st_folium
 from streamlit_option_menu import option_menu
+from navira.data_loader import get_dataframes
 
 # --- 1. App Configuration ---
 st.set_page_config(
@@ -40,56 +41,78 @@ SURGICAL_APPROACH_NAMES = {
     'LAP': 'Open Surgery', 'COE': 'Coelioscopy', 'ROB': 'Robotic'
 }
 
-# --- 3. Load and Prepare Data ---
-@st.cache_data
-def load_data(path="data/flattened_v3.csv"):
-    try:
-        df = pd.read_csv(path)
-        df.rename(columns={
-            'id': 'ID', 'rs': 'Hospital Name', 'statut': 'Status', 'ville': 'City',
-            'revision_surgeries_n': 'Revision Surgeries (N)', 'revision_surgeries_pct': 'Revision Surgeries (%)'
-        }, inplace=True)
-        df['Status'] = df['Status'].astype(str).str.strip().str.lower()
-        status_mapping = {'private not-for-profit': 'private-non-profit', 'public': 'public', 'private for profit': 'private-for-profit'}
-        df['Status'] = df['Status'].map(status_mapping)
-        numeric_cols = [
-            'Revision Surgeries (N)', 'total_procedures_period', 'annee', 'total_procedures_year',
-            'university', 'cso', 'LAB_SOFFCO', 'latitude', 'longitude', 'Revision Surgeries (%)'
-        ] + list(BARIATRIC_PROCEDURE_NAMES.keys()) + list(SURGICAL_APPROACH_NAMES.keys())
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        df.dropna(subset=['latitude', 'longitude'], inplace=True)
-        df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
-        return df
-    except FileNotFoundError:
-        st.error(f"Fatal Error: Data file '{path}' not found.")
+# --- 3. Load Data (Parquet) ---
+try:
+    establishments, annual = get_dataframes()
+except Exception as e:
+    st.error("Parquet data not found. Please run: make parquet")
+    st.stop()
+
+# Minimal schema checks (allow soft recovery on id; hard-require name/lat/lon)
+required_est_cols = {"name", "latitude", "longitude"}
+required_ann_cols = {"id", "annee", "total_procedures_year"}
+missing_est = required_est_cols - set(establishments.columns)
+missing_ann = required_ann_cols - set(annual.columns)
+if missing_est or missing_ann or ('id' not in establishments.columns):
+    if 'id' not in establishments.columns:
+        st.warning("Establishments missing 'id'; attempting soft recovery from raw CSV. If map works, you can ignore this warning.")
+    st.error(
+        f"Parquet schema invalid. Missing columns -> establishments: {sorted(list(required_est_cols - set(establishments.columns)))}; annual: {sorted(missing_ann)}.\n"
+        "If this persists after reload, please rebuild: make parquet"
+    )
+    if missing_ann:
         st.stop()
 
-# --- Function to Calculate National Averages ---
-@st.cache_data
-def calculate_national_averages(dataf):
-    hospital_sums = dataf.groupby('ID').agg({
-         'total_procedures_period': 'first', 'Revision Surgeries (N)': 'first',
-         **{proc: 'sum' for proc in BARIATRIC_PROCEDURE_NAMES.keys()},
-         **{app: 'sum' for app in SURGICAL_APPROACH_NAMES.keys()}
-    })
-    averages = hospital_sums.mean().to_dict()
+# Filter establishments to those that have data in annual (ensures details always resolve)
+if 'id' in establishments.columns and 'id' in annual.columns:
+    valid_ids = set(annual['id'].astype(str).unique())
+    establishments = establishments[establishments['id'].astype(str).isin(valid_ids)].copy()
+    # Drop duplicates on id to avoid multiple markers per site
+    establishments = establishments.drop_duplicates(subset=['id'], keep='first')
+
+# --- Function to Calculate National Averages (from annual table) ---
+@st.cache_data(show_spinner=False)
+def calculate_national_averages(annual_df: pd.DataFrame):
+    dataf_clean = annual_df.drop_duplicates(subset=['id', 'annee'], keep='first')
+    dataf_eligible = dataf_clean[dataf_clean['total_procedures_year'] >= 5]
+    # Average per hospital across years for procedures and approaches
+    proc_aggs = {proc: 'mean' for proc in BARIATRIC_PROCEDURE_NAMES.keys() if proc in dataf_eligible.columns}
+    appr_aggs = {app: 'mean' for app in SURGICAL_APPROACH_NAMES.keys() if app in dataf_eligible.columns}
+    hospital_averages = dataf_eligible.groupby('id').agg({**proc_aggs, **appr_aggs})
+    averages = hospital_averages.mean().to_dict()
+    # Total surgeries per period (sum of yearly totals)
+    totals_per_hospital = dataf_eligible.groupby('id')['total_procedures_year'].sum()
+    averages['total_procedures_period'] = float(totals_per_hospital.mean()) if not totals_per_hospital.empty else 0.0
+    # Approach mix percentages
     total_approaches = sum(averages.get(app, 0) for app in SURGICAL_APPROACH_NAMES.keys())
     averages['approaches_pct'] = {}
     if total_approaches > 0:
         for app_code, app_name in SURGICAL_APPROACH_NAMES.items():
             avg_count = averages.get(app_code, 0)
             averages['approaches_pct'][app_name] = (avg_count / total_approaches) * 100 if total_approaches else 0
+    # Revision percentage average: use establishments if available
+    try:
+        from navira.data_loader import get_dataframes as _get
+        est, _ = _get()
+        rev_sum = est.get('revision_surgeries_n')
+        if rev_sum is not None and not rev_sum.empty:
+            # Total surgeries per hospital from annual
+            totals = annual_df.groupby('id')['total_procedures_year'].sum()
+            aligned = pd.concat([rev_sum, totals], axis=1).dropna()
+            aligned.columns = ['rev', 'tot']
+            pct_series = aligned.apply(lambda r: (r['rev'] / r['tot'] * 100) if r['tot'] > 0 else 0, axis=1)
+            averages['revision_pct_avg'] = float(pct_series.mean()) if not pct_series.empty else 0.0
+        else:
+            averages['revision_pct_avg'] = 0.0
+    except Exception:
+        averages['revision_pct_avg'] = 0.0
     return averages
 
-# <<< FIX: Moved this block down, after load_data() is defined >>>
-df = load_data()
-st.session_state.df = df
-
+# Store references in session for other pages
+st.session_state.establishments = establishments
+st.session_state.annual = annual
 if 'national_averages' not in st.session_state:
-    st.session_state.national_averages = calculate_national_averages(df)
-# <<< END OF FIX
+    st.session_state.national_averages = calculate_national_averages(annual)
 
 # --- TOP NAVIGATION HEADER ---
 selected = option_menu(
@@ -161,13 +184,15 @@ def geocode_address(address):
 if st.session_state.get('search_triggered', False):
     user_coords = geocode_address(st.session_state.address)
     if user_coords:
-        temp_df = df.copy()
+        temp_df = establishments.copy()
         temp_df['Distance (km)'] = temp_df.apply(lambda row: geodesic(user_coords, (row['latitude'], row['longitude'])).km, axis=1)
         temp_df = temp_df[temp_df['Distance (km)'] <= radius_km]
+        # Normalize and map status values for filtering
+        temp_df['statut_norm'] = temp_df['statut'].astype(str).str.strip().str.lower()
         selected_statuses = []
-        if is_public_non_profit: selected_statuses.extend(['public', 'private-non-profit'])
-        if is_private_for_profit: selected_statuses.append('private-for-profit')
-        temp_df = temp_df[temp_df['Status'].isin(selected_statuses)]
+        if is_public_non_profit: selected_statuses.extend(['public', 'private not-for-profit'])
+        if is_private_for_profit: selected_statuses.append('private for profit')
+        temp_df = temp_df[temp_df['statut_norm'].isin([s.lower() for s in selected_statuses])]
         if is_university: temp_df = temp_df[temp_df['university'] == 1]
         if is_soffco: temp_df = temp_df[temp_df['LAB_SOFFCO'] == 1]
         if is_health_ministry: temp_df = temp_df[temp_df['cso'] == 1]
@@ -179,28 +204,34 @@ if st.session_state.get('search_triggered', False):
 
 # --- Display Results: Map and List ---
 if st.session_state.get('search_triggered', False) and not st.session_state.filtered_df.empty:
-    unique_hospitals_df = st.session_state.filtered_df.drop_duplicates(subset=['ID']).copy()
+    unique_hospitals_df = st.session_state.filtered_df.drop_duplicates(subset=['id']).copy()
     st.header(f"Found {len(unique_hospitals_df)} Hospitals")
     m = folium.Map(location=user_coords, zoom_start=9, tiles="CartoDB positron")
     folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to(m)
     marker_cluster = MarkerCluster().add_to(m)
     for idx, row in unique_hospitals_df.iterrows():
-        color = "blue" if row['Status'] == 'public' else "lightblue" if row['Status'] == 'private-non-profit' else "green"
-        folium.Marker(location=[row['latitude'], row['longitude']], popup=f"<b>{row['Hospital Name']}</b>", icon=folium.Icon(icon="hospital-o", prefix="fa", color=color)).add_to(marker_cluster)
+        statut_norm = str(row.get('statut', '')).strip().lower()
+        if statut_norm == 'public':
+            color = "blue"
+        elif statut_norm == 'private not-for-profit':
+            color = "lightblue"
+        else:
+            color = "green"
+        folium.Marker(location=[row['latitude'], row['longitude']], popup=f"<b>{row['name']}</b>", icon=folium.Icon(icon="hospital-o", prefix="fa", color=color)).add_to(marker_cluster)
     map_data = st_folium(m, width="100%", height=500, key="folium_map")
     if map_data and map_data.get("last_object_clicked"):
         clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])
         distances = unique_hospitals_df.apply(lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1)
         if distances.min() < 0.1:
-            st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['ID']
+            st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['id']
             st.switch_page("pages/dashboard.py")
     st.subheader("Hospital List")
     for idx, row in unique_hospitals_df.iterrows():
         col1, col2, col3 = st.columns([4, 2, 2])
-        col1.markdown(f"**{row['Hospital Name']}** ({row['City']})")
+        col1.markdown(f"**{row['name']}** ({row['ville']})")
         col2.markdown(f"*{row['Distance (km)']:.1f} km*")
-        if col3.button("View Details", key=f"details_{row['ID']}"):
-            st.session_state.selected_hospital_id = row['ID']
+        if col3.button("View Details", key=f"details_{row['id']}"):
+            st.session_state.selected_hospital_id = row['id']
             st.switch_page("pages/dashboard.py")
         st.markdown("---")
 elif st.session_state.get('search_triggered', False):

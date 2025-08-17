@@ -6,3 +6,6 @@ streamlit-folium
 haversine>=2.8
 altair
 streamlit-option-menu
+plotly
+pyarrow
+pytest

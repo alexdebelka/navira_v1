@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from streamlit_option_menu import option_menu
+from navira.data_loader import get_dataframes
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -30,31 +31,12 @@ SURGICAL_APPROACH_NAMES = {
     'LAP': 'Open Surgery', 'COE': 'Coelioscopy', 'ROB': 'Robotic'
 }
 
-# --- Load Data Function (as a fallback) ---
-@st.cache_data
-def load_data(path="data/flattened_v3.csv"):
-    try:
-        df = pd.read_csv(path)
-        df.rename(columns={
-            'id': 'ID', 'rs': 'Hospital Name', 'statut': 'Status', 'ville': 'City',
-            'revision_surgeries_n': 'Revision Surgeries (N)', 'revision_surgeries_pct': 'Revision Surgeries (%)'
-        }, inplace=True)
-        df['Status'] = df['Status'].astype(str).str.strip().str.lower()
-        status_mapping = {'private not-for-profit': 'private-non-profit', 'public': 'public', 'private for profit': 'private-for-profit'}
-        df['Status'] = df['Status'].map(status_mapping)
-        numeric_cols = [
-            'Revision Surgeries (N)', 'total_procedures_period', 'annee', 'total_procedures_year',
-            'university', 'cso', 'LAB_SOFFCO', 'latitude', 'longitude', 'Revision Surgeries (%)'
-        ] + list(BARIATRIC_PROCEDURE_NAMES.keys()) + list(SURGICAL_APPROACH_NAMES.keys())
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        df.dropna(subset=['latitude', 'longitude'], inplace=True)
-        df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
-        return df
-    except FileNotFoundError:
-        st.error(f"Fatal Error: Data file '{path}' not found.")
-        st.stop()
+# --- Load Data (Parquet) ---
+try:
+    establishments, annual = get_dataframes()
+except Exception:
+    st.error("Parquet data not found. Please run: make parquet")
+    st.stop()
 
 # --- TOP NAVIGATION HEADER ---
 selected = option_menu(
@@ -76,46 +58,39 @@ elif selected == "National Overview":
 if "selected_hospital_id" not in st.session_state or st.session_state.selected_hospital_id is None:
     st.warning("Please select a hospital from the Home page first.", icon="👈")
     st.stop()
-    
-if 'df' not in st.session_state:
-    st.session_state.df = load_data()
 
 # --- Load data and averages from session state ---
-df = st.session_state.df
 filtered_df = st.session_state.get('filtered_df', pd.DataFrame())
 selected_hospital_id = st.session_state.selected_hospital_id
 national_averages = st.session_state.get('national_averages', {})
 
-# Find all data for the selected hospital
-if not filtered_df.empty and selected_hospital_id in filtered_df['ID'].values:
-    selected_hospital_all_data = filtered_df[filtered_df['ID'] == selected_hospital_id]
-else:
-    selected_hospital_all_data = df[df['ID'] == selected_hospital_id]
-if selected_hospital_all_data.empty:
+# Establishment details and annual series
+est_row = establishments[establishments['id'] == str(selected_hospital_id)]
+if est_row.empty:
     st.error("Could not find data for the selected hospital.")
     st.stop()
-selected_hospital_details = selected_hospital_all_data.drop_duplicates(subset=['ID'], keep='first').iloc[0]
+selected_hospital_details = est_row.iloc[0]
+selected_hospital_all_data = annual[annual['id'] == str(selected_hospital_id)]
 
 # --- (The rest of your dashboard page code follows here) ---
 # I'm including the rest of the file for completeness.
 st.title("📊 Hospital Details Dashboard")
-st.markdown(f"## {selected_hospital_details['Hospital Name']}")
+st.markdown(f"## {selected_hospital_details['name']}")
 col1, col2, col3 = st.columns(3)
-col1.markdown(f"**City:** {selected_hospital_details['City']}")
-col2.markdown(f"**Status:** {selected_hospital_details['Status']}")
+col1.markdown(f"**City:** {selected_hospital_details['ville']}")
+col2.markdown(f"**Status:** {selected_hospital_details['statut']}")
 if 'Distance (km)' in selected_hospital_details:
     col3.markdown(f"**Distance:** {selected_hospital_details['Distance (km)']:.1f} km")
 st.markdown("---")
 metric_col1, metric_col2 = st.columns(2)
 with metric_col1:
     st.markdown("#### Surgery Statistics (2020-2024)")
-    total_proc_hospital = selected_hospital_details.get('total_procedures_period', 0)
-    total_rev_hospital = selected_hospital_details.get('Revision Surgeries (N)', 0)
+    total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
+    total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
     hospital_revision_pct = (total_rev_hospital / total_proc_hospital) * 100 if total_proc_hospital > 0 else 0
-    national_total_procedures = df.drop_duplicates(subset=['ID'])['total_procedures_period'].sum()
-    national_total_revisions = df.drop_duplicates(subset=['ID'])['Revision Surgeries (N)'].sum()
-    national_revision_pct = (national_total_revisions / national_total_procedures) * 100 if national_total_procedures > 0 else 0
+    # National reference values from session
     avg_total_proc = national_averages.get('total_procedures_period', 0)
+    national_revision_pct = national_averages.get('revision_pct_avg', 0)
     delta_total = total_proc_hospital - avg_total_proc
     st.metric(
         label="Total Surgeries (All Types)",
@@ -142,6 +117,7 @@ st.markdown("---")
 st.header("Annual Statistics")
 hospital_annual_data = selected_hospital_all_data.set_index('annee')
 st.markdown("#### Bariatric Procedures by Year")
+st.caption("📊 Chart shows annual procedures. Averages compare hospital's yearly average vs. national yearly average per hospital.")
 bariatric_df = hospital_annual_data[[key for key in BARIATRIC_PROCEDURE_NAMES.keys() if key in hospital_annual_data.columns]].rename(columns=BARIATRIC_PROCEDURE_NAMES)
 bariatric_summary = bariatric_df.sum()
 summary_texts = []
@@ -149,7 +125,9 @@ for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
     count = bariatric_summary.get(proc_name, 0)
     if count > 0:
         avg_count = national_averages.get(proc_code, 0)
-        summary_texts.append(f"**{proc_name}**: {int(count)} <span style='color:grey; font-style: italic;'>(National Average: {avg_count:.1f})</span>")
+        # Calculate hospital's average per year for fair comparison
+        hospital_avg_per_year = count / 5  # 5 years (2020-2024)
+        summary_texts.append(f"**{proc_name}**: {int(count)} total ({hospital_avg_per_year:.1f}/year) <span style='color:grey; font-style: italic;'>(National Avg: {avg_count:.1f}/year)</span>")
 if summary_texts: st.markdown(" | ".join(summary_texts), unsafe_allow_html=True)
 bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedure', value_name='Count')
 if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:

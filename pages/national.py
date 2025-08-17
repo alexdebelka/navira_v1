@@ -1,7 +1,15 @@
 import streamlit as st
 import pandas as pd
-import altair as alt
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from streamlit_option_menu import option_menu
+import sys
+import os
+
+# Add the parent directory to the Python path to import lib
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from lib.national_utils import *
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -19,58 +27,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- MAPPING DICTIONARIES (keep consistent with main.py) ---
-BARIATRIC_PROCEDURE_NAMES = {
-    'SLE': 'Sleeve Gastrectomy', 'BPG': 'Gastric Bypass', 'ANN': 'Gastric Banding',
-    'REV': 'Other', 'ABL': 'Band Removal'
-}
-SURGICAL_APPROACH_NAMES = {
-    'LAP': 'Open Surgery', 'COE': 'Coelioscopy', 'ROB': 'Robotic'
-}
-
-# --- Load Data Fallback ---
-@st.cache_data
-def load_data(path="data/flattened_v3.csv"):
-    try:
-        df = pd.read_csv(path)
-        df.rename(columns={
-            'id': 'ID', 'rs': 'Hospital Name', 'statut': 'Status', 'ville': 'City',
-            'revision_surgeries_n': 'Revision Surgeries (N)', 'revision_surgeries_pct': 'Revision Surgeries (%)'
-        }, inplace=True)
-        df['Status'] = df['Status'].astype(str).str.strip().str.lower()
-        status_mapping = {'private not-for-profit': 'private-non-profit', 'public': 'public', 'private for profit': 'private-for-profit'}
-        df['Status'] = df['Status'].map(status_mapping)
-        numeric_cols = [
-            'Revision Surgeries (N)', 'total_procedures_period', 'annee', 'total_procedures_year',
-            'university', 'cso', 'LAB_SOFFCO', 'latitude', 'longitude', 'Revision Surgeries (%)'
-        ] + list(BARIATRIC_PROCEDURE_NAMES.keys()) + list(SURGICAL_APPROACH_NAMES.keys())
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        df.dropna(subset=['latitude', 'longitude'], inplace=True)
-        df = df[df['latitude'].between(-90, 90) & df['longitude'].between(-180, 180)]
-        return df
-    except FileNotFoundError:
-        st.error(f"Fatal Error: Data file '{path}' not found.")
-        st.stop()
-
-# --- National averages computation (reuse from session if available) ---
-@st.cache_data
-def calculate_national_averages(dataf):
-    hospital_sums = dataf.groupby('ID').agg({
-         'total_procedures_period': 'first', 'Revision Surgeries (N)': 'first',
-         **{proc: 'sum' for proc in BARIATRIC_PROCEDURE_NAMES.keys()},
-         **{app: 'sum' for app in SURGICAL_APPROACH_NAMES.keys()}
-    })
-    averages = hospital_sums.mean().to_dict()
-    total_approaches = sum(averages.get(app, 0) for app in SURGICAL_APPROACH_NAMES.keys())
-    averages['approaches_pct'] = {}
-    if total_approaches > 0:
-        for app_code, app_name in SURGICAL_APPROACH_NAMES.items():
-            avg_count = averages.get(app_code, 0)
-            averages['approaches_pct'][app_name] = (avg_count / total_approaches) * 100 if total_approaches else 0
-    return averages
-
 # --- TOP NAVIGATION HEADER ---
 selected = option_menu(
     menu_title=None,
@@ -82,255 +38,424 @@ selected = option_menu(
 )
 
 if selected == "Home":
-    st.switch_page("main.py")
+    st.switch_page("../main.py")
 elif selected == "Hospital Dashboard":
     if st.session_state.get('selected_hospital_id'):
-        st.switch_page("pages/dashboard.py")
+        st.switch_page("dashboard.py")
     else:
         st.warning("Please select a hospital from the Home page first.")
 
-# --- Load data and compute/reuse averages ---
-if 'df' not in st.session_state:
-    st.session_state.df = load_data()
-df = st.session_state.df
+# --- Load Data (Parquet via loader) ---
+df = load_and_prepare_data()
 
-if 'national_averages' not in st.session_state:
-    st.session_state.national_averages = calculate_national_averages(df)
-national_averages = st.session_state.national_averages
+# --- Page Title and Notice ---
+st.title("🇫🇷 National Overview")
 
-# --- Page Title ---
-st.title("🇫🇷 National Overview (Averages per Hospital)")
-st.markdown("National means are computed across hospitals (2020–2024 period).")
-st.markdown("---")
+# Top notice in info callout
+st.info("""
+**National means are computed across hospitals (2020–2024 period).**
+**Note: Only hospitals with ≥5 interventions per year are considered for this analysis.**
+""")
 
-# --- High-level metrics ---
-unique_hospitals = df.drop_duplicates(subset=['ID'])
-num_hospitals = len(unique_hospitals)
-avg_total_surgeries = national_averages.get('total_procedures_period', 0)
-avg_revision_n = national_averages.get('Revision Surgeries (N)', 0)
+# --- (1) HOSPITAL VOLUME DISTRIBUTION ---
+st.header("Hospital Volume Distribution")
 
-national_total_procedures = unique_hospitals['total_procedures_period'].sum()
-national_total_revisions = unique_hospitals['Revision Surgeries (N)'].sum()
-national_revision_pct = (national_total_revisions / national_total_procedures) * 100 if national_total_procedures > 0 else 0
+# Compute KPIs
+kpis = compute_national_kpis(df)
+volume_2024 = compute_volume_bins_2024(df)
+baseline_2020_2023 = compute_baseline_bins_2020_2023(df)
 
-colA, colB, colC, colD = st.columns(4)
-colA.metric("Hospitals in Dataset", f"{num_hospitals}")
-colB.metric("Avg. Total Surgeries per Hospital", f"{avg_total_surgeries:.0f}")
-colC.metric("Avg. Revision Surgeries per Hospital", f"{avg_revision_n:.0f}")
-colD.metric("National Revision Rate (overall)", f"{national_revision_pct:.1f}%")
+# Calculate deltas
+delta_less_50 = volume_2024["<50"] - baseline_2020_2023["<50"]
+delta_more_200 = volume_2024[">200"] - baseline_2020_2023[">200"]
 
-st.markdown("---")
+# KPI Row
+col1, col2, col3, col4, col5 = st.columns(5)
 
-# --- Hospital volume distribution ---
-st.subheader("Hospital Volume Distribution (Most Recent Year: 2024)")
-st.markdown("*Note: Only hospitals with ≥5 interventions per year are considered for this analysis*")
+with col1:
+    st.metric(
+        "Total Hospitals (2024)", 
+        f"{kpis['total_hospitals_2024']:.0f}"
+    )
 
-# Get the most recent year's data (2024)
-latest_year = 2024
-latest_year_data = df[df['annee'] == latest_year].drop_duplicates(subset=['ID'])
+with col2:
+    st.metric(
+        "Avg Surgeries/Year", 
+        f"{kpis['avg_surgeries_per_year']:.0f}"
+    )
 
-# Apply minimum cutoff of 5 interventions per year
-valid_hospitals = latest_year_data[latest_year_data['total_procedures_year'] >= 5]
-total_valid_hospitals = len(valid_hospitals)
+with col3:
+    st.metric(
+        "Avg Revisions/Year", 
+        f"{kpis['avg_revisions_per_year']:.0f}"
+    )
 
-# Define volume categories
-def categorize_volume(annual_interventions):
-    if annual_interventions < 50:
-        return "< 50"
-    elif annual_interventions < 100:
-        return "50-100"
-    elif annual_interventions < 200:
-        return "100-200"
-    else:
-        return "≥ 200"
+with col4:
+    delta_color = "normal" if delta_less_50 <= 0 else "inverse"
+    st.metric(
+        "Hospitals <50/year (2024)",
+        f"{volume_2024['<50']:.0f}",
+        delta_color=delta_color
+    )
 
-valid_hospitals['volume_category'] = valid_hospitals['total_procedures_year'].apply(categorize_volume)
-volume_distribution = valid_hospitals['volume_category'].value_counts().reindex(['< 50', '50-100', '100-200', '≥ 200'])
+with col5:
+    delta_color = "normal" if delta_more_200 >= 0 else "inverse"
+    st.metric(
+        "Hospitals >200/year (2024)",
+        f"{volume_2024['>200']:.0f}",
+        delta_color=delta_color
+    )
 
-# Create distribution data
+# Volume Distribution Chart
+st.subheader("Volume Distribution by Hospital (2024)")
+
+# Prepare data for chart
 volume_data = []
-for category in ['< 50', '50-100', '100-200', '≥ 200']:
-    count = volume_distribution.get(category, 0)
-    percentage = (count / total_valid_hospitals) * 100 if total_valid_hospitals > 0 else 0
+for bin_name, count in volume_2024.items():
     volume_data.append({
-        'Volume Category': category,
+        'Volume Category': bin_name,
         'Number of Hospitals': count,
-        'Percentage': round(percentage, 1)
+        'Percentage': (count / kpis['total_hospitals_2024']) * 100 if kpis['total_hospitals_2024'] > 0 else 0
     })
 
 volume_df = pd.DataFrame(volume_data)
 
-# Display metrics
-col1, col2, col3 = st.columns(3)
-col1.metric("Total Valid Hospitals (2024)", f"{total_valid_hospitals}")
-col2.metric("Hospitals < 50/year", f"{volume_data[0]['Number of Hospitals']} ({volume_data[0]['Percentage']}%)")
-col3.metric("Hospitals ≥ 200/year", f"{volume_data[3]['Number of Hospitals']} ({volume_data[3]['Percentage']}%)")
+# Toggle for baseline comparison
+show_baseline = st.toggle("Show 2020-2023 average comparison", value=True)
 
-# Display table and chart
-left, right = st.columns([1, 1])
-with left:
-    st.markdown("**Volume Distribution Table**")
-    st.dataframe(volume_df, hide_index=True, use_container_width=True)
+# Create Plotly chart
+fig = go.Figure()
 
-with right:
-    st.markdown("**Volume Distribution Chart**")
-    chart = alt.Chart(volume_df).mark_bar().encode(
-        x=alt.X('Volume Category:N', title='Annual Interventions'),
-        y=alt.Y('Number of Hospitals:Q', title='Number of Hospitals'),
-        color=alt.Color('Volume Category:N'),
-        tooltip=['Volume Category', 'Number of Hospitals', alt.Tooltip('Percentage:Q', format='.1f')]
-    ).properties(height=300).configure_axisX(labelAngle=0)
-    st.altair_chart(chart, use_container_width=True)
+# Main bars for 2024
+fig.add_trace(go.Bar(
+    x=volume_df['Volume Category'],
+    y=volume_df['Number of Hospitals'],
+    name='2024',
+    marker_color='#2E86AB',
+    hovertemplate='<b>%{x}</b><br>Hospitals: %{y}<br>Percentage: %{text:.2f}%<extra></extra>',
+    text=volume_df['Percentage'],
+    texttemplate='%{text:.2f}%',
+    textposition='auto'
+))
 
-st.markdown("---")
+if show_baseline:
+    # Baseline bars (semi-transparent)
+    baseline_data = []
+    for bin_name, avg_count in baseline_2020_2023.items():
+        baseline_data.append({
+            'Volume Category': bin_name,
+            'Average Hospitals': avg_count
+        })
+    baseline_df = pd.DataFrame(baseline_data)
+    
+    fig.add_trace(go.Bar(
+        x=baseline_df['Volume Category'],
+        y=baseline_df['Average Hospitals'],
+        name='2020-2023 Average',
+        marker_color='rgba(255, 193, 7, 0.7)',
+        hovertemplate='<b>%{x}</b><br>Average Hospitals: %{y:.2f}<extra></extra>'
+    ))
 
-# --- Hospital characteristics distribution ---
-st.subheader("Hospital Characteristics Distribution (Most Recent Year: 2024)")
+fig.update_layout(
+    title="Hospital Volume Distribution",
+    xaxis_title="Annual Interventions per Hospital",
+    yaxis_title="Number of Hospitals",
+    barmode='overlay',
+    hovermode='x unified',
+    showlegend=True,
+    height=400,
+    plot_bgcolor='rgba(0,0,0,0)',
+    paper_bgcolor='rgba(0,0,0,0)',
+    font=dict(size=12),
+    margin=dict(l=50, r=50, t=80, b=50)
+)
 
-# Get all hospitals from 2024 (not just valid ones for this analysis)
-all_2024_hospitals = df[df['annee'] == latest_year].drop_duplicates(subset=['ID'])
-total_hospitals_2024 = len(all_2024_hospitals)
+st.plotly_chart(fig, use_container_width=True)
 
-# Establishment type distribution
-status_distribution = all_2024_hospitals['Status'].value_counts()
-status_data = []
-for status, count in status_distribution.items():
-    percentage = (count / total_hospitals_2024) * 100
-    status_data.append({
-        'Category': 'Establishment Type',
-        'Type': status.replace('-', ' ').title(),
-        'Number of Hospitals': count,
-        'Percentage': round(percentage, 1)
-    })
+# --- (2) HOSPITAL AFFILIATION ---
+st.header("Hospital Affiliation (2024)")
 
-# Certification and affiliation distribution
-certification_data = []
+affiliation_data = compute_affiliation_breakdown_2024(df)
+affiliation_counts = affiliation_data['affiliation_counts']
+label_breakdown = affiliation_data['label_breakdown']
 
-# University affiliation
-university_hospitals = all_2024_hospitals[all_2024_hospitals['university'] == 1]
-university_count = len(university_hospitals)
-university_pct = (university_count / total_hospitals_2024) * 100
-certification_data.append({
-    'Category': 'Certifications & Affiliations',
-    'Type': 'University Hospital',
-    'Number of Hospitals': university_count,
-    'Percentage': round(university_pct, 1)
-})
-
-# SOFFCO certification
-soffco_hospitals = all_2024_hospitals[all_2024_hospitals['LAB_SOFFCO'] == 1]
-soffco_count = len(soffco_hospitals)
-soffco_pct = (soffco_count / total_hospitals_2024) * 100
-certification_data.append({
-    'Category': 'Certifications & Affiliations',
-    'Type': 'Centre of Excellence (SOFFCO)',
-    'Number of Hospitals': soffco_count,
-    'Percentage': round(soffco_pct, 1)
-})
-
-# Health Ministry certification
-health_ministry_hospitals = all_2024_hospitals[all_2024_hospitals['cso'] == 1]
-health_ministry_count = len(health_ministry_hospitals)
-health_ministry_pct = (health_ministry_count / total_hospitals_2024) * 100
-certification_data.append({
-    'Category': 'Certifications & Affiliations',
-    'Type': 'Centre of Excellence (Health Ministry)',
-    'Number of Hospitals': health_ministry_count,
-    'Percentage': round(health_ministry_pct, 1)
-})
-
-# Hospitals with both certifications
-both_certifications = all_2024_hospitals[
-    (all_2024_hospitals['LAB_SOFFCO'] == 1) & 
-    (all_2024_hospitals['cso'] == 1)
-]
-both_count = len(both_certifications)
-both_pct = (both_count / total_hospitals_2024) * 100
-certification_data.append({
-    'Category': 'Certifications & Affiliations',
-    'Type': 'Both Certifications (SOFFCO + Health Ministry)',
-    'Number of Hospitals': both_count,
-    'Percentage': round(both_pct, 1)
-})
-
-# Display metrics
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Total Hospitals (2024)", f"{total_hospitals_2024}")
-col2.metric("Public Hospitals", f"{status_distribution.get('public', 0)} ({round((status_distribution.get('public', 0) / total_hospitals_2024) * 100, 1)}%)")
-col3.metric("University Hospitals", f"{university_count} ({university_pct:.1f}%)")
-col4.metric("SOFFCO Centers", f"{soffco_count} ({soffco_pct:.1f}%)")
-
-# Display tables
-st.markdown("**Establishment Type Distribution**")
-status_df = pd.DataFrame(status_data)
-st.dataframe(status_df[['Type', 'Number of Hospitals', 'Percentage']], hide_index=True, use_container_width=True)
-
-st.markdown("**Certifications & Affiliations Distribution**")
-cert_df = pd.DataFrame(certification_data)
-st.dataframe(cert_df[['Type', 'Number of Hospitals', 'Percentage']], hide_index=True, use_container_width=True)
-
-# Create charts
+# First block: Affiliation cards
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown("**Establishment Type Chart**")
-    status_chart = alt.Chart(status_df).mark_bar().encode(
-        x=alt.X('Type:N', title='Establishment Type'),
-        y=alt.Y('Number of Hospitals:Q', title='Number of Hospitals'),
-        color=alt.Color('Type:N'),
-        tooltip=['Type', 'Number of Hospitals', alt.Tooltip('Percentage:Q', format='.1f')]
-    ).properties(height=300).configure_axisX(labelAngle=0)
-    st.altair_chart(status_chart, use_container_width=True)
+    st.subheader("Public")
+    
+    # Public university hospitals
+    public_univ_count = affiliation_counts.get('Public – Univ.', 0)
+   
+    st.metric(
+        "Public University Hospital",
+        f"{public_univ_count}",
+    )
+    
+    # Public non-academic hospitals
+    public_non_acad_count = affiliation_counts.get('Public – Non-Acad.', 0)
+   
+    st.metric(
+        "Public, No Academic Affiliation",
+        f"{public_non_acad_count}",
+    )
 
 with col2:
-    st.markdown("**Certifications & Affiliations Chart**")
-    cert_chart = alt.Chart(cert_df).mark_bar().encode(
-        x=alt.X('Type:N', title='Certification Type'),
-        y=alt.Y('Number of Hospitals:Q', title='Number of Hospitals'),
-        color=alt.Color('Type:N'),
-        tooltip=['Type', 'Number of Hospitals', alt.Tooltip('Percentage:Q', format='.1f')]
-    ).properties(height=300).configure_axisX(labelAngle=0)
-    st.altair_chart(cert_chart, use_container_width=True)
+    st.subheader("Private")
+    
+    # Private for-profit hospitals
+    private_for_profit_count = affiliation_counts.get('Private – For-profit', 0)
+    
+    st.metric(
+        "Private For Profit",
+        f"{private_for_profit_count}",
+        
+    )
+    
+    # Private not-for-profit hospitals
+    private_not_profit_count = affiliation_counts.get('Private – Not-for-profit', 0)
+    
+    st.metric(
+        "Private Not For Profit",
+        f"{private_not_profit_count}",
+    )
 
-st.markdown("---")
+# Second block: Stacked bar chart
+st.subheader("Hospital Labels by Affiliation Type")
 
-# --- Average bariatric procedures per hospital ---
-st.subheader("Average Bariatric Procedures per Hospital")
-avg_proc_rows = []
-for code, name in BARIATRIC_PROCEDURE_NAMES.items():
-    if code in national_averages:
-        avg_proc_rows.append({"Procedure": name, "Average per Hospital": round(national_averages.get(code, 0), 2)})
-avg_proc_df = pd.DataFrame(avg_proc_rows)
-if not avg_proc_df.empty:
-    left, right = st.columns([2, 3])
-    with left:
-        st.dataframe(avg_proc_df, hide_index=True, use_container_width=True)
-    with right:
-        chart = alt.Chart(avg_proc_df).mark_bar().encode(
-            x=alt.X('Average per Hospital:Q', title='Average Count'),
-            y=alt.Y('Procedure:N', sort='-x', title='Procedure'),
-            tooltip=['Procedure', alt.Tooltip('Average per Hospital:Q', format='.2f')]
-        ).properties(height=300).configure_axisY(labelAngle=0)
-        st.altair_chart(chart, use_container_width=True)
+# Prepare data for stacked bar chart
+stacked_data = []
+categories = ['Public – Univ.', 'Public – Non-Acad.', 'Private – For-profit', 'Private – Not-for-profit']
+labels = ['SOFFCO Label', 'CSO Label', 'Both', 'None']
+
+for category in categories:
+    if category in label_breakdown:
+        for label in labels:
+            count = label_breakdown[category].get(label, 0)
+            if count > 0:  # Only add non-zero values
+                stacked_data.append({
+                    'Affiliation': category,
+                    'Label': label,
+                    'Count': count
+                })
+
+stacked_df = pd.DataFrame(stacked_data)
+
+if not stacked_df.empty:
+    fig = px.bar(
+        stacked_df,
+        x='Affiliation',
+        y='Count',
+        color='Label',
+        title="Hospital Labels by Affiliation Type",
+        color_discrete_map={
+            'SOFFCO Label': '#e9967a',
+            'CSO Label': '#00008b',
+            'Both': '#00bfff',
+            'None': '#9bef01'
+        }
+    )
+    
+    fig.update_layout(
+        xaxis_title="Affiliation Type",
+        yaxis_title="Number of Hospitals",
+        hovermode='x unified',
+        height=400,
+        showlegend=True,
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(size=12),
+        margin=dict(l=50, r=50, t=80, b=50)
+    )
+    
+    fig.update_traces(
+        hovertemplate='<b>%{fullData.name}</b><br>%{x}<br>Count: %{y}<extra></extra>'
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
 else:
-    st.info("No bariatric procedure data available.")
+    st.info("No label data available for the selected criteria.")
 
-st.markdown("---")
+# --- (3) PROCEDURES ---
+st.header("Procedures")
 
-# --- Average surgical approaches share ---
-st.subheader("Average Surgical Approaches Share (per Hospital)")
-approach_pct = national_averages.get('approaches_pct', {})
-approach_rows = [{"Approach": name, "Share (%)": round(pct, 2)} for name, pct in approach_pct.items()]
-approach_df = pd.DataFrame(approach_rows)
-if not approach_df.empty:
-    c = alt.Chart(approach_df).mark_arc(innerRadius=60).encode(
-        theta=alt.Theta(field='Share (%)', type='quantitative'),
-        color=alt.Color(field='Approach', type='nominal'),
-        tooltip=['Approach', alt.Tooltip('Share (%):Q', format='.2f')]
-    ).properties(height=300)
-    st.altair_chart(c, use_container_width=False)
-    st.dataframe(approach_df, hide_index=True, use_container_width=True)
-else:
-    st.info("No surgical approach data available.")
+# Compute procedure data
+procedure_averages = compute_procedure_averages_2020_2024(df)
+procedure_totals_2024 = get_2024_procedure_totals(df)
+
+# Two-column layout
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    st.subheader("Average Procedures (2020-2024)")
+    
+    # Prepare data for bar chart
+    avg_data = []
+    for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
+        if proc_code in procedure_averages:
+            avg_data.append({
+                'Procedure': proc_name,
+                'Average Count': procedure_averages[proc_code]
+            })
+    
+    avg_df = pd.DataFrame(avg_data)
+    avg_df = avg_df.sort_values('Average Count', ascending=False)
+    
+    if not avg_df.empty:
+        fig = px.bar(
+            avg_df,
+            x='Procedure',
+            y='Average Count',
+            title="Average Annual Procedures by Type",
+            color='Average Count',
+            color_continuous_scale='Blues'
+        )
+        
+        fig.update_layout(
+            xaxis_title="Procedure Type",
+            yaxis_title="Average Annual Count",
+            hovermode='x unified',
+            height=400,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12),
+            margin=dict(l=50, r=50, t=80, b=50)
+        )
+        
+        fig.update_traces(
+            hovertemplate='<b>%{x}</b><br>Average: %{y:.0f}<extra></extra>'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    st.subheader("2024 Totals")
+    
+    # Sleeve Gastrectomies in 2024
+    sleeve_2024 = procedure_totals_2024.get('SLE', 0)
+    st.metric(
+        "Sleeve Gastrectomies (2024)",
+        f"{sleeve_2024:,}"
+    )
+    
+    # Total procedures in 2024
+    total_2024 = procedure_totals_2024.get('total_all', 0)
+    st.metric(
+        "Total Procedures (2024)",
+        f"{total_2024:,}"
+    )
+
+st.caption("Averages computed over 2020-2024 across eligible hospital-years.")
+
+# --- (4) APPROACH TRENDS ---
+st.header("Approach Trends")
+
+# Compute approach data
+approach_trends = compute_approach_trends(df)
+approach_mix_2024 = compute_2024_approach_mix(df)
+
+
+
+
+st.subheader("Surgical Approach Trends (2020-2024)")
+
+# Prepare data for line chart
+trend_data = []
+for year in range(2020, 2025):
+    trend_data.append({
+        'Year': year,
+        'All Surgeries': approach_trends['all'].get(year, 0),
+        'Robotic Surgeries': approach_trends['robotic'].get(year, 0)
+    })
+
+trend_df = pd.DataFrame(trend_data)
+
+fig = go.Figure()
+
+fig.add_trace(go.Scatter(
+    x=trend_df['Year'],
+    y=trend_df['All Surgeries'],
+    mode='lines+markers',
+    name='All Surgeries',
+    line=dict(color='#2E86AB', width=3),
+    marker=dict(size=8, color='#2E86AB')
+))
+
+fig.add_trace(go.Scatter(
+    x=trend_df['Year'],
+    y=trend_df['Robotic Surgeries'],
+    mode='lines+markers',
+    name='Robotic Surgeries',
+    line=dict(color='#F7931E', width=3),
+    marker=dict(size=8, color='#F7931E')
+))
+
+fig.update_layout(
+    title="Surgical Approach Trends",
+    xaxis_title="Year",
+    yaxis_title="Number of Surgeries",
+    hovermode='x unified',
+    height=400,
+    showlegend=True,
+    plot_bgcolor='rgba(0,0,0,0)',
+    paper_bgcolor='rgba(0,0,0,0)',
+    font=dict(size=12),
+    margin=dict(l=50, r=50, t=80, b=50)
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# Two-column layout for trends and pie chart
+col1, col2 = st.columns([2, 1])
+with col1:
+    st.subheader("Surgical Approach Mix (2024)")
+
+    if approach_mix_2024:
+        # Prepare data for pie chart
+        pie_data = []
+        for approach_name, count in approach_mix_2024.items():
+            if count > 0:
+                pie_data.append({
+                    'Approach': approach_name,
+                    'Count': count
+                })
+        
+        pie_df = pd.DataFrame(pie_data)
+        
+        if not pie_df.empty:
+            fig = px.pie(
+                pie_df,
+                values='Count',
+                names='Approach',
+                title="Surgical Approach Distribution (2024)",
+                color_discrete_sequence=['#2E86AB', '#F7931E', '#A23B72', '#F18F01']
+            )
+            
+            fig.update_layout(
+                height=400,
+                showlegend=True,
+                font=dict(size=12)
+            )
+            
+            fig.update_traces(
+                hovertemplate='<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>',
+                textposition='outside',
+                textinfo='percent+label',
+                textfont=dict(size=11)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No approach data available for 2024.")
+with col2:
+    robotic_2024 = approach_trends['robotic'].get(2024, 0)
+    st.metric(
+        "Total Robotic Surgeries (2024)",
+        f"{robotic_2024:,}"
+    )
+
+
+
 
 
