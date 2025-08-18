@@ -284,37 +284,54 @@ st.header("Procedures")
 procedure_averages = compute_procedure_averages_2020_2024(df)
 procedure_totals_2024 = get_2024_procedure_totals(df)
 
+# Toggle between per-hospital average and national totals
+toggle_totals = st.toggle("Show national totals (2024) instead of per-hospital averages", value=False)
+
 # Two-column layout
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.subheader("Average Procedures (2020-2024)")
-    
-    # Prepare data for bar chart
-    avg_data = []
-    for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
-        if proc_code in procedure_averages:
-            avg_data.append({
-                'Procedure': proc_name,
-                'Average Count': procedure_averages[proc_code]
-            })
-    
-    avg_df = pd.DataFrame(avg_data)
-    avg_df = avg_df.sort_values('Average Count', ascending=False)
-    
-    if not avg_df.empty:
+    if not toggle_totals:
+        st.subheader("Average Procedures (2020-2024)")
+        # Prepare data for bar chart (per-hospital average)
+        avg_data = []
+        for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
+            if proc_code in procedure_averages:
+                avg_data.append({
+                    'Procedure': proc_name,
+                    'Value': procedure_averages[proc_code]
+                })
+        chart_df = pd.DataFrame(avg_data).sort_values('Value', ascending=False)
+        y_title = "Average annual count per hospital"
+        chart_title = "Average Annual Procedures by Type"
+        hover_tmpl = '<b>%{x}</b><br>Average: %{y:.0f}<extra></extra>'
+    else:
+        st.subheader("Total Procedures (2024)")
+        # Prepare data for bar chart (national totals 2024)
+        tot_data = []
+        for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
+            if proc_code in procedure_totals_2024:
+                tot_data.append({
+                    'Procedure': proc_name,
+                    'Value': procedure_totals_2024[proc_code]
+                })
+        chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=False)
+        y_title = "Total count (2024)"
+        chart_title = "Total Procedures by Type (2024)"
+        hover_tmpl = '<b>%{x}</b><br>Total 2024: %{y:,}<extra></extra>'
+
+    if not chart_df.empty:
         fig = px.bar(
-            avg_df,
+            chart_df,
             x='Procedure',
-            y='Average Count',
-            title="Average Annual Procedures by Type",
-            color='Average Count',
+            y='Value',
+            title=chart_title,
+            color='Value',
             color_continuous_scale='Blues'
         )
-        
         fig.update_layout(
             xaxis_title="Procedure Type",
-            yaxis_title="Average Annual Count",
+            yaxis_title=y_title,
             hovermode='x unified',
             height=400,
             plot_bgcolor='rgba(0,0,0,0)',
@@ -322,23 +339,17 @@ with col1:
             font=dict(size=12),
             margin=dict(l=50, r=50, t=80, b=50)
         )
-        
-        fig.update_traces(
-            hovertemplate='<b>%{x}</b><br>Average: %{y:.0f}<extra></extra>'
-        )
-        
+        fig.update_traces(hovertemplate=hover_tmpl)
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
     st.subheader("2024 Totals")
-    
     # Sleeve Gastrectomies in 2024
     sleeve_2024 = procedure_totals_2024.get('SLE', 0)
     st.metric(
         "Sleeve Gastrectomies (2024)",
         f"{sleeve_2024:,}"
     )
-    
     # Total procedures in 2024
     total_2024 = procedure_totals_2024.get('total_all', 0)
     st.metric(
