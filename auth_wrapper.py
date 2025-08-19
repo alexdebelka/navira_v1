@@ -19,7 +19,8 @@ def check_auth():
         st.markdown("You need to be logged in to view this content.")
         
         if st.button("🔐 Go to Login"):
-            st.switch_page("app.py")
+            st.session_state.navigate_to = "login"
+            st.rerun()
         
         st.stop()
     
@@ -47,7 +48,8 @@ def check_auth():
         st.error("🚫 Access Denied")
         st.markdown("You don't have permission to access this page.")
         if st.button("🏠 Go to Dashboard"):
-            st.switch_page("app.py")
+            st.session_state.navigate_to = "dashboard"
+            st.rerun()
         st.stop()
 
 def show_user_info():

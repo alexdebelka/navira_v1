@@ -12,6 +12,18 @@ from auth_wrapper import add_auth_to_page
 # Add authentication check
 add_auth_to_page()
 
+# Handle navigation requests
+navigate_to = st.session_state.get('navigate_to')
+if navigate_to:
+    if navigate_to == "dashboard":
+        st.switch_page("app.py")
+    elif navigate_to == "national":
+        st.switch_page("pages/national.py")
+    elif navigate_to == "hospital":
+        st.switch_page("pages/dashboard.py")
+    else:
+        st.session_state.navigate_to = None
+
 # --- 1. App Configuration ---
 st.set_page_config(
     page_title="Navira - Hospital Explorer",
@@ -142,14 +154,17 @@ selected = option_menu(
 )
 
 if selected == "User Dashboard":
-    st.switch_page("app.py")
+    st.session_state.navigate_to = "dashboard"
+    st.rerun()
 elif selected == "Hospital Dashboard":
     if st.session_state.selected_hospital_id:
-        st.switch_page("pages/dashboard.py")
+        st.session_state.navigate_to = "hospital"
+        st.rerun()
     else:
         st.warning("Please select a hospital from the map or list below before viewing the dashboard.")
 elif selected == "National Overview":
-    st.switch_page("pages/national.py")
+    st.session_state.navigate_to = "national"
+    st.rerun()
 
 # --- Main Page UI ---
 st.title("🏥 Navira - French Hospital Explorer")
@@ -283,7 +298,8 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
             except Exception as e:
                 print(f"Analytics tracking error: {e}")
             
-            st.switch_page("pages/dashboard.py")
+            st.session_state.navigate_to = "hospital"
+            st.rerun()
     st.subheader("Hospital List")
     for idx, row in unique_hospitals_df.iterrows():
         col1, col2, col3 = st.columns([4, 2, 2])
@@ -304,7 +320,8 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
                 print(f"Analytics tracking error: {e}")
             
             st.session_state.selected_hospital_id = row['id']
-            st.switch_page("pages/dashboard.py")
+            st.session_state.navigate_to = "hospital"
+            st.rerun()
         st.markdown("---")
 elif st.session_state.get('search_triggered', False):
     st.warning("No hospitals found matching your criteria. Try increasing the search radius or changing filters.")

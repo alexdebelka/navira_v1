@@ -82,10 +82,16 @@ def main():
             elif navigate_to == "hospital":
                 st.switch_page("pages/dashboard.py")
             elif navigate_to == "hospital_explorer":
-                st.switch_page("pages/hospital_explorer.py")
+                st.switch_page("main.py")  # main.py is the hospital explorer
             elif navigate_to == "admin":
                 st.session_state.navigate_to = None
                 admin_panel()
+            elif navigate_to == "login":
+                st.session_state.navigate_to = None
+                st.session_state.authenticated = False
+                st.session_state.user = None
+                st.session_state.session_token = None
+                login_page()
             else:
                 st.session_state.navigate_to = None
                 user_dashboard()
