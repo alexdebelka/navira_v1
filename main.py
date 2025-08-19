@@ -7,6 +7,10 @@ from geopy.distance import geodesic
 from streamlit_folium import st_folium
 from streamlit_option_menu import option_menu
 from navira.data_loader import get_dataframes
+from auth_wrapper import add_auth_to_page
+
+# Add authentication check
+add_auth_to_page()
 
 # --- 1. App Configuration ---
 st.set_page_config(
@@ -80,7 +84,7 @@ if 'id' in establishments.columns and 'id' in annual.columns:
 @st.cache_data(show_spinner=False)
 def calculate_national_averages(annual_df: pd.DataFrame):
     dataf_clean = annual_df.drop_duplicates(subset=['id', 'annee'], keep='first')
-    dataf_eligible = dataf_clean[dataf_clean['total_procedures_year'] >= 5]
+    dataf_eligible = dataf_clean[dataf_clean['total_procedures_year'] >= 25]
     # Average per hospital across years for procedures and approaches
     proc_aggs = {proc: 'mean' for proc in BARIATRIC_PROCEDURE_NAMES.keys() if proc in dataf_eligible.columns}
     appr_aggs = {app: 'mean' for app in SURGICAL_APPROACH_NAMES.keys() if app in dataf_eligible.columns}
@@ -130,14 +134,16 @@ if 'national_averages' not in st.session_state:
 # --- TOP NAVIGATION HEADER ---
 selected = option_menu(
     menu_title=None,
-    options=["Home", "Hospital Dashboard", "National Overview"],
-    icons=["house", "clipboard2-data", "globe2"],
+    options=["User Dashboard", "Hospital Explorer", "Hospital Dashboard", "National Overview"],
+    icons=["person-circle", "house", "clipboard2-data", "globe2"],
     menu_icon="cast",
-    default_index=0,
+    default_index=1,
     orientation="horizontal",
 )
 
-if selected == "Hospital Dashboard":
+if selected == "User Dashboard":
+    st.switch_page("app.py")
+elif selected == "Hospital Dashboard":
     if st.session_state.selected_hospital_id:
         st.switch_page("pages/dashboard.py")
     else:
@@ -169,6 +175,13 @@ with center_col:
         reset_clicked = reset_col.form_submit_button("🔄 Reset", use_container_width=True)
 
         if submitted and address_input:
+            # Track hospital search
+            try:
+                from analytics_integration import track_search
+                track_search(address_input, 0)  # Will update count after filtering
+            except Exception as e:
+                print(f"Analytics tracking error: {e}")
+            
             st.session_state.address = address_input
             st.session_state.search_triggered = True
             st.session_state.selected_hospital_id = None
@@ -211,6 +224,24 @@ if st.session_state.get('search_triggered', False):
         if is_health_ministry: temp_df = temp_df[temp_df['cso'] == 1]
         filtered_df = temp_df.sort_values('Distance (km)')
         st.session_state.filtered_df = filtered_df
+        
+        # Update search tracking with results count
+        try:
+            from analytics_integration import track_user_action
+            track_user_action("search_results", "hospital_explorer", {
+                "search_term": st.session_state.address,
+                "results_count": len(filtered_df),
+                "radius_km": radius_km,
+                "filters_applied": {
+                    "public_non_profit": is_public_non_profit,
+                    "private_for_profit": is_private_for_profit,
+                    "university": is_university,
+                    "soffco": is_soffco,
+                    "health_ministry": is_health_ministry
+                }
+            })
+        except Exception as e:
+            print(f"Analytics tracking error: {e}")
     else:
         if st.session_state.address: st.error("Address not found. Please try a different address.")
         st.session_state.search_triggered = False
@@ -236,7 +267,22 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
         clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])
         distances = unique_hospitals_df.apply(lambda row: geodesic(clicked_coords, (row['latitude'], row['longitude'])).km, axis=1)
         if distances.min() < 0.1:
-            st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['id']
+            selected_hospital = unique_hospitals_df.loc[distances.idxmin()]
+            st.session_state.selected_hospital_id = selected_hospital['id']
+            
+            # Track hospital selection from map
+            try:
+                from analytics_integration import track_user_action
+                track_user_action("hospital_selected", "hospital_explorer", {
+                    "selection_method": "map_click",
+                    "hospital_id": selected_hospital['id'],
+                    "hospital_name": selected_hospital['name'],
+                    "hospital_city": selected_hospital['ville'],
+                    "distance_km": selected_hospital['Distance (km)']
+                })
+            except Exception as e:
+                print(f"Analytics tracking error: {e}")
+            
             st.switch_page("pages/dashboard.py")
     st.subheader("Hospital List")
     for idx, row in unique_hospitals_df.iterrows():
@@ -244,6 +290,19 @@ if st.session_state.get('search_triggered', False) and not st.session_state.filt
         col1.markdown(f"**{row['name']}** ({row['ville']})")
         col2.markdown(f"*{row['Distance (km)']:.1f} km*")
         if col3.button("View Details", key=f"details_{row['id']}"):
+            # Track hospital selection from list
+            try:
+                from analytics_integration import track_user_action
+                track_user_action("hospital_selected", "hospital_explorer", {
+                    "selection_method": "list_button",
+                    "hospital_id": row['id'],
+                    "hospital_name": row['name'],
+                    "hospital_city": row['ville'],
+                    "distance_km": row['Distance (km)']
+                })
+            except Exception as e:
+                print(f"Analytics tracking error: {e}")
+            
             st.session_state.selected_hospital_id = row['id']
             st.switch_page("pages/dashboard.py")
         st.markdown("---")

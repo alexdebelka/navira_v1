@@ -9,3 +9,5 @@ streamlit-option-menu
 plotly
 pyarrow
 pytest
+requests
+mixpanel

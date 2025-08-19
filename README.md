@@ -32,7 +32,7 @@ The app loads only Parquet files for visualization. If they are missing, the UI 
 
 ## National overview note
 
-National means are computed across hospitals (2020–2024). Only hospitals with ≥5 interventions/year are considered for that analysis.
+National means are computed across hospitals (2020–2024). Only hospitals with ≥25 interventions/year are considered for that analysis.
 
 ## Troubleshooting
 
