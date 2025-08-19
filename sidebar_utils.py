@@ -35,57 +35,37 @@ def add_sidebar_to_page():
         # Navigation section
         st.subheader("🧭 Navigation")
         
-        # Dashboard button
-        if st.button("🏠 Dashboard", use_container_width=True):
-            # Track navigation
-            try:
-                from analytics_integration import track_user_action
-                track_user_action("navigation", "sidebar", {"destination": "dashboard"})
-            except Exception as e:
-                print(f"Analytics tracking error: {e}")
+        # Navigation form
+        with st.form("navigation_form"):
+            nav_option = st.selectbox(
+                "Navigate to:",
+                ["🏠 Dashboard", "🏥 Hospital Explorer", "📈 National Overview", "📊 Hospital Analysis"],
+                index=0
+            )
             
-            st.session_state.current_page = "dashboard"
-            st.session_state.navigate_to = "dashboard"
-            st.rerun()
-        
-        # Hospital Explorer button
-        if st.button("🏥 Hospital Explorer", use_container_width=True):
-            # Track navigation
-            try:
-                from analytics_integration import track_user_action
-                track_user_action("navigation", "sidebar", {"destination": "hospital_explorer"})
-            except Exception as e:
-                print(f"Analytics tracking error: {e}")
-            
-            st.session_state.current_page = "hospital_explorer"
-            st.session_state.navigate_to = "hospital_explorer"
-            st.rerun()
-        
-        # National Overview button
-        if st.button("📈 National Overview", use_container_width=True):
-            # Track navigation
-            try:
-                from analytics_integration import track_user_action
-                track_user_action("navigation", "sidebar", {"destination": "national_overview"})
-            except Exception as e:
-                print(f"Analytics tracking error: {e}")
-            
-            st.session_state.current_page = "national"
-            st.session_state.navigate_to = "national"
-            st.rerun()
-        
-        # Hospital Analysis button
-        if st.button("📊 Hospital Analysis", use_container_width=True):
-            # Track navigation
-            try:
-                from analytics_integration import track_user_action
-                track_user_action("navigation", "sidebar", {"destination": "hospital_dashboard"})
-            except Exception as e:
-                print(f"Analytics tracking error: {e}")
-            
-            st.session_state.current_page = "hospital"
-            st.session_state.navigate_to = "hospital"
-            st.rerun()
+            if st.form_submit_button("Go"):
+                # Track navigation
+                try:
+                    from analytics_integration import track_user_action
+                    track_user_action("navigation", "sidebar", {"destination": nav_option})
+                except Exception as e:
+                    print(f"Analytics tracking error: {e}")
+                
+                # Set navigation based on selection
+                if "Dashboard" in nav_option:
+                    st.session_state.current_page = "dashboard"
+                    st.session_state.navigate_to = "dashboard"
+                elif "Hospital Explorer" in nav_option:
+                    st.session_state.current_page = "hospital_explorer"
+                    st.session_state.navigate_to = "hospital_explorer"
+                elif "National Overview" in nav_option:
+                    st.session_state.current_page = "national"
+                    st.session_state.navigate_to = "national"
+                elif "Hospital Analysis" in nav_option:
+                    st.session_state.current_page = "hospital"
+                    st.session_state.navigate_to = "hospital"
+                
+                st.rerun()
         
         # Admin section (only for admin users)
         if st.session_state.user['role'] == 'admin':
@@ -94,7 +74,7 @@ def add_sidebar_to_page():
             if st.button("👥 User Management", use_container_width=True):
                 st.session_state.current_page = "admin"
                 st.session_state.navigate_to = "admin"
-                st.rerun()
+                st.experimental_rerun()
         
         # Logout
         st.markdown("---")
