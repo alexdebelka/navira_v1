@@ -45,7 +45,8 @@ def add_sidebar_to_page():
                 print(f"Analytics tracking error: {e}")
             
             st.session_state.current_page = "dashboard"
-            st.switch_page("app.py")
+            st.session_state.navigate_to = "dashboard"
+            st.rerun()
         
         # Hospital Explorer button
         if st.button("🏥 Hospital Explorer", use_container_width=True):
@@ -57,7 +58,8 @@ def add_sidebar_to_page():
                 print(f"Analytics tracking error: {e}")
             
             st.session_state.current_page = "hospital_explorer"
-            st.switch_page("pages/hospital_explorer.py")
+            st.session_state.navigate_to = "hospital_explorer"
+            st.rerun()
         
         # National Overview button
         if st.button("📈 National Overview", use_container_width=True):
@@ -69,7 +71,8 @@ def add_sidebar_to_page():
                 print(f"Analytics tracking error: {e}")
             
             st.session_state.current_page = "national"
-            st.switch_page("pages/national.py")
+            st.session_state.navigate_to = "national"
+            st.rerun()
         
         # Hospital Analysis button
         if st.button("📊 Hospital Analysis", use_container_width=True):
@@ -81,7 +84,8 @@ def add_sidebar_to_page():
                 print(f"Analytics tracking error: {e}")
             
             st.session_state.current_page = "hospital"
-            st.switch_page("pages/dashboard.py")
+            st.session_state.navigate_to = "hospital"
+            st.rerun()
         
         # Admin section (only for admin users)
         if st.session_state.user['role'] == 'admin':
@@ -89,7 +93,8 @@ def add_sidebar_to_page():
             st.subheader("⚙️ Admin")
             if st.button("👥 User Management", use_container_width=True):
                 st.session_state.current_page = "admin"
-                st.switch_page("app.py")
+                st.session_state.navigate_to = "admin"
+                st.rerun()
         
         # Logout
         st.markdown("---")

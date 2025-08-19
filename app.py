@@ -74,18 +74,29 @@ def main():
         # User is authenticated, show appropriate page
         current_page = st.session_state.get('current_page', 'dashboard')
         
-        if current_page == "dashboard":
-            user_dashboard()
-        elif current_page == "national":
-            st.switch_page("pages/national.py")
-        elif current_page == "hospital":
-            st.switch_page("pages/dashboard.py")
-        elif current_page == "hospital_explorer":
-            st.switch_page("pages/hospital_explorer.py")
-        elif current_page == "admin" and st.session_state.user['role'] == 'admin':
-            admin_panel()
+        # Handle navigation requests
+        navigate_to = st.session_state.get('navigate_to')
+        if navigate_to:
+            if navigate_to == "national":
+                st.switch_page("pages/national.py")
+            elif navigate_to == "hospital":
+                st.switch_page("pages/dashboard.py")
+            elif navigate_to == "hospital_explorer":
+                st.switch_page("pages/hospital_explorer.py")
+            elif navigate_to == "admin":
+                st.session_state.navigate_to = None
+                admin_panel()
+            else:
+                st.session_state.navigate_to = None
+                user_dashboard()
         else:
-            user_dashboard()
+            # Normal page routing
+            if current_page == "dashboard":
+                user_dashboard()
+            elif current_page == "admin" and st.session_state.user['role'] == 'admin':
+                admin_panel()
+            else:
+                user_dashboard()
 
 def admin_panel():
     """Admin panel for user management."""
