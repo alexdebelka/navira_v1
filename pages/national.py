@@ -10,6 +10,8 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lib.national_utils import *
 from auth_wrapper import add_auth_to_page
+from navigation_utils import handle_navigation_request
+handle_navigation_request()
 
 # Add authentication check
 add_auth_to_page()
@@ -708,7 +710,7 @@ with col2:
         5. **Affiliation**: Public vs private hospital robotic adoption
         """)
 
-# --- ROBOTIC SURGERY COMPARISON ANALYSIS ---
+# --- ROBOTIC SURGERY COMPARATIVE ANALYSIS ---
 st.header("Robotic Surgery Comparative Analysis")
 
 # Compute all robotic surgery comparisons

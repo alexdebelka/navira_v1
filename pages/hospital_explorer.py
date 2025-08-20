@@ -7,6 +7,8 @@ from geopy.distance import geodesic
 from streamlit_folium import st_folium
 from navira.data_loader import get_dataframes
 from auth_wrapper import add_auth_to_page
+from navigation_utils import handle_navigation_request
+handle_navigation_request()
 
 # Add authentication check
 add_auth_to_page()
