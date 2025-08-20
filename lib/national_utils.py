@@ -573,3 +573,31 @@ def compute_national_kpis(df: pd.DataFrame) -> Dict[str, float]:
         'avg_surgeries_per_year': total_surgeries_2024,
         'avg_revisions_per_year': total_revisions_2024
     }
+
+@st.cache_data(show_spinner=False)
+def compute_robotic_volume_distribution(df: pd.DataFrame) -> pd.DataFrame:
+    """Return per-hospital robotic share by volume bin for distribution plots.
+    Columns: volume_category, hospital_pct, total_surgeries, hospital_id
+    """
+    df_2024 = df[df['year'] == 2024].copy()
+    df_eligible = filter_eligible_years(df_2024)
+
+    def categorize_volume(total_procedures):
+        if total_procedures < 50:
+            return "<50"
+        elif total_procedures < 100:
+            return "50–100"
+        elif total_procedures < 200:
+            return "100–200"
+        else:
+            return ">200"
+
+    df_eligible['volume_category'] = df_eligible['total_procedures_year'].apply(categorize_volume)
+
+    hosp_agg = (df_eligible.groupby(['hospital_id', 'volume_category'])
+                .agg({'ROB': 'sum', 'total_procedures_year': 'sum'})
+                .reset_index())
+    hosp_agg['hospital_pct'] = (hosp_agg['ROB'] / hosp_agg['total_procedures_year'] * 100)
+    hosp_agg['hospital_pct'] = pd.to_numeric(hosp_agg['hospital_pct'], errors='coerce').fillna(0)
+    hosp_agg = hosp_agg.rename(columns={'total_procedures_year': 'total_surgeries'})
+    return hosp_agg[['hospital_id', 'volume_category', 'hospital_pct', 'total_surgeries']]
