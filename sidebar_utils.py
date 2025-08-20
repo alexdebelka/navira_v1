@@ -61,6 +61,10 @@ def add_sidebar_to_page():
 		if st.button("📊 Hospital Analysis", use_container_width=True):
 			_track("Hospital Analysis")
 			navigate_to_hospital_dashboard()
+		if st.button("💬 Assistant", use_container_width=True):
+			_track("Assistant")
+			from navigation_utils import navigate_to_assistant
+			navigate_to_assistant()
 		
 		# Admin section (only for admin users)
 		if st.session_state.user['role'] == 'admin':

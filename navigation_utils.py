@@ -36,6 +36,11 @@ def navigate_to_login():
     st.switch_page("pages/login.py")
 
 
+def navigate_to_assistant():
+    """Navigate to the assistant chat page."""
+    st.switch_page("pages/assistant.py")
+
+
 def navigate_to_page(page_name: str):
     """Navigate to a specific page by name."""
     navigation_map = {
@@ -45,6 +50,7 @@ def navigate_to_page(page_name: str):
         "hospital_explorer": navigate_to_hospital_explorer,
         "admin": navigate_to_admin,
         "login": navigate_to_login,
+        "assistant": navigate_to_assistant,
     }
 
     if page_name in navigation_map:
