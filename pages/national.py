@@ -921,11 +921,18 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
     """)
     
     if robotic_volume['volume_categories'] and len(robotic_volume['volume_categories']) > 0:
+        # Safely pick weighted percentages if available, otherwise fallback
+        y_vals = (
+            robotic_volume.get('percentages_weighted')
+            or robotic_volume.get('percentages')
+            or robotic_volume.get('percentages_mean')
+        )
+
         fig = px.bar(
             x=robotic_volume['volume_categories'],
-            y=robotic_volume.get('percentages_weighted', robotic_volume['percentages']),
+            y=y_vals,
             title="Robotic Adoption by Hospital Volume (2024)",
-            color=robotic_volume.get('percentages_weighted', robotic_volume['percentages']),
+            color=y_vals,
             color_continuous_scale='Purples'
         )
         
@@ -948,11 +955,16 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
 
         # Optional: Show unweighted mean as a footnote toggle
         with st.expander("Show unweighted (per-hospital mean) percentages"):
+            mean_vals = (
+                robotic_volume.get('percentages_mean')
+                or robotic_volume.get('percentages')
+                or robotic_volume.get('percentages_weighted')
+            )
             fig_mean = px.bar(
                 x=robotic_volume['volume_categories'],
-                y=robotic_volume.get('percentages_mean', robotic_volume.get('percentages')),
+                y=mean_vals,
                 title="Robotic Adoption by Volume (Per-hospital mean)",
-                color=robotic_volume.get('percentages_mean', robotic_volume.get('percentages')),
+                color=mean_vals,
                 color_continuous_scale='Purples'
             )
             fig_mean.update_layout(
