@@ -372,22 +372,26 @@ def login_page():
         
         with col1:
             if st.button("🏠 Go to Dashboard", use_container_width=True):
-                st.switch_page("app.py")
+                from navigation_utils import navigate_to_dashboard
+                navigate_to_dashboard()
         
         with col2:
             if st.button("🏥 Hospital Explorer", use_container_width=True):
-                st.switch_page("pages/hospital_explorer.py")
+                from navigation_utils import navigate_to_hospital_explorer
+                navigate_to_hospital_explorer()
         
         with col3:
             if st.button("📈 National Overview", use_container_width=True):
-                st.switch_page("pages/national.py")
+                from navigation_utils import navigate_to_national
+                navigate_to_national()
         
         # Admin panel option for admin users
         if st.session_state.user['role'] == 'admin':
             st.markdown("---")
             if st.button("⚙️ Admin Panel", use_container_width=True):
                 st.session_state.current_page = "admin"
-                st.switch_page("app.py")
+                # Admin panel is handled in the main app, not a separate page
+                st.rerun()
         
         # Logout option
         st.markdown("---")
@@ -537,22 +541,25 @@ def user_dashboard():
     if user['role'] == 'admin':
         if st.button("⚙️ Admin Panel", use_container_width=True):
             st.session_state.current_page = "admin"
-            st.switch_page("app.py")
+            st.rerun()
         st.markdown("---")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
         if st.button("🏥 Hospital Explorer"):
-            st.switch_page("pages/hospital_explorer.py")
+            from navigation_utils import navigate_to_hospital_explorer
+            navigate_to_hospital_explorer()
     
     with col2:
         if st.button("📈 National Overview"):
-            st.switch_page("pages/national.py")
+            from navigation_utils import navigate_to_national
+            navigate_to_national()
     
     with col3:
         if st.button("📊 Hospital Dashboard"):
-            st.switch_page("pages/dashboard.py")
+            from navigation_utils import navigate_to_hospital_dashboard
+            navigate_to_hospital_dashboard()
 
 
 

@@ -8,6 +8,7 @@ from streamlit_folium import st_folium
 from streamlit_option_menu import option_menu
 from navira.data_loader import get_dataframes
 from auth_wrapper import add_auth_to_page
+import os
 
 # Add authentication check
 add_auth_to_page()
@@ -15,14 +16,9 @@ add_auth_to_page()
 # Handle navigation requests
 navigate_to = st.session_state.get('navigate_to')
 if navigate_to:
-    if navigate_to == "dashboard":
-        st.switch_page("app.py")
-    elif navigate_to == "national":
-        st.switch_page("pages/national.py")
-    elif navigate_to == "hospital":
-        st.switch_page("pages/dashboard.py")
-    else:
-        st.session_state.navigate_to = None
+    from navigation_utils import navigate_to_page
+    navigate_to_page(navigate_to)
+    st.session_state.navigate_to = None
 
 # --- 1. App Configuration ---
 st.set_page_config(

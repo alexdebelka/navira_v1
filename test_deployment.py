@@ -177,6 +177,27 @@ def test_file_structure():
     
     return len(missing_files) == 0 and len(missing_dirs) == 0
 
+def test_navigation():
+    """Test that the navigation utility works correctly."""
+    print("\n🧭 Testing navigation utility...")
+    
+    try:
+        from navigation_utils import get_main_file_path, navigate_to_page
+        
+        # Test main file path detection
+        main_file = get_main_file_path()
+        print(f"✅ Main file path detected: {main_file}")
+        
+        # Test navigation function exists
+        assert callable(navigate_to_page)
+        print("✅ Navigation function available")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Navigation test failed: {e}")
+        return False
+
 def main():
     """Run all deployment tests."""
     print("🚀 Navira Deployment Test Suite")
@@ -186,7 +207,8 @@ def main():
         ("File Structure", test_file_structure),
         ("Imports", test_imports),
         ("Authentication", test_authentication),
-        ("Data Loading", test_data_loading)
+        ("Data Loading", test_data_loading),
+        ("Navigation", test_navigation)
     ]
     
     results = []
