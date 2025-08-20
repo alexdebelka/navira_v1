@@ -32,8 +32,8 @@ def navigate_to_admin():
 
 
 def navigate_to_login():
-    """Navigate to the main app where the login page is rendered."""
-    st.switch_page("app.py")
+    """Navigate to the dedicated login page."""
+    st.switch_page("pages/login.py")
 
 
 def navigate_to_page(page_name: str):
