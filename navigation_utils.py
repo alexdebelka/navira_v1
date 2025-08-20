@@ -7,8 +7,8 @@ import streamlit as st
 
 
 def navigate_to_dashboard():
-    """Navigate to the app home (use Hospital Explorer as landing)."""
-    st.switch_page("pages/hospital_explorer.py")
+    """Navigate to the user dashboard page."""
+    st.switch_page("pages/user_dashboard.py")
 
 
 def navigate_to_national():
