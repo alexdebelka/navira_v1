@@ -4,6 +4,7 @@ Requires: requests
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 from datetime import datetime
 
 
@@ -47,17 +48,13 @@ class GoogleAnalytics4:
         """Send event via GA4 Measurement Protocol (requires api_secret)."""
         try:
             if not self.api_secret:
-                # Skip silently if API secret not configured
                 return False
             import requests
 
             payload = {
                 "client_id": self._get_client_id(),
                 "events": [
-                    {
-                        "name": event_name,
-                        "params": parameters or {},
-                    }
+                    {"name": event_name, "params": parameters or {}}
                 ],
             }
             url = f"{self.base_url}?measurement_id={self.measurement_id}&api_secret={self.api_secret}"
@@ -94,16 +91,15 @@ class GoogleAnalytics4:
 
 
 def setup_ga4_tracking():
-    """Inject GA4 gtag with consent mode and optional Consent Manager.
-    Should be called on every page load (safe due to Streamlit reruns).
+    """Inject GA4 gtag with consent mode and optional CMP via components.html.
+    This ensures scripts execute in Streamlit Cloud.
     """
     cfg = _get_ga4_config()
     mid = cfg["measurement_id"]
 
-    # Base gtag with Consent Mode v2 (default denied)
-    scripts = f"""
+    html = f"""
     <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id={mid}"></script>
+    <script async src=\"https://www.googletagmanager.com/gtag/js?id={mid}\"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){{dataLayer.push(arguments);}}
@@ -118,14 +114,12 @@ def setup_ga4_tracking():
     </script>
     """
 
-    # Optional Consent Manager (Consentmanager.net) if configured
     if cfg["cmp_script_url"]:
-        # Autoconsent/Autoblocking script; CM will update gtag consent after user choice
-        scripts += f"""
-        <script type="text/javascript" data-cmp-ab="1" src="{cfg['cmp_script_url']}"
-                data-cmp-host="{cfg.get('cmp_host','')}" data-cmp-cdn="{cfg.get('cmp_cdn','')}"
-                data-cmp-codesrc="{cfg.get('cmp_codesrc','')}"></script>
+        html += f"""
+        <script type=\"text/javascript\" data-cmp-ab=\"1\" src=\"{cfg['cmp_script_url']}\"
+                data-cmp-host=\"{cfg.get('cmp_host','')}\" data-cmp-cdn=\"{cfg.get('cmp_cdn','')}\"
+                data-cmp-codesrc=\"{cfg.get('cmp_codesrc','')}\"></script>
         """
 
-    # Inject once per run (safe to repeat across pages)
-    st.markdown(scripts, unsafe_allow_html=True)
+    # Render invisible container to execute scripts
+    components.html(html, height=0, width=0)
