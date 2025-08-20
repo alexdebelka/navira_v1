@@ -19,8 +19,12 @@ def check_auth():
 		st.markdown("You need to be logged in to view this content.")
 		
 		if st.button("🔐 Go to Login"):
-			st.session_state.navigate_to = "login"
-			st.rerun()
+			try:
+				from navigation_utils import navigate_to_login
+				navigate_to_login()
+			except Exception:
+				st.session_state.navigate_to = "login"
+				st.rerun()
 		
 		st.stop()
 	

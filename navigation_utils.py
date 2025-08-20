@@ -31,6 +31,11 @@ def navigate_to_admin():
     st.switch_page("pages/admin.py")
 
 
+def navigate_to_login():
+    """Navigate to the main app where the login page is rendered."""
+    st.switch_page("app.py")
+
+
 def navigate_to_page(page_name: str):
     """Navigate to a specific page by name."""
     navigation_map = {
@@ -39,6 +44,7 @@ def navigate_to_page(page_name: str):
         "hospital": navigate_to_hospital_dashboard,
         "hospital_explorer": navigate_to_hospital_explorer,
         "admin": navigate_to_admin,
+        "login": navigate_to_login,
     }
 
     if page_name in navigation_map:
