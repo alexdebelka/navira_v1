@@ -800,15 +800,6 @@ with st.expander("🗺️ 1. Geographic Analysis - Regional Robotic Adoption"):
     - **Example**: If ILE-DE-FRANCE shows 5.4%, it means 5.4% of all bariatric surgeries in Île-de-France are robotic
     - **Robotic count**: The actual number of robotic procedures performed in that region
     
-    # **Key insights:**
-    # - **Regional disparities**: Some regions may have better access to robotic technology
-    # - **Infrastructure gaps**: Areas with low adoption may need investment
-    # - **Best practices**: High-adoption regions can serve as models
-    
-    # **What to look for:**
-    # - **Leading regions**: Which areas have the highest robotic adoption?
-    # - **Geographic patterns**: Are there clusters of high or low adoption?
-    # - **Equity issues**: Are all regions getting equal access to technology?
     """)
     
     if robotic_geographic['regions'] and len(robotic_geographic['regions']) > 0:
@@ -863,11 +854,6 @@ with st.expander("🏥 2. Institutional Analysis - Hospital Type vs Robotic Adop
     - **Academic advantage**: University hospitals may have better access to new technology
     - **Public vs private**: Different funding models may affect technology adoption
     - **Resource allocation**: Which hospital types are investing in robotic technology
-    
-    # **What to look for:**
-    # - **Institutional differences**: Which hospital types lead in robotic adoption?
-    # - **Resource gaps**: Are certain hospital types falling behind?
-    # - **Policy implications**: What funding or support might different hospital types need?
     """)
     
     if robotic_institutional['academic']['types'] and len(robotic_institutional['academic']['types']) > 0:
@@ -915,10 +901,10 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
     **How we calculated this (default chart):**
     - **Data source**: 2024 data for all eligible hospitals (≥25 procedures/year)
     - **Volume categorization**: Hospitals grouped by annual procedure volume:
-      * <50 procedures/year
+      * less than 50 procedures/year
       * 50–100 procedures/year  
       * 100–200 procedures/year
-      * >200 procedures/year
+      * more than 200 procedures/year
     - **Weighted percentage**: For each volume group, we compute (sum of robotic surgeries ÷ sum of all surgeries) × 100. This weights each hospital by its number of surgeries so large centers are represented proportionally.
     - Hover shows: **weighted % robotic** and the **robotic count** in that group.
     
@@ -981,7 +967,7 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
         st.info("No volume-based data available for analysis.")
 
 # 5. Affiliation Analysis
-with st.expander("🏛️ 5. Affiliation Analysis - Hospital Affiliation vs Robotic Adoption"):
+with st.expander("🏛️ 4. Affiliation Analysis - Hospital Affiliation vs Robotic Adoption"):
     st.markdown("""
     **Understanding this analysis:**
     
@@ -1007,11 +993,6 @@ with st.expander("🏛️ 5. Affiliation Analysis - Hospital Affiliation vs Robo
     - **Funding models**: Different affiliation types may have different access to capital
     - **Mission alignment**: Some hospital types may prioritize technology differently
     - **Patient populations**: Different affiliations may serve different patient needs
-    
-    # **What to look for:**
-    # - **Affiliation patterns**: Which hospital types lead in robotic adoption?
-    # - **Funding disparities**: Are certain affiliation types at a disadvantage?
-    # - **Policy implications**: What support might different hospital types need?
     """)
     
     if robotic_affiliation['affiliations'] and len(robotic_affiliation['affiliations']) > 0:
