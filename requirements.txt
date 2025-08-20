@@ -11,3 +11,4 @@ pyarrow
 pytest
 requests
 mixpanel
+openai>=1.40.0

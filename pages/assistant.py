@@ -45,16 +45,18 @@ for msg in st.session_state.assistant_chat:
 # OpenAI client init (key via Secrets or env var)
 @st.cache_resource(show_spinner=False)
 def _init_openai_client():
-    from openai import OpenAI
     api_key = None
     if hasattr(st, "secrets") and st.secrets:
         api_key = st.secrets.get("openai", {}).get("api_key") or st.secrets.get("OPENAI_API_KEY")
         if not api_key:
-            # Back-compat with top-level secrets
             api_key = st.secrets.get("openai_api_key")
     api_key = api_key or os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return None, "Missing OpenAI API key. Add to Secrets under [openai].api_key or set OPENAI_API_KEY."
+    try:
+        from openai import OpenAI  # type: ignore
+    except Exception:
+        return None, "OpenAI package not installed. Add 'openai' to requirements.txt or 'pip install openai'."
     try:
         client = OpenAI(api_key=api_key)
         return client, None
@@ -99,7 +101,6 @@ user_msg = st.chat_input("Type a question or a command…")
 if user_msg:
     # First, try local navigation intents
     if maybe_navigate(user_msg):
-        # Add a small acknowledgement to history before switching
         st.session_state.assistant_chat.append({"role": "user", "content": user_msg})
         st.session_state.assistant_chat.append({"role": "assistant", "content": "Navigating…"})
         st.rerun()
@@ -111,7 +112,7 @@ if user_msg:
             client, err = _init_openai_client()
             if err:
                 st.info(err)
-                reply = "I can't reach the assistant service yet. Please add your OpenAI API key in Secrets under [openai].api_key."
+                reply = "I can't reach the assistant service yet. Please configure it and try again."
             else:
                 try:
                     response = client.responses.create(
