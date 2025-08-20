@@ -953,30 +953,51 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
         
         st.plotly_chart(fig, use_container_width=True)
 
-        # Optional: Show unweighted mean as a footnote toggle
-        with st.expander("Show unweighted (per-hospital mean) percentages"):
-            mean_vals = (
-                robotic_volume.get('percentages_mean')
-                or robotic_volume.get('percentages')
-                or robotic_volume.get('percentages_weighted')
-            )
-            fig_mean = px.bar(
-                x=robotic_volume['volume_categories'],
-                y=mean_vals,
-                title="Robotic Adoption by Volume (Per-hospital mean)",
-                color=mean_vals,
-                color_continuous_scale='Purples'
-            )
-            fig_mean.update_layout(
-                xaxis_title=None,
-                yaxis_title=None,
-                height=280,
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)'
-            )
-            st.plotly_chart(fig_mean, use_container_width=True)
-    else:
-        st.info("No volume-based data available for analysis.")
+        # Annotations: hospitals and average surgeries per bin
+        try:
+            num_hosp = robotic_volume.get('hospitals')
+            total_counts = robotic_volume.get('total_counts')
+            ann_text = []
+            if num_hosp and total_counts:
+                avg_surg = [round(tc / h, 1) if h else 0 for tc, h in zip(total_counts, num_hosp)]
+                for xc, h, a in zip(robotic_volume['volume_categories'], num_hosp, avg_surg):
+                    ann_text.append(f"{h} hospitals\n~{a} surgeries/hosp")
+                fig_ann = px.bar(x=robotic_volume['volume_categories'], y=[0]*len(num_hosp))
+                fig_ann.update_layout(height=1)  # placeholder
+            st.caption("Hospitals and avg surgeries per bin: " + ", ".join(ann_text))
+        except Exception:
+            pass
+
+        # Δ between weighted and mean
+        try:
+            weighted = robotic_volume.get('percentages_weighted') or [None]*len(robotic_volume['volume_categories'])
+            mean_vals = robotic_volume.get('percentages_mean') or [None]*len(robotic_volume['volume_categories'])
+            deltas = []
+            for w, m in zip(weighted, mean_vals):
+                if w is not None and m is not None:
+                    deltas.append(round(w - m, 1))
+                else:
+                    deltas.append(None)
+            st.markdown("**Δ (weighted − mean) by volume bin:** " + ", ".join(
+                [f"{cat}: {d:+.1f}%" if d is not None else f"{cat}: n/a" for cat, d in zip(robotic_volume['volume_categories'], deltas)]
+            ))
+        except Exception:
+            pass
+
+        # Distribution plot (per-hospital robotic share) by volume bin
+        try:
+            from lib.national_utils import compute_robotic_volume_distribution
+            dist_df = compute_robotic_volume_distribution(df)
+            st.subheader("Per-hospital distribution by volume")
+            import plotly.express as px
+            box = px.box(dist_df, x='volume_category', y='hospital_pct', points='all',
+                         title='Per-hospital robotic share distribution', color='volume_category')
+            box.update_layout(showlegend=False, xaxis_title=None, yaxis_title=None, height=380,
+                              plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            box.update_traces(jitter=0.3, marker_opacity=0.5)
+            st.plotly_chart(box, use_container_width=True)
+        except Exception as e:
+            st.info(f"Distribution view unavailable: {e}")
 
 # 5. Affiliation Analysis
 with st.expander("🏛️ 4. Affiliation Analysis - Hospital Affiliation vs Robotic Adoption"):
