@@ -105,6 +105,10 @@ if user_msg:
         st.session_state.assistant_chat.append({"role": "assistant", "content": "Navigating…"})
         st.rerun()
 
+    # Show the user's message immediately
+    with st.chat_message("user"):
+        st.markdown(user_msg)
+
     st.session_state.assistant_chat.append({"role": "user", "content": user_msg})
 
     with st.chat_message("assistant"):
