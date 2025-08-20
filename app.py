@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from auth import (
     init_session_state, 
     login_page, 
@@ -336,7 +337,10 @@ def admin_panel():
                 {"Page": page, "Visits": visits} 
                 for page, visits in st.session_state.page_visits.items()
             ])
-            st.bar_chart(visit_data.set_index("Page"))
+            fig = px.bar(visit_data, x="Page", y="Visits", color_discrete_sequence=["#69b3ff"])
+            fig.update_layout(xaxis_tickangle=-90, xaxis_title=None, yaxis_title=None, height=300,
+                              plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No page visits recorded yet.")
         

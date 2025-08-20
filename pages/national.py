@@ -989,7 +989,6 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
             from lib.national_utils import compute_robotic_volume_distribution
             dist_df = compute_robotic_volume_distribution(df)
             st.subheader("Per-hospital distribution by volume")
-            import plotly.express as px
             box = px.box(dist_df, x='volume_category', y='hospital_pct', points='all',
                          title='Per-hospital robotic share distribution', color='volume_category')
             box.update_layout(showlegend=False, xaxis_title=None, yaxis_title=None, height=380,
