@@ -26,6 +26,11 @@ def navigate_to_hospital_explorer():
     st.switch_page("pages/hospital_explorer.py")
 
 
+def navigate_to_admin():
+    """Navigate to the admin page."""
+    st.switch_page("pages/admin.py")
+
+
 def navigate_to_page(page_name: str):
     """Navigate to a specific page by name."""
     navigation_map = {
@@ -33,6 +38,7 @@ def navigate_to_page(page_name: str):
         "national": navigate_to_national,
         "hospital": navigate_to_hospital_dashboard,
         "hospital_explorer": navigate_to_hospital_explorer,
+        "admin": navigate_to_admin,
     }
 
     if page_name in navigation_map:

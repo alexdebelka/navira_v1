@@ -67,8 +67,8 @@ def add_sidebar_to_page():
 			st.markdown("---")
 			st.subheader("⚙️ Admin")
 			if st.button("👥 User Management", use_container_width=True):
-				st.session_state.current_page = "admin"
-				st.experimental_rerun()
+				from navigation_utils import navigate_to_admin
+				navigate_to_admin()
 		
 		# Logout
 		st.markdown("---")

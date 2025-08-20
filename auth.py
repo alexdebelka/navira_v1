@@ -389,9 +389,8 @@ def login_page():
         if st.session_state.user['role'] == 'admin':
             st.markdown("---")
             if st.button("⚙️ Admin Panel", use_container_width=True):
-                st.session_state.current_page = "admin"
-                # Admin panel is handled in the main app, not a separate page
-                st.rerun()
+                from navigation_utils import navigate_to_admin
+                navigate_to_admin()
         
         # Logout option
         st.markdown("---")
@@ -540,8 +539,8 @@ def user_dashboard():
     # Show admin panel button for admin users
     if user['role'] == 'admin':
         if st.button("⚙️ Admin Panel", use_container_width=True):
-            st.session_state.current_page = "admin"
-            st.rerun()
+            from navigation_utils import navigate_to_admin
+            navigate_to_admin()
         st.markdown("---")
     
     col1, col2, col3 = st.columns(3)
