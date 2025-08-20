@@ -2,8 +2,16 @@ import os
 import pandas as pd
 import streamlit as st
 
-DATA_DIR_DEFAULT = os.environ.get("NAVIRA_OUT_DIR", "data/processed")
-RAW_FALLBACK_DIR = "data"
+# Get the absolute path to the directory of the current script
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Construct the path to the data directory (go up one level from 'navira' to the project root, then into 'data')
+data_dir = os.path.join(script_dir, '..', 'data')
+processed_data_dir = os.path.join(data_dir, 'processed')
+
+# Use environment variable if set, otherwise use the constructed path
+DATA_DIR_DEFAULT = os.environ.get("NAVIRA_OUT_DIR", processed_data_dir)
+RAW_FALLBACK_DIR = data_dir
 
 def _resolve_parquet_path(filename: str) -> str:
     """Return the existing Parquet path, preferring NAVIRA_OUT_DIR then falling back to data/."""
@@ -147,5 +155,38 @@ def get_dataframes():
     est = load_establishments(est_path, est_ver)
     ann = load_annual(ann_path, ann_ver)
     return est, ann
+
+
+@st.cache_data
+def load_data():
+    """
+    Loads all the necessary data for the app using dynamic paths.
+    This function is optimized for deployment environments.
+    """
+    # Get the absolute path to the directory of the current script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Construct the path to the data directory (go up one level from 'navira' to the project root, then into 'data')
+    data_dir = os.path.join(script_dir, '..', 'data')
+
+    # Construct the full paths to the data files
+    establishments_path = os.path.join(data_dir, 'establishments.parquet')
+    annual_procedures_path = os.path.join(data_dir, 'annual_procedures.parquet')
+
+    # Load the datasets
+    establishments = pd.read_parquet(establishments_path)
+    annual_procedures = pd.read_parquet(annual_procedures_path)
+
+    # Rename columns for establishments (only if they exist)
+    rename_mapping = {}
+    if 'rs' in establishments.columns:
+        rename_mapping['rs'] = 'name'
+    if 'finess_geo' in establishments.columns:
+        rename_mapping['finess_geo'] = 'finess'
+    
+    if rename_mapping:
+        establishments = establishments.rename(columns=rename_mapping)
+
+    return establishments, annual_procedures
 
 

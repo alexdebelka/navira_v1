@@ -8,8 +8,31 @@ from datetime import datetime, timedelta
 import pandas as pd
 from typing import Optional, Dict, List
 
-# Database setup
-DB_PATH = "users.db"
+# Configuration with Streamlit secrets support
+def get_config():
+    """Get configuration from Streamlit secrets or use defaults."""
+    if hasattr(st, 'secrets') and st.secrets:
+        return {
+            'database_path': st.secrets.get("database", {}).get("path", "users.db"),
+            'admin_username': st.secrets.get("admin", {}).get("username", "admin"),
+            'admin_email': st.secrets.get("admin", {}).get("email", "admin@navira.com"),
+            'admin_password': st.secrets.get("admin", {}).get("password", "admin123"),
+            'session_expiry_hours': st.secrets.get("session", {}).get("expiry_hours", 24),
+            'cleanup_interval': st.secrets.get("session", {}).get("cleanup_interval", 3600)
+        }
+    else:
+        return {
+            'database_path': "users.db",
+            'admin_username': "admin",
+            'admin_email': "admin@navira.com",
+            'admin_password': "admin123",
+            'session_expiry_hours': 24,
+            'cleanup_interval': 3600
+        }
+
+# Get configuration
+config = get_config()
+DB_PATH = config['database_path']
 SESSION_FILE = "session.json"
 
 def init_database():
@@ -161,7 +184,7 @@ def create_session(user_id: int) -> str:
     import secrets
     
     session_token = secrets.token_urlsafe(32)
-    expires_at = datetime.now() + timedelta(hours=24)  # 24-hour session
+    expires_at = datetime.now() + timedelta(hours=config['session_expiry_hours'])  # Use config
     
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -563,9 +586,9 @@ def create_default_admin():
     
     if admin_count == 0:
         # Create default admin user
-        admin_username = "admin"
-        admin_email = "admin@navira.com"
-        admin_password = "admin123"  # Change this in production!
+        admin_username = config['admin_username']
+        admin_email = config['admin_email']
+        admin_password = config['admin_password'] # Use config
         
         success = create_user(admin_username, admin_email, admin_password, "admin")
         if success:

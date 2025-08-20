@@ -28,10 +28,18 @@ SURGICAL_APPROACH_NAMES = {
 def load_and_prepare_data() -> pd.DataFrame:
     """Load Parquet data, merge establishments and annual, and normalize schema for national analysis."""
     try:
+        # Try the original method first
         establishments, annual = get_dataframes()
-    except Exception:
-        st.error("Parquet data not found. Please run: make parquet")
-        st.stop()
+    except Exception as e:
+        st.warning(f"Primary data loading method failed: {e}")
+        try:
+            # Fallback to the new deployment-friendly method
+            from navira.data_loader import load_data
+            establishments, annual = load_data()
+        except Exception as e2:
+            st.error(f"Both data loading methods failed. Primary: {e}, Fallback: {e2}")
+            st.error("Please ensure data files are available in the data/ directory.")
+            st.stop()
 
     # Ensure consistent dtypes and uniqueness on establishments
     est_meta = establishments.copy()
