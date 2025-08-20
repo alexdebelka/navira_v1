@@ -41,31 +41,26 @@ def add_sidebar_to_page():
 		# Navigation section
 		st.subheader("🧭 Navigation")
 		
-		# Navigation form
-		with st.form("navigation_form"):
-			nav_option = st.selectbox(
-				"Navigate to:",
-				["🏠 Dashboard", "🏥 Hospital Explorer", "📈 National Overview", "📊 Hospital Analysis"],
-				index=0
-			)
-			
-			if st.form_submit_button("Go"):
-				# Track navigation
-				try:
-					from analytics_integration import track_user_action
-					track_user_action("navigation", "sidebar", {"destination": nav_option})
-				except Exception as e:
-					print(f"Analytics tracking error: {e}")
-				
-				# Directly navigate
-				if "Dashboard" in nav_option:
-					navigate_to_dashboard()
-				elif "Hospital Explorer" in nav_option:
-					navigate_to_hospital_explorer()
-				elif "National Overview" in nav_option:
-					navigate_to_national()
-				elif "Hospital Analysis" in nav_option:
-					navigate_to_hospital_dashboard()
+		# Direct navigation buttons (no dropdown, no Go button)
+		def _track(dest: str):
+			try:
+				from analytics_integration import track_user_action
+				track_user_action("navigation", "sidebar", {"destination": dest})
+			except Exception:
+				pass
+		
+		if st.button("🏠 Dashboard", use_container_width=True):
+			_track("Dashboard")
+			navigate_to_dashboard()
+		if st.button("🏥 Hospital Explorer", use_container_width=True):
+			_track("Hospital Explorer")
+			navigate_to_hospital_explorer()
+		if st.button("📈 National Overview", use_container_width=True):
+			_track("National Overview")
+			navigate_to_national()
+		if st.button("📊 Hospital Analysis", use_container_width=True):
+			_track("Hospital Analysis")
+			navigate_to_hospital_dashboard()
 		
 		# Admin section (only for admin users)
 		if st.session_state.user['role'] == 'admin':
