@@ -720,68 +720,68 @@ robotic_volume = compute_robotic_volume_analysis(df)
 robotic_temporal = compute_robotic_temporal_analysis(df)
 robotic_institutional = compute_robotic_institutional_analysis(df)
 
-# 1. Temporal Analysis
-with st.expander("📈 1. Temporal Analysis - Robotic Adoption Over Time"):
-    st.markdown("""
-    **Understanding this analysis:**
+# # 1. Temporal Analysis
+# with st.expander("📈 1. Temporal Analysis - Robotic Adoption Over Time"):
+#     st.markdown("""
+#     **Understanding this analysis:**
     
-    This chart shows how robotic surgery adoption has evolved from 2020 to 2024. It tracks both the absolute number of robotic procedures and the percentage of all surgeries that are performed robotically.
+#     This chart shows how robotic surgery adoption has evolved from 2020 to 2024. It tracks both the absolute number of robotic procedures and the percentage of all surgeries that are performed robotically.
     
-    **How we calculated this:**
-    - **Data source**: Annual procedures data (2020-2024) for all eligible hospitals
-    - **Filtering**: Only hospitals with ≥25 procedures/year in each year
-    - **Robotic count**: Sum of all robotic procedures (ROB column) per year
-    - **Total procedures**: Sum of all bariatric procedures per year
-    - **Percentage**: (Robotic procedures / Total procedures) × 100 for each year
+#     **How we calculated this:**
+#     - **Data source**: Annual procedures data (2020-2024) for all eligible hospitals
+#     - **Filtering**: Only hospitals with ≥25 procedures/year in each year
+#     - **Robotic count**: Sum of all robotic procedures (ROB column) per year
+#     - **Total procedures**: Sum of all bariatric procedures per year
+#     - **Percentage**: (Robotic procedures / Total procedures) × 100 for each year
     
-    **Key metrics:**
-    - **Absolute growth**: Total number of robotic surgeries each year
-    - **Relative growth**: Percentage of all surgeries that are robotic
-    - **Adoption rate**: How quickly hospitals are adopting robotic technology
+#     **Key metrics:**
+#     - **Absolute growth**: Total number of robotic surgeries each year
+#     - **Relative growth**: Percentage of all surgeries that are robotic
+#     - **Adoption rate**: How quickly hospitals are adopting robotic technology
     
-    **What to look for:**
-    - **Acceleration**: Is robotic adoption speeding up or slowing down?
-    - **Market penetration**: How much room is there for further growth?
-    - **Year-over-year changes**: Which years saw the biggest increases?
-    """)
+#     **What to look for:**
+#     - **Acceleration**: Is robotic adoption speeding up or slowing down?
+#     - **Market penetration**: How much room is there for further growth?
+#     - **Year-over-year changes**: Which years saw the biggest increases?
+#     """)
     
-    if robotic_temporal['years']:
-        fig = go.Figure()
+#     if robotic_temporal['years']:
+#         fig = go.Figure()
         
-        fig.add_trace(go.Bar(
-            x=robotic_temporal['years'],
-            y=robotic_temporal['robotic_counts'],
-            name='Robotic Surgeries',
-            marker_color='#F7931E',
-            hovertemplate='<b>%{x}</b><br>Robotic: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>',
-            customdata=robotic_temporal['percentages']
-        ))
+#         fig.add_trace(go.Bar(
+#             x=robotic_temporal['years'],
+#             y=robotic_temporal['robotic_counts'],
+#             name='Robotic Surgeries',
+#             marker_color='#F7931E',
+#             hovertemplate='<b>%{x}</b><br>Robotic: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>',
+#             customdata=robotic_temporal['percentages']
+#         ))
         
-        fig.update_layout(
-            title="Robotic Surgery Adoption (2020-2024)",
-            xaxis_title="Year",
-            yaxis_title="Number of Robotic Surgeries",
-            height=400,
-            showlegend=True,
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(size=12),
-            margin=dict(l=50, r=50, t=80, b=50)
-        )
+#         fig.update_layout(
+#             title="Robotic Surgery Adoption (2020-2024)",
+#             xaxis_title="Year",
+#             yaxis_title="Number of Robotic Surgeries",
+#             height=400,
+#             showlegend=True,
+#             plot_bgcolor='rgba(0,0,0,0)',
+#             paper_bgcolor='rgba(0,0,0,0)',
+#             font=dict(size=12),
+#             margin=dict(l=50, r=50, t=80, b=50)
+#         )
         
-        st.plotly_chart(fig, use_container_width=True)
+#         st.plotly_chart(fig, use_container_width=True)
         
-        # Show percentage trend
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("2020", f"{robotic_temporal['percentages'][0]}%")
-        with col2:
-            st.metric("2022", f"{robotic_temporal['percentages'][2]}%")
-        with col3:
-            st.metric("2024", f"{robotic_temporal['percentages'][4]}%")
+#         # Show percentage trend
+#         col1, col2, col3 = st.columns(3)
+#         with col1:
+#             st.metric("2020", f"{robotic_temporal['percentages'][0]}%")
+#         with col2:
+#             st.metric("2022", f"{robotic_temporal['percentages'][2]}%")
+#         with col3:
+#             st.metric("2024", f"{robotic_temporal['percentages'][4]}%")
 
 # 2. Geographic Analysis
-with st.expander("🗺️ 2. Geographic Analysis - Regional Robotic Adoption"):
+with st.expander("🗺️ 1. Geographic Analysis - Regional Robotic Adoption"):
     st.markdown("""
     **Understanding this analysis:**
     
@@ -800,15 +800,15 @@ with st.expander("🗺️ 2. Geographic Analysis - Regional Robotic Adoption"):
     - **Example**: If ILE-DE-FRANCE shows 5.4%, it means 5.4% of all bariatric surgeries in Île-de-France are robotic
     - **Robotic count**: The actual number of robotic procedures performed in that region
     
-    **Key insights:**
-    - **Regional disparities**: Some regions may have better access to robotic technology
-    - **Infrastructure gaps**: Areas with low adoption may need investment
-    - **Best practices**: High-adoption regions can serve as models
+    # **Key insights:**
+    # - **Regional disparities**: Some regions may have better access to robotic technology
+    # - **Infrastructure gaps**: Areas with low adoption may need investment
+    # - **Best practices**: High-adoption regions can serve as models
     
-    **What to look for:**
-    - **Leading regions**: Which areas have the highest robotic adoption?
-    - **Geographic patterns**: Are there clusters of high or low adoption?
-    - **Equity issues**: Are all regions getting equal access to technology?
+    # **What to look for:**
+    # - **Leading regions**: Which areas have the highest robotic adoption?
+    # - **Geographic patterns**: Are there clusters of high or low adoption?
+    # - **Equity issues**: Are all regions getting equal access to technology?
     """)
     
     if robotic_geographic['regions'] and len(robotic_geographic['regions']) > 0:
@@ -840,7 +840,7 @@ with st.expander("🗺️ 2. Geographic Analysis - Regional Robotic Adoption"):
         st.info("No geographic data available. Region information may not be included in the dataset.")
 
 # 3. Institutional Analysis
-with st.expander("🏥 3. Institutional Analysis - Hospital Type vs Robotic Adoption"):
+with st.expander("🏥 2. Institutional Analysis - Hospital Type vs Robotic Adoption"):
     st.markdown("""
     **Understanding this analysis:**
     
@@ -864,10 +864,10 @@ with st.expander("🏥 3. Institutional Analysis - Hospital Type vs Robotic Adop
     - **Public vs private**: Different funding models may affect technology adoption
     - **Resource allocation**: Which hospital types are investing in robotic technology
     
-    **What to look for:**
-    - **Institutional differences**: Which hospital types lead in robotic adoption?
-    - **Resource gaps**: Are certain hospital types falling behind?
-    - **Policy implications**: What funding or support might different hospital types need?
+    # **What to look for:**
+    # - **Institutional differences**: Which hospital types lead in robotic adoption?
+    # - **Resource gaps**: Are certain hospital types falling behind?
+    # - **Policy implications**: What funding or support might different hospital types need?
     """)
     
     if robotic_institutional['academic']['types'] and len(robotic_institutional['academic']['types']) > 0:
@@ -882,7 +882,7 @@ with st.expander("🏥 3. Institutional Analysis - Hospital Type vs Robotic Adop
                 color=robotic_institutional['academic']['percentages'],
                 color_continuous_scale='Blues'
             )
-            fig1.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            fig1.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis_title=None, yaxis_title=None)
             fig1.update_traces(
                 hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<extra></extra>'
             )
@@ -897,7 +897,7 @@ with st.expander("🏥 3. Institutional Analysis - Hospital Type vs Robotic Adop
                 color=robotic_institutional['sector']['percentages'],
                 color_continuous_scale='Greens'
             )
-            fig2.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            fig2.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis_title=None, yaxis_title=None)
             fig2.update_traces(
                 hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<extra></extra>'
             )
@@ -906,51 +906,46 @@ with st.expander("🏥 3. Institutional Analysis - Hospital Type vs Robotic Adop
         st.info("No institutional data available for analysis.")
 
 # 4. Volume-based Analysis
-with st.expander("📊 4. Volume-based Analysis - Hospital Volume vs Robotic Adoption"):
+with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Adoption"):
     st.markdown("""
     **Understanding this analysis:**
     
-    This chart shows how robotic surgery adoption varies with hospital volume. It examines whether high-volume centers are more likely to invest in robotic technology.
+    This chart shows how robotic surgery adoption varies with hospital volume. It examines whether high‑volume centers are more likely to use robotic technology.
     
-    **How we calculated this:**
+    **How we calculated this (default chart):**
     - **Data source**: 2024 data for all eligible hospitals (≥25 procedures/year)
     - **Volume categorization**: Hospitals grouped by annual procedure volume:
       * <50 procedures/year
-      * 50-100 procedures/year  
-      * 100-200 procedures/year
+      * 50–100 procedures/year  
+      * 100–200 procedures/year
       * >200 procedures/year
-    - **Robotic count**: Sum of robotic procedures (ROB column) per volume category
-    - **Total procedures**: Sum of all bariatric procedures per volume category
-    - **Percentage**: (Robotic procedures / Total procedures) × 100 per volume category
+    - **Weighted percentage**: For each volume group, we compute (sum of robotic surgeries ÷ sum of all surgeries) × 100. This weights each hospital by its number of surgeries so large centers are represented proportionally.
+    - Hover shows: **weighted % robotic** and the **robotic count** in that group.
     
-    **What the percentages mean:**
-    - **Percentage**: Shows what % of ALL bariatric surgeries in that volume category are performed robotically
-    - **Example**: If >200 shows 12.3%, it means 12.3% of all bariatric surgeries in high-volume hospitals (>200/year) are robotic
-    - **Robotic count**: The actual number of robotic procedures performed in that volume category
+    **Alternative view (optional expander below the chart):**
+    - **Unweighted mean**: Average of per‑hospital robotic shares within each group (each hospital contributes equally, regardless of size).
     
-    **Key insights:**
-    - **Volume correlation**: Do busier hospitals adopt robotic technology more readily?
-    - **Investment patterns**: High-volume centers may have more resources for technology
-    - **Efficiency gains**: Robotic technology may be more cost-effective at higher volumes
+    **Why both matter:**
+    - Weighted view answers: “What share of all surgeries in this group are robotic?” (system‑wide perspective).
+    - Unweighted view answers: “What is the typical hospital’s robotic share in this group?” (center‑level perspective).
     
-    **What to look for:**
-    - **Volume threshold**: Is there a minimum volume needed for robotic adoption?
-    - **Resource allocation**: Are high-volume centers getting better technology access?
-    - **Efficiency patterns**: Do robotic adoption rates scale with volume?
+    **Questions this helps answer:**
+    - Do higher‑volume centers have higher robotic adoption?
+    - Is the difference driven by a few very large programs or broadly across centers?
     """)
     
     if robotic_volume['volume_categories'] and len(robotic_volume['volume_categories']) > 0:
         fig = px.bar(
             x=robotic_volume['volume_categories'],
-            y=robotic_volume['percentages'],
+            y=robotic_volume.get('percentages_weighted', robotic_volume['percentages']),
             title="Robotic Adoption by Hospital Volume (2024)",
-            color=robotic_volume['percentages'],
+            color=robotic_volume.get('percentages_weighted', robotic_volume['percentages']),
             color_continuous_scale='Purples'
         )
         
         fig.update_layout(
-            xaxis_title="Annual Procedures per Hospital",
-            yaxis_title="Robotic Surgery Percentage (%)",
+            xaxis_title=None,
+            yaxis_title=None,
             height=400,
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
@@ -959,11 +954,29 @@ with st.expander("📊 4. Volume-based Analysis - Hospital Volume vs Robotic Ado
         )
         
         fig.update_traces(
-            hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<br>Robotic: %{customdata}<extra></extra>',
+            hovertemplate='<b>%{x}</b><br>Weighted % robotic: %{y:.1f}%<br>Robotic: %{customdata}<extra></extra>',
             customdata=robotic_volume['robotic_counts']
         )
         
         st.plotly_chart(fig, use_container_width=True)
+
+        # Optional: Show unweighted mean as a footnote toggle
+        with st.expander("Show unweighted (per-hospital mean) percentages"):
+            fig_mean = px.bar(
+                x=robotic_volume['volume_categories'],
+                y=robotic_volume.get('percentages_mean', robotic_volume.get('percentages')),
+                title="Robotic Adoption by Volume (Per-hospital mean)",
+                color=robotic_volume.get('percentages_mean', robotic_volume.get('percentages')),
+                color_continuous_scale='Purples'
+            )
+            fig_mean.update_layout(
+                xaxis_title=None,
+                yaxis_title=None,
+                height=280,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+            st.plotly_chart(fig_mean, use_container_width=True)
     else:
         st.info("No volume-based data available for analysis.")
 
@@ -995,10 +1008,10 @@ with st.expander("🏛️ 5. Affiliation Analysis - Hospital Affiliation vs Robo
     - **Mission alignment**: Some hospital types may prioritize technology differently
     - **Patient populations**: Different affiliations may serve different patient needs
     
-    **What to look for:**
-    - **Affiliation patterns**: Which hospital types lead in robotic adoption?
-    - **Funding disparities**: Are certain affiliation types at a disadvantage?
-    - **Policy implications**: What support might different hospital types need?
+    # **What to look for:**
+    # - **Affiliation patterns**: Which hospital types lead in robotic adoption?
+    # - **Funding disparities**: Are certain affiliation types at a disadvantage?
+    # - **Policy implications**: What support might different hospital types need?
     """)
     
     if robotic_affiliation['affiliations'] and len(robotic_affiliation['affiliations']) > 0:

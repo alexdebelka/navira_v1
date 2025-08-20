@@ -327,10 +327,13 @@ def compute_robotic_affiliation_analysis(df: pd.DataFrame) -> Dict[str, Dict[str
 
 @st.cache_data
 def compute_robotic_volume_analysis(df: pd.DataFrame) -> Dict[str, Dict[str, int]]:
-    """Compute robotic surgery adoption by hospital volume category."""
+    """Compute robotic surgery adoption by hospital volume category.
+    Returns both weighted (by total surgeries) and unweighted (per-hospital mean) percentages,
+    along with counts per category.
+    """
     df_2024 = df[df['year'] == 2024].copy()
     df_eligible = filter_eligible_years(df_2024)
-    
+
     # Categorize hospitals by volume
     def categorize_volume(total_procedures):
         if total_procedures < 50:
@@ -341,27 +344,44 @@ def compute_robotic_volume_analysis(df: pd.DataFrame) -> Dict[str, Dict[str, int
             return "100–200"
         else:
             return ">200"
-    
+
     df_eligible['volume_category'] = df_eligible['total_procedures_year'].apply(categorize_volume)
-    
-    # Group by volume category and compute robotic adoption
-    volume_data = df_eligible.groupby('volume_category').agg({
+
+    # Weighted percentages (by total surgeries in each category)
+    vol_agg = df_eligible.groupby('volume_category').agg({
         'ROB': 'sum',
-        'total_procedures_year': 'sum'
-    }).reset_index()
-    
-    volume_data['robotic_percentage'] = (volume_data['ROB'] / volume_data['total_procedures_year'] * 100).round(1)
-    
+        'total_procedures_year': 'sum',
+        'hospital_id': pd.Series.nunique
+    }).reset_index().rename(columns={'hospital_id': 'hospitals'})
+
+    vol_agg['pct_weighted'] = (vol_agg['ROB'] / vol_agg['total_procedures_year'] * 100).round(1)
+
+    # Unweighted: compute hospital-level robotic share first, then average within each category
+    hosp_agg = (df_eligible.groupby(['hospital_id', 'volume_category'])
+                .agg({
+                    'ROB': 'sum',
+                    'total_procedures_year': 'sum'
+                })
+                .reset_index())
+    hosp_agg['hospital_pct'] = (hosp_agg['ROB'] / hosp_agg['total_procedures_year'] * 100).replace([pd.NA, float('inf')], 0).fillna(0)
+    mean_pct = hosp_agg.groupby('volume_category')['hospital_pct'].mean().round(1).reset_index(name='pct_mean')
+
+    # Merge to align ordering
+    merged = vol_agg.merge(mean_pct, on='volume_category', how='left')
+
     # Sort by volume category order
     volume_order = ["<50", "50–100", "100–200", ">200"]
-    volume_data['volume_order'] = volume_data['volume_category'].map({cat: i for i, cat in enumerate(volume_order)})
-    volume_data = volume_data.sort_values('volume_order')
-    
+    order_map = {cat: i for i, cat in enumerate(volume_order)}
+    merged['volume_order'] = merged['volume_category'].map(order_map)
+    merged = merged.sort_values('volume_order')
+
     return {
-        'volume_categories': volume_data['volume_category'].tolist(),
-        'robotic_counts': volume_data['ROB'].tolist(),
-        'total_counts': volume_data['total_procedures_year'].tolist(),
-        'percentages': volume_data['robotic_percentage'].tolist()
+        'volume_categories': merged['volume_category'].tolist(),
+        'robotic_counts': merged['ROB'].tolist(),
+        'total_counts': merged['total_procedures_year'].tolist(),
+        'hospitals': merged['hospitals'].tolist(),
+        'percentages_weighted': merged['pct_weighted'].tolist(),
+        'percentages_mean': merged['pct_mean'].tolist(),
     }
 
 @st.cache_data
