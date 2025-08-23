@@ -51,10 +51,9 @@ try:
 except Exception as e:
     print(f"Analytics tracking error: {e}")
 
-# Top notice in info callout
-st.info("""
-**National means are computed across hospitals (2020–2024 period).**
-**Note: Only hospitals with ≥25 interventions per year are considered for this analysis.**
+# Top notice (plain text instead of blue info box)
+st.markdown("""
+> **Note:** National means are computed across hospitals (2020–2024). Only hospitals with ≥25 interventions per year are considered.
 """)
 
 # --- (1) HOSPITAL VOLUME DISTRIBUTION ---
@@ -132,23 +131,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Dropdown with full description
-with st.expander("Understanding this chart"):
-    st.markdown(
-        """
-        This chart shows how hospitals are distributed across different volume categories based on their annual bariatric surgery procedures. The main bars (blue) represent the average number of hospitals in each volume category during the 2020–2023 period, serving as a baseline for comparison.
-
-        **Volume Categories:**
-        - <50 procedures/year: Small‑volume hospitals (typically smaller facilities or those just starting bariatric programs)
-        - 50–100 procedures/year: Medium‑low volume hospitals
-        - 100–200 procedures/year: Medium‑high volume hospitals
-        - >200 procedures/year: High‑volume hospitals (typically specialized centers of excellence)
-
-        When you toggle "Show 2024 comparison", the overlay bars (yellow) show the actual 2024 distribution, allowing you to see how hospital volumes have changed compared to the previous 4‑year average.
-        """
-    )
-
-# Calculate key findings values for all categories
+# Pre-compute values used in dropdown key findings
 small_vol_2024 = int(volume_2024['<50'])
 small_vol_baseline = round(baseline_2020_2023['<50'])
 med_low_2024 = int(volume_2024['50–100'])
@@ -169,6 +152,39 @@ concentration_trend = "increased" if high_vol_2024 > high_vol_baseline else "dec
 small_vol_trend = "More" if small_vol_2024 > small_vol_baseline else "Fewer"
 med_low_trend = "increased" if med_low_2024 > med_low_baseline else "decreased"
 med_high_trend = "increased" if med_high_2024 > med_high_baseline else "decreased"
+
+# Dropdown with full description
+with st.expander("Understanding this chart"):
+    st.markdown(
+        """
+        This chart shows how hospitals are distributed across different volume categories based on their annual bariatric surgery procedures. The main bars (blue) represent the average number of hospitals in each volume category during the 2020–2023 period, serving as a baseline for comparison.
+
+        **Volume Categories:**
+        - <50 procedures/year: Small‑volume hospitals (typically smaller facilities or those just starting bariatric programs)
+        - 50–100 procedures/year: Medium‑low volume hospitals
+        - 100–200 procedures/year: Medium‑high volume hospitals
+        - >200 procedures/year: High‑volume hospitals (typically specialized centers of excellence)
+
+        When you toggle "Show 2024 comparison", the overlay bars (yellow) show the actual 2024 distribution, allowing you to see how hospital volumes have changed compared to the previous 4‑year average.
+        """
+    )
+    st.markdown(
+        f"""
+        **What to look for:**
+        - Distribution shifts across the four volume bins
+        - Growth or decline in the medium categories (50–100, 100–200)
+        - Concentration of high‑volume centers (>200)
+
+        **Key findings:**
+        - Small‑volume hospitals (<50/year): **{small_vol_2024}** in 2024 vs **{small_vol_baseline}** avg (2020–2023)
+        - High‑volume hospitals (>200/year): **{high_vol_2024}** in 2024 vs **{high_vol_baseline}** avg (2020–2023)
+        - Medium‑low volume (50–100/year): **{med_low_2024}** in 2024 vs **{med_low_baseline}** avg — **{med_low_trend}** by **{abs(med_low_2024 - med_low_baseline)}** hospitals
+        - Medium‑high volume (100–200/year): **{med_high_2024}** in 2024 vs **{med_high_baseline}** avg — **{med_high_trend}** by **{abs(med_high_2024 - med_high_baseline)}** hospitals
+
+        **Current Distribution (2024):**
+        - <50: **{small_vol_pct}%** of hospitals | 50–100: **{med_low_pct}%** | 100–200: **{med_high_pct}%** | >200: **{high_vol_pct}%**
+        """
+    )
 
 # (Removed previous info block in favor of hover tooltip)
 
@@ -314,21 +330,43 @@ st.markdown(
 )
 
 with st.expander("Understanding this chart"):
-    st.markdown(
-        """
-        This stacked bar chart shows the distribution of hospital labels (SOFFCO and CSO) across different affiliation types. Each bar represents an affiliation category, and the colored segments within each bar show how many hospitals have specific label combinations.
-        """
-    )
+    # Static explanation
+    st.markdown("This stacked bar chart shows the distribution of hospital labels (SOFFCO and CSO) across different affiliation types. Each bar represents an affiliation category, and the colored segments within each bar show how many hospitals have specific label combinations.")
 
-# Info bubble for Hospital Labels by Affiliation Type chart
-st.info(
-    """
-    **Understanding this chart:**
+    # Computed key findings from label_breakdown
+    try:
+        totals = {k: 0 for k in ['SOFFCO Label', 'CSO Label', 'Both', 'None']}
+        labeled_by_category = {}
+        for cat in ['Public – Univ.', 'Public – Non-Acad.', 'Private – For-profit', 'Private – Not-for-profit']:
+            if cat in label_breakdown:
+                labeled_by_category[cat] = (
+                    label_breakdown[cat].get('SOFFCO Label', 0)
+                    + label_breakdown[cat].get('CSO Label', 0)
+                    + label_breakdown[cat].get('Both', 0)
+                )
+                for lab in totals.keys():
+                    totals[lab] += label_breakdown[cat].get(lab, 0)
 
-    This stacked bar chart shows the distribution of hospital labels (SOFFCO and CSO) across different affiliation types. Each bar represents an affiliation category, and the colored segments within each bar show how many hospitals have specific label combinations.
-    """,
-    icon="💡"
-)
+        top_cat = max(labeled_by_category.items(), key=lambda x: x[1])[0] if labeled_by_category else None
+        most_common_label = max(totals.items(), key=lambda x: x[1])[0] if totals else None
+
+        st.markdown(
+            f"""
+            **What to look for:**
+            - Label concentration by affiliation type
+            - Balance of SOFFCO vs CSO vs Dual labels
+            - Affiliation types with few or no labels
+
+            **Key findings:**
+            - Most labeled affiliation type: **{top_cat if top_cat else 'n/a'}**
+            - Most common label overall: **{most_common_label if most_common_label else 'n/a'}**
+            - Totals — SOFFCO: **{totals.get('SOFFCO Label', 0):,}**, CSO: **{totals.get('CSO Label', 0):,}**, Both: **{totals.get('Both', 0):,}**, None: **{totals.get('None', 0):,}**
+            """
+        )
+    except Exception:
+        pass
+
+# Removed previous blue info box in favor of hover tooltip + dropdown
 
 # Prepare data for stacked bar chart
 stacked_data = []
@@ -417,21 +455,7 @@ with st.expander("Understanding this chart"):
         """
     )
 
-# Info bubble for Hospital Affiliation Trends chart
-st.info(
-    """
-    **Understanding this chart:**
-
-    This stacked area chart shows how hospital affiliations have evolved from 2020 to 2024. The total height of the chart at any point represents the total number of hospitals, while the colored segments show the proportion of each affiliation type.
-
-    **Affiliation Types:**
-    - Public – Univ.: Public hospitals with university/academic affiliation
-    - Public – Non-Acad.: Public hospitals without academic affiliation
-    - Private – For-profit: Private for-profit hospitals
-    - Private – Not-for-profit: Private not-for-profit hospitals
-    """,
-    icon="💡"
-)
+# Removed previous blue info box in favor of hover tooltip + dropdown
 
 # Prepare data for line chart
 trend_data = []
@@ -620,6 +644,28 @@ with col1:
         )
         fig.update_traces(hovertemplate=hover_tmpl)
         st.plotly_chart(fig, use_container_width=True)
+        # Add WTLF + Key findings for procedures
+        try:
+            if not chart_df.empty:
+                top_row = chart_df.iloc[0]
+                top_name = str(top_row['Procedure'])
+                top_val = int(top_row['Value'])
+                top_pct = float(top_row.get('Percentage', 0))
+                total_sum = int(chart_df['Value'].sum())
+                with st.expander("What to look for and key findings"):
+                    st.markdown(
+                        f"""
+                        **What to look for:**
+                        - Which procedure dominates overall volume
+                        - Relative mix shifts when toggling the time period
+                        - Tail procedures with very small shares
+
+                        **Key findings:**
+                        - Top procedure: **{top_name}** with **{top_val:,}** cases ({top_pct:.0f}% of total {total_sum:,})
+                        """
+                    )
+        except Exception:
+            pass
         with st.expander("Understanding this chart"):
             st.markdown("""
             **What to look for:**
@@ -1153,6 +1199,25 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
                 customdata=dist_df['hospital_id']
             )
             st.plotly_chart(fig, use_container_width=True)
+            # WTLF + Key findings for distribution view
+            try:
+                med = dist_df.groupby('volume_category', observed=False)['hospital_pct'].median().to_dict()
+                q25 = dist_df.groupby('volume_category', observed=False)['hospital_pct'].quantile(0.25).to_dict()
+                q75 = dist_df.groupby('volume_category', observed=False)['hospital_pct'].quantile(0.75).to_dict()
+                with st.expander("What to look for and key findings"):
+                    bullets = "\n".join([f"- {k}: median **{med.get(k, 0):.1f}%**, IQR **{(q25.get(k,0)):.1f}%–{(q75.get(k,0)):.1f}%**" for k in ["<50","50–100","100–200",">200"] if k in med])
+                    st.markdown(
+                        f"""
+                        **What to look for:**
+                        - Spread of robotic% within each volume bin (dense clusters, outliers)
+                        - Whether medians rise with volume
+
+                        **Key findings:**
+                        {bullets}
+                        """
+                    )
+            except Exception:
+                pass
         else:
             st.info("Distribution view unavailable.")
 
@@ -1332,6 +1397,23 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
                     paper_bgcolor='rgba(0,0,0,0)'
                 )
                 st.plotly_chart(cont, use_container_width=True)
+                # WTLF + key findings for continuous scatter
+                try:
+                    r = float(np.corrcoef(xvals, yvals)[0,1]) if len(xvals) > 1 else 0.0
+                    with st.expander("What to look for and key findings"):
+                        st.markdown(
+                            f"""
+                            **What to look for:**
+                            - Overall relationship slope between volume and robotic%
+                            - Clusters and outliers at high/low volumes
+
+                            **Key findings:**
+                            - Linear trend slope: **{slope:.3f}** percentage points per surgery (approx)
+                            - Correlation (r): **{r:.2f}**
+                            """
+                        )
+                except Exception:
+                    pass
         except Exception:
             pass
 
