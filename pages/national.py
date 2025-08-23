@@ -985,6 +985,61 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
         except Exception:
             pass
 
+        # ECDF by volume bin
+        try:
+            from lib.national_utils import compute_robotic_volume_distribution
+            dist_df = compute_robotic_volume_distribution(df)
+            if not dist_df.empty:
+                st.subheader("ECDF of hospital robotic% by volume bin")
+                show_ge = st.toggle("Show ≥ threshold (instead of ≤)", value=False)
+                ordered_cats = ["<50", "50–100", "100–200", ">200"]
+                ecdf_records = []
+                for cat in ordered_cats:
+                    sub = dist_df[dist_df['volume_category'] == cat]['hospital_pct'].dropna().astype(float)
+                    if len(sub) == 0:
+                        continue
+                    vals = np.sort(sub.values)
+                    frac = np.arange(1, len(vals) + 1) / len(vals)
+                    for v, f in zip(vals, frac):
+                        ecdf_records.append({
+                            'volume_category': cat,
+                            'hospital_pct': v,
+                            'ecdf': f
+                        })
+
+                ecdf_df = pd.DataFrame(ecdf_records)
+                if not ecdf_df.empty:
+                    # Invert if showing ≥ threshold
+                    ecdf_df['ecdf_plot'] = 1 - ecdf_df['ecdf'] if show_ge else ecdf_df['ecdf']
+                    operator = '≥' if show_ge else '≤'
+                    ecdf_fig = px.line(
+                        ecdf_df,
+                        x='hospital_pct',
+                        y='ecdf_plot',
+                        color='volume_category',
+                        title=f'ECDF: Share of hospitals with robotic% {operator} threshold',
+                        line_shape='hv'
+                    )
+                    ecdf_fig.update_layout(
+                        xaxis_title='Robotic % (threshold)',
+                        yaxis_title='Cumulative share of hospitals',
+                        height=420,
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)'
+                    )
+                    ecdf_fig.update_yaxes(tickformat='.0%')
+                    ecdf_fig.update_traces(
+                        hovertemplate=f'%{{fullData.name}}<br>{operator} %{{x:.1f}}% -> %{{y:.0%}}<extra></extra>'
+                    )
+                    # Add vertical guide lines at key thresholds
+                    for thr in [5, 10, 20]:
+                        ecdf_fig.add_vline(x=thr, line_dash='dot', line_color='gray', opacity=0.5)
+                        ecdf_fig.add_annotation(x=thr, y=1.02, xref='x', yref='paper',
+                                                text=f'{thr}%', showarrow=False, font=dict(size=10, color='gray'))
+                    st.plotly_chart(ecdf_fig, use_container_width=True)
+        except Exception:
+            pass
+
         # Δ between weighted and mean
         try:
             weighted = robotic_volume.get('percentages_weighted') or [None]*len(robotic_volume['volume_categories'])
