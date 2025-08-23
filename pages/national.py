@@ -26,6 +26,13 @@ st.markdown("""
         [data-testid="stPageNav"] {
             display: none;
         }
+        /* Tooltip styles for info badge */
+        .nv-info-wrap { display:inline-flex; align-items:center; gap:8px; }
+        .nv-info-badge { width:18px; height:18px; border-radius:50%; background:#444; color:#fff; font-weight:600; font-size:12px; display:inline-flex; align-items:center; justify-content:center; cursor:help; }
+        .nv-tooltip { position:relative; display:inline-block; }
+        .nv-tooltip .nv-tooltiptext { visibility:hidden; opacity:0; transition:opacity .15s ease; position:absolute; z-index:9999; top:22px; left:50%; transform:translateX(-50%); width:min(420px, 80vw); background:#2b2b2b; color:#fff; border:1px solid rgba(255,255,255,.1); border-radius:6px; padding:10px 12px; box-shadow:0 4px 14px rgba(0,0,0,.35); text-align:left; font-size:0.9rem; line-height:1.25rem; }
+        .nv-tooltip:hover .nv-tooltiptext { visibility:visible; opacity:1; }
+        .nv-h3 { font-weight:600; font-size:1.25rem; margin:0; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -103,8 +110,27 @@ with col5:
         delta_color=delta_color
     )
 
-# Volume Distribution Chart
-st.subheader("Volume Distribution by Hospital")
+# Volume Distribution Chart (with hover info)
+st.markdown(
+    """
+    <div class="nv-info-wrap">
+      <div class="nv-h3">Volume Distribution by Hospital</div>
+      <div class="nv-tooltip"><span class="nv-info-badge">i</span>
+        <div class="nv-tooltiptext">
+          <b>Understanding this chart:</b><br/>
+          This chart shows how hospitals are distributed across different volume categories based on their annual bariatric surgery procedures. The main bars (blue) represent the average number of hospitals in each volume category during the 2020–2023 period, serving as a baseline for comparison.<br/><br/>
+          <b>Volume Categories:</b><br/>
+          &lt;50 procedures/year: Small‑volume hospitals (typically smaller facilities or those just starting bariatric programs)<br/>
+          50–100 procedures/year: Medium‑low volume hospitals<br/>
+          100–200 procedures/year: Medium‑high volume hospitals<br/>
+          &gt;200 procedures/year: High‑volume hospitals (typically specialized centers of excellence)<br/><br/>
+          When you toggle "Show 2024 comparison", the overlay bars (yellow) show the actual 2024 distribution, allowing you to see how hospital volumes have changed compared to the previous 4‑year average.
+        </div>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # Calculate key findings values for all categories
 small_vol_2024 = int(volume_2024['<50'])
@@ -128,23 +154,7 @@ small_vol_trend = "More" if small_vol_2024 > small_vol_baseline else "Fewer"
 med_low_trend = "increased" if med_low_2024 > med_low_baseline else "decreased"
 med_high_trend = "increased" if med_high_2024 > med_high_baseline else "decreased"
 
-# Info bubble for Volume Distribution chart
-st.info(
-    """
-    **Understanding this chart:**
-
-    This chart shows how hospitals are distributed across different volume categories based on their annual bariatric surgery procedures. The main bars (blue) represent the average number of hospitals in each volume category during the 2020-2023 period, serving as a baseline for comparison.
-
-    **Volume Categories:**
-    - <50 procedures/year: Small-volume hospitals (typically smaller facilities or those just starting bariatric programs)
-    - 50-100 procedures/year: Medium-low volume hospitals
-    - 100-200 procedures/year: Medium-high volume hospitals
-    - >200 procedures/year: High-volume hospitals (typically specialized centers of excellence)
-
-    When you toggle "Show 2024 comparison", the overlay bars (yellow) show the actual 2024 distribution, allowing you to see how hospital volumes have changed compared to the previous 4-year average.
-    """,
-    icon="💡"
-)
+# (Removed previous info block in favor of hover tooltip)
 
 # Prepare data for chart
 volume_data = []
@@ -272,7 +282,20 @@ with col2:
     st.markdown(f"<span style='color: grey; font-size: 0.9em;'>{private_not_profit_pct}% of total</span>", unsafe_allow_html=True)
 
 # Second block: Stacked bar chart
-st.subheader("Hospital Labels by Affiliation Type")
+st.markdown(
+    """
+    <div class=\"nv-info-wrap\">
+      <div class=\"nv-h3\">Hospital Labels by Affiliation Type</div>
+      <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+        <div class=\"nv-tooltiptext\">
+          <b>Understanding this chart:</b><br/>
+          This stacked bar chart shows the distribution of hospital labels (SOFFCO and CSO) across different affiliation types. Each bar represents an affiliation category, and the colored segments within each bar show how many hospitals have specific label combinations.
+        </div>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # Info bubble for Hospital Labels by Affiliation Type chart
 st.info(
@@ -338,7 +361,25 @@ else:
     st.info("No label data available for the selected criteria.")
 
 # Affiliation trends line plot
-st.subheader("Hospital Affiliation Trends (2020-2024)")
+st.markdown(
+    """
+    <div class=\"nv-info-wrap\">
+      <div class=\"nv-h3\">Hospital Affiliation Trends (2020–2024)</div>
+      <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+        <div class=\"nv-tooltiptext\">
+          <b>Understanding this chart:</b><br/>
+          This stacked area chart shows how hospital affiliations have evolved from 2020 to 2024. The total height of the chart at any point represents the total number of hospitals, while the colored segments show the proportion of each affiliation type.<br/><br/>
+          <b>Affiliation Types:</b><br/>
+          Public – Univ.: Public hospitals with university/academic affiliation<br/>
+          Public – Non‑Acad.: Public hospitals without academic affiliation<br/>
+          Private – For‑profit: Private for‑profit hospitals<br/>
+          Private – Not‑for‑profit: Private not‑for‑profit hospitals
+        </div>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # Info bubble for Hospital Affiliation Trends chart
 st.info(
@@ -427,7 +468,23 @@ col1, col2 = st.columns([2, 1])
 
 with col1:
     if not toggle_2024_only:
-        st.subheader("Total Procedures (2020-2024)")
+        st.markdown(
+            """
+            <div class=\"nv-info-wrap\">
+              <div class=\"nv-h3\">Total Procedures (2020–2024)</div>
+              <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+                <div class=\"nv-tooltiptext\">
+                  <b>Understanding this chart:</b><br/>
+                  This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.<br/><br/>
+                  <b>Time Period:</b><br/>
+                  Toggle OFF: Shows data for the entire 2020–2024 period (5 years)<br/>
+                  Toggle ON: Shows data for 2024 only
+                </div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
         # Prepare data for bar chart (2020-2024 totals)
         tot_data = []
         total_procedures = sum(procedure_totals_2020_2024.get(proc_code, 0) for proc_code in BARIATRIC_PROCEDURE_NAMES.keys())
@@ -447,7 +504,23 @@ with col1:
         chart_title = "Total Procedures by Type (2020-2024)"
         hover_tmpl = '<b>%{x}</b><br>Total 2020-2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
     else:
-        st.subheader("Total Procedures (2024)")
+        st.markdown(
+            """
+            <div class=\"nv-info-wrap\">
+              <div class=\"nv-h3\">Total Procedures (2024)</div>
+              <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+                <div class=\"nv-tooltiptext\">
+                  <b>Understanding this chart:</b><br/>
+                  This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.<br/><br/>
+                  <b>Time Period:</b><br/>
+                  Toggle OFF: Shows data for the entire 2020–2024 period (5 years)<br/>
+                  Toggle ON: Shows data for 2024 only
+                </div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
         # Prepare data for bar chart (2024 totals only)
         tot_data = []
         total_procedures = sum(procedure_totals_2024.get(proc_code, 0) for proc_code in BARIATRIC_PROCEDURE_NAMES.keys())
@@ -468,19 +541,7 @@ with col1:
         hover_tmpl = '<b>%{x}</b><br>Total 2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
 
     if not chart_df.empty:
-        # Info bubble for Procedures chart
-        st.info(
-            """
-            **Understanding this chart:**
-
-            This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.
-
-            **Time Period:**
-            - Toggle OFF: Shows data for the entire 2020-2024 period (5 years)
-            - Toggle ON: Shows data for 2024 only
-            """,
-            icon="💡"
-        )
+        # (Removed previous info block in favor of hover tooltip)
         
         fig = px.bar(
             chart_df,
