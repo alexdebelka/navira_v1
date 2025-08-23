@@ -132,6 +132,22 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Dropdown with full description
+with st.expander("Understanding this chart"):
+    st.markdown(
+        """
+        This chart shows how hospitals are distributed across different volume categories based on their annual bariatric surgery procedures. The main bars (blue) represent the average number of hospitals in each volume category during the 2020–2023 period, serving as a baseline for comparison.
+
+        **Volume Categories:**
+        - <50 procedures/year: Small‑volume hospitals (typically smaller facilities or those just starting bariatric programs)
+        - 50–100 procedures/year: Medium‑low volume hospitals
+        - 100–200 procedures/year: Medium‑high volume hospitals
+        - >200 procedures/year: High‑volume hospitals (typically specialized centers of excellence)
+
+        When you toggle "Show 2024 comparison", the overlay bars (yellow) show the actual 2024 distribution, allowing you to see how hospital volumes have changed compared to the previous 4‑year average.
+        """
+    )
+
 # Calculate key findings values for all categories
 small_vol_2024 = int(volume_2024['<50'])
 small_vol_baseline = round(baseline_2020_2023['<50'])
@@ -297,6 +313,13 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+with st.expander("Understanding this chart"):
+    st.markdown(
+        """
+        This stacked bar chart shows the distribution of hospital labels (SOFFCO and CSO) across different affiliation types. Each bar represents an affiliation category, and the colored segments within each bar show how many hospitals have specific label combinations.
+        """
+    )
+
 # Info bubble for Hospital Labels by Affiliation Type chart
 st.info(
     """
@@ -380,6 +403,19 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+with st.expander("Understanding this chart"):
+    st.markdown(
+        """
+        This stacked area chart shows how hospital affiliations have evolved from 2020 to 2024. The total height of the chart at any point represents the total number of hospitals, while the colored segments show the proportion of each affiliation type.
+
+        **Affiliation Types:**
+        - Public – Univ.: Public hospitals with university/academic affiliation
+        - Public – Non‑Acad.: Public hospitals without academic affiliation
+        - Private – For‑profit: Private for‑profit hospitals
+        - Private – Not‑for‑profit: Private not‑for‑profit hospitals
+        """
+    )
 
 # Info bubble for Hospital Affiliation Trends chart
 st.info(
@@ -485,6 +521,16 @@ with col1:
             """,
             unsafe_allow_html=True
         )
+        with st.expander("Understanding this chart"):
+            st.markdown(
+                """
+                This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.
+
+                **Time Period:**
+                - Toggle OFF: Shows data for the entire 2020–2024 period (5 years)
+                - Toggle ON: Shows data for 2024 only
+                """
+            )
         # Prepare data for bar chart (2020-2024 totals)
         tot_data = []
         total_procedures = sum(procedure_totals_2020_2024.get(proc_code, 0) for proc_code in BARIATRIC_PROCEDURE_NAMES.keys())
@@ -521,6 +567,16 @@ with col1:
             """,
             unsafe_allow_html=True
         )
+        with st.expander("Understanding this chart"):
+            st.markdown(
+                """
+                This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.
+
+                **Time Period:**
+                - Toggle OFF: Shows data for the entire 2020–2024 period (5 years)
+                - Toggle ON: Shows data for 2024 only
+                """
+            )
         # Prepare data for bar chart (2024 totals only)
         tot_data = []
         total_procedures = sum(procedure_totals_2024.get(proc_code, 0) for proc_code in BARIATRIC_PROCEDURE_NAMES.keys())
