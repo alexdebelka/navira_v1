@@ -665,7 +665,20 @@ approach_mix_2024 = compute_2024_approach_mix(df)
 
 
 
-st.subheader("Surgical Approach Mix (2024)")
+st.markdown(
+    """
+    <div class=\"nv-info-wrap\">
+      <div class=\"nv-h3\">Surgical Approach Mix (2024)</div>
+      <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+        <div class=\"nv-tooltiptext\">
+          <b>Understanding this chart:</b><br/>
+          This pie chart shows the proportion of surgical approaches used in 2024 across all eligible hospitals.
+        </div>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 if approach_mix_2024:
     # Prepare data for pie chart
@@ -706,12 +719,44 @@ if approach_mix_2024:
         )
         
         st.plotly_chart(fig, use_container_width=True)
+        # Dropdown with What to look for + Key findings
+        try:
+            total_approaches = pie_df['Count'].sum()
+            robotic_cnt = int(pie_df[pie_df['Approach'] == 'Robotic']['Count'].sum()) if 'Robotic' in pie_df['Approach'].values else 0
+            robotic_share = (robotic_cnt / total_approaches * 100) if total_approaches > 0 else 0
+            top_row = pie_df.sort_values('Count', ascending=False).iloc[0]
+            with st.expander("Understanding this chart"):
+                st.markdown(f"""
+                **What to look for:**
+                - Dominant approach segment size
+                - Relative share of Robotic vs others
+                - Presence of small slivers indicating rare approaches
+
+                **Key findings:**
+                - Robotic share in 2024: **{robotic_share:.1f}%** ({robotic_cnt:,} procedures)
+                - Most common approach: **{top_row['Approach']}** ({int(top_row['Count']):,})
+                """)
+        except Exception:
+            pass
 else:
     st.info("No approach data available for 2024.")
 # Two-column layout for trends and pie chart
 col1, col2 = st.columns([2, 1])
 with col1:
-    st.subheader("Surgical Approach Trends (2020-2024)")
+    st.markdown(
+        """
+        <div class=\"nv-info-wrap\">
+          <div class=\"nv-h3\">Surgical Approach Trends (2020–2024)</div>
+          <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+            <div class=\"nv-tooltiptext\">
+              <b>Understanding this chart:</b><br/>
+              This line chart tracks the number of robotic surgeries by year from 2020 to 2024.
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
     trend_data = []
     for year in range(2020, 2025):
         trend_data.append({
@@ -747,6 +792,25 @@ with col1:
     )
 
     st.plotly_chart(fig, use_container_width=True)
+    try:
+        first_year = 2020
+        last_year = 2024
+        rob_start = int(approach_trends['robotic'].get(first_year, 0))
+        rob_end = int(approach_trends['robotic'].get(last_year, 0))
+        pct_rob_2024 = (approach_trends['robotic'].get(2024, 0) / max(approach_trends['all'].get(2024, 1), 1)) * 100 if approach_trends['all'].get(2024, 0) else 0
+        with st.expander("Understanding this chart"):
+            st.markdown(f"""
+            **What to look for:**
+            - Year‑over‑year growth or dips
+            - Peak adoption year
+            - Gap between robotic and total surgeries
+
+            **Key findings:**
+            - Robotic surgeries grew from **{rob_start:,}** (2020) to **{rob_end:,}** (2024)
+            - Robotic share in 2024: **{pct_rob_2024:.1f}%** of all surgeries
+            """)
+    except Exception:
+        pass
         
 with col2:
     robotic_2024 = approach_trends['robotic'].get(2024, 0)
