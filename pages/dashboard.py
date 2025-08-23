@@ -256,48 +256,64 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
 
         st.plotly_chart(fig, use_container_width=True)
 
-    # Right column: 2024 mix comparison (Hospital vs National)
+    # Right column: National analytics in tabs (won't overshadow hospital charts)
     with right:
-        try:
-            year_2024 = selected_hospital_all_data[selected_hospital_all_data['annee'] == 2024]
-            hosp_counts = {}
-            for code, name in BARIATRIC_PROCEDURE_NAMES.items():
-                if code in year_2024.columns:
-                    hosp_counts[name] = int(year_2024[code].sum())
-            hosp_total = sum(hosp_counts.values()) or 1
-            hosp_pct = {k: (v / hosp_total * 100) for k, v in hosp_counts.items()}
+        tabs = st.tabs(["National over time", "2024 mix"])
+        with tabs[0]:
+            try:
+                nat_df = annual.copy()
+                if 'total_procedures_year' in nat_df.columns:
+                    nat_df = nat_df[nat_df['total_procedures_year'] >= 25]
+                proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in nat_df.columns]
+                nat_year = nat_df.groupby('annee')[proc_codes].sum().reset_index()
+                nat_long = []
+                for _, r in nat_year.iterrows():
+                    total = max(1, sum(r[c] for c in proc_codes))
+                    sleeve = r.get('SLE', 0)
+                    bypass = r.get('BPG', 0)
+                    other = sum(r[c] for c in proc_codes if c not in ['SLE', 'BPG'])
+                    for label, val in [("Sleeve", sleeve), ("Gastric Bypass", bypass), ("Other", other)]:
+                        nat_long.append({'annee': int(r['annee']), 'Procedure3': label, 'Share': val/total*100})
+                nat_share_df = pd.DataFrame(nat_long)
+                if not nat_share_df.empty:
+                    nat_fig = px.bar(nat_share_df, x='annee', y='Share', color='Procedure3', title='National procedures (share %)', barmode='stack')
+                    nat_fig.update_layout(height=360, xaxis_title='Year', yaxis_title='% of procedures', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    nat_fig.update_traces(opacity=0.85)
+                    st.plotly_chart(nat_fig, use_container_width=True)
+            except Exception:
+                pass
+        with tabs[1]:
+            try:
+                year_2024 = selected_hospital_all_data[selected_hospital_all_data['annee'] == 2024]
+                hosp_counts = {}
+                for code, name in BARIATRIC_PROCEDURE_NAMES.items():
+                    if code in year_2024.columns:
+                        hosp_counts[name] = int(year_2024[code].sum())
+                hosp_total = sum(hosp_counts.values()) or 1
+                hosp_pct = {k: (v / hosp_total * 100) for k, v in hosp_counts.items()}
 
-            nat_2024 = annual[annual['annee'] == 2024]
-            if 'total_procedures_year' in nat_2024.columns:
-                nat_2024 = nat_2024[nat_2024['total_procedures_year'] >= 25]
-            nat_counts = {}
-            for code, name in BARIATRIC_PROCEDURE_NAMES.items():
-                if code in nat_2024.columns:
-                    nat_counts[name] = int(nat_2024[code].sum())
-            nat_total = sum(nat_counts.values()) or 1
-            nat_pct = {k: (v / nat_total * 100) for k, v in nat_counts.items()}
+                nat_2024 = annual[annual['annee'] == 2024]
+                if 'total_procedures_year' in nat_2024.columns:
+                    nat_2024 = nat_2024[nat_2024['total_procedures_year'] >= 25]
+                nat_counts = {}
+                for code, name in BARIATRIC_PROCEDURE_NAMES.items():
+                    if code in nat_2024.columns:
+                        nat_counts[name] = int(nat_2024[code].sum())
+                nat_total = sum(nat_counts.values()) or 1
+                nat_pct = {k: (v / nat_total * 100) for k, v in nat_counts.items()}
 
-            comp_rows = []
-            for name in BARIATRIC_PROCEDURE_NAMES.values():
-                if name in hosp_pct or name in nat_pct:
-                    comp_rows.append({
-                        'Procedure': name,
-                        'Hospital %': hosp_pct.get(name, 0),
-                        'National %': nat_pct.get(name, 0)
-                    })
-            comp_df = pd.DataFrame(comp_rows)
-            if not comp_df.empty:
-                comp_long = comp_df.melt('Procedure', var_name='Source', value_name='Percent')
-                comp_fig = px.bar(
-                    comp_long,
-                    x='Percent', y='Procedure', color='Source', orientation='h',
-                    title='2024 Procedure Mix: Hospital vs National'
-                )
-                comp_fig.update_layout(height=400, xaxis_title='% of procedures', yaxis_title=None,
-                                       plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(comp_fig, use_container_width=True)
-        except Exception:
-            pass
+                comp_rows = []
+                for name in BARIATRIC_PROCEDURE_NAMES.values():
+                    if name in hosp_pct or name in nat_pct:
+                        comp_rows.append({'Procedure': name, 'Hospital %': hosp_pct.get(name, 0), 'National %': nat_pct.get(name, 0)})
+                comp_df = pd.DataFrame(comp_rows)
+                if not comp_df.empty:
+                    comp_long = comp_df.melt('Procedure', var_name='Source', value_name='Percent')
+                    comp_fig = px.bar(comp_long, x='Percent', y='Procedure', color='Source', orientation='h', title='2024 Procedure Mix: Hospital vs National')
+                    comp_fig.update_layout(height=360, xaxis_title='% of procedures', yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(comp_fig, use_container_width=True)
+            except Exception:
+                pass
 else:
     st.info("No bariatric procedure data available.")
 st.markdown("---")
@@ -362,36 +378,60 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
         st.plotly_chart(fig2, use_container_width=True)
 
     with right2:
-        try:
-            year_2024 = selected_hospital_all_data[selected_hospital_all_data['annee'] == 2024]
-            h_counts = {}
-            for code, name in SURGICAL_APPROACH_NAMES.items():
-                if code in year_2024.columns:
-                    h_counts[name] = int(year_2024[code].sum())
-            h_tot = sum(h_counts.values()) or 1
-            h_pct = {k: (v / h_tot * 100) for k, v in h_counts.items()}
+        tabs2 = st.tabs(["National over time", "2024 mix"])
+        with tabs2[0]:
+            try:
+                nat_df2 = annual.copy()
+                if 'total_procedures_year' in nat_df2.columns:
+                    nat_df2 = nat_df2[nat_df2['total_procedures_year'] >= 25]
+                appr_codes = [c for c in SURGICAL_APPROACH_NAMES.keys() if c in nat_df2.columns]
+                nat_y = nat_df2.groupby('annee')[appr_codes].sum().reset_index()
+                nat_long2 = []
+                for _, r in nat_y.iterrows():
+                    total = max(1, sum(r[c] for c in appr_codes))
+                    for code, name in SURGICAL_APPROACH_NAMES.items():
+                        if code in r:
+                            nat_long2.append({'annee': int(r['annee']), 'Approach': name, 'Share': r[code]/total*100})
+                nat_share2 = pd.DataFrame(nat_long2)
+                if not nat_share2.empty:
+                    nat_fig2 = px.bar(nat_share2, x='annee', y='Share', color='Approach', title='National approaches (share %)', barmode='stack')
+                    nat_fig2.update_layout(height=360, xaxis_title='Year', yaxis_title='% of surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    nat_fig2.update_traces(opacity=0.85)
+                    st.plotly_chart(nat_fig2, use_container_width=True)
+            except Exception:
+                pass
 
-            nat_2024 = annual[annual['annee'] == 2024]
-            if 'total_procedures_year' in nat_2024.columns:
-                nat_2024 = nat_2024[nat_2024['total_procedures_year'] >= 25]
-            n_counts = {}
-            for code, name in SURGICAL_APPROACH_NAMES.items():
-                if code in nat_2024.columns:
-                    n_counts[name] = int(nat_2024[code].sum())
-            n_tot = sum(n_counts.values()) or 1
-            n_pct = {k: (v / n_tot * 100) for k, v in n_counts.items()}
+        with tabs2[1]:
+            try:
+                year_2024 = selected_hospital_all_data[selected_hospital_all_data['annee'] == 2024]
+                h_counts = {}
+                for code, name in SURGICAL_APPROACH_NAMES.items():
+                    if code in year_2024.columns:
+                        h_counts[name] = int(year_2024[code].sum())
+                h_tot = sum(h_counts.values()) or 1
+                h_pct = {k: (v / h_tot * 100) for k, v in h_counts.items()}
 
-            rows = []
-            for name in SURGICAL_APPROACH_NAMES.values():
-                if name in h_pct or name in n_pct:
-                    rows.append({'Approach': name, 'Hospital %': h_pct.get(name, 0), 'National %': n_pct.get(name, 0)})
-            dfc = pd.DataFrame(rows)
-            if not dfc.empty:
-                long = dfc.melt('Approach', var_name='Source', value_name='Percent')
-                cmp = px.bar(long, x='Percent', y='Approach', color='Source', orientation='h', title='2024 Approach Mix: Hospital vs National')
-                cmp.update_layout(height=400, xaxis_title='% of surgeries', yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(cmp, use_container_width=True)
-        except Exception:
-            pass
+                nat_2024 = annual[annual['annee'] == 2024]
+                if 'total_procedures_year' in nat_2024.columns:
+                    nat_2024 = nat_2024[nat_2024['total_procedures_year'] >= 25]
+                n_counts = {}
+                for code, name in SURGICAL_APPROACH_NAMES.items():
+                    if code in nat_2024.columns:
+                        n_counts[name] = int(nat_2024[code].sum())
+                n_tot = sum(n_counts.values()) or 1
+                n_pct = {k: (v / n_tot * 100) for k, v in n_counts.items()}
+
+                rows = []
+                for name in SURGICAL_APPROACH_NAMES.values():
+                    if name in h_pct or name in n_pct:
+                        rows.append({'Approach': name, 'Hospital %': h_pct.get(name, 0), 'National %': n_pct.get(name, 0)})
+                dfc = pd.DataFrame(rows)
+                if not dfc.empty:
+                    long = dfc.melt('Approach', var_name='Source', value_name='Percent')
+                    cmp = px.bar(long, x='Percent', y='Approach', color='Source', orientation='h', title='2024 Approach Mix: Hospital vs National')
+                    cmp.update_layout(height=360, xaxis_title='% of surgeries', yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(cmp, use_container_width=True)
+            except Exception:
+                pass
 else:
     st.info("No surgical approach data available.")
