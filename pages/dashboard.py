@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
+import plotly.express as px
 from navira.data_loader import get_dataframes
 from auth_wrapper import add_auth_to_page
 from navigation_utils import handle_navigation_request
@@ -87,19 +88,29 @@ with metric_col1:
     avg_total_proc = national_averages.get('total_procedures_period', 0)
     national_revision_pct = national_averages.get('revision_pct_avg', 0)
     delta_total = total_proc_hospital - avg_total_proc
-    st.metric(
-        label="Total Surgeries (All Types)",
-        value=f"{int(round(total_proc_hospital)):,}",
-        delta=f"{int(round(delta_total)):+,} vs. National Average (={int(round(avg_total_proc)):,})",
-        delta_color="normal"
-    )
-    # Metric 2: Revision Surgeries (UPDATED)
-    st.metric(
-        label="Revision Surgeries",
-        value=f"{int(round(total_rev_hospital)):,}",
-        delta=f"{hospital_revision_pct:.1f}% of hospital's total surgeries vs. National Average: {national_revision_pct:.1f}%",
-        delta_color="normal"
-    )
+    m1, m2 = st.columns(2)
+    with m1:
+        st.metric(
+            label="Hospital Total Surgeries",
+            value=f"{int(round(total_proc_hospital)):,}",
+            delta=f"{int(round(delta_total)):+,} vs National",
+            delta_color="normal"
+        )
+        st.metric(
+            label="Hospital Revision Surgeries",
+            value=f"{int(round(total_rev_hospital)):,}",
+            delta=f"{hospital_revision_pct:.1f}% of total",
+            delta_color="normal"
+        )
+    with m2:
+        st.metric(
+            label="National Avg Surgeries / Hospital",
+            value=f"{int(round(avg_total_proc)):,}"
+        )
+        st.metric(
+            label="National Avg Revision %",
+            value=f"{national_revision_pct:.1f}%"
+        )
 with metric_col2:
     st.markdown("#### Labels & Affiliations")
     if selected_hospital_details.get('university') == 1: st.success("🎓 University Hospital")
@@ -129,15 +140,23 @@ for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
 if summary_texts: st.markdown(" | ".join(summary_texts), unsafe_allow_html=True)
 bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedure', value_name='Count')
 if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
-    bariatric_chart = alt.Chart(bariatric_df_melted).mark_bar().encode(
-        x=alt.X('annee:O', title='Year', axis=alt.Axis(labelAngle=0)),
-        y=alt.Y('Count:Q', title='Number of Procedures', axis= None),
-        color='Procedure:N', tooltip=['annee', 'Procedure', 'Count']
-    ).properties(
-        width=700,
-        height=400
+    fig = px.bar(
+        bariatric_df_melted,
+        x='annee',
+        y='Count',
+        color='Procedure',
+        title='Bariatric Procedures by Year',
+        barmode='group'
     )
-    st.altair_chart(bariatric_chart, use_container_width=True)
+    fig.update_layout(
+        xaxis_title='Year',
+        yaxis_title='Number of Procedures',
+        hovermode='x unified',
+        height=400,
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)'
+    )
+    st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("No bariatric procedure data available.")
 st.markdown("---")
@@ -156,14 +175,22 @@ if total_approaches > 0:
 if summary_texts_approach: st.markdown(" | ".join(summary_texts_approach), unsafe_allow_html=True)
 approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach', value_name='Count')
 if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
-    bar = alt.Chart(approach_df_melted).mark_bar().encode(
-        x=alt.X('annee:O', title='Year', axis=alt.Axis(labelAngle=0)),
-        y=alt.Y('Count:Q', title='Number of Surgeries', axis= None),
-        color='Approach:N', tooltip=['annee', 'Approach', 'Count']
-    ).properties(
-        width=700,
-        height=400
+    fig2 = px.bar(
+        approach_df_melted,
+        x='annee',
+        y='Count',
+        color='Approach',
+        title='Surgical Approaches by Year',
+        barmode='group'
     )
-    st.altair_chart(bar, use_container_width=True)
+    fig2.update_layout(
+        xaxis_title='Year',
+        yaxis_title='Number of Surgeries',
+        hovermode='x unified',
+        height=400,
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)'
+    )
+    st.plotly_chart(fig2, use_container_width=True)
 else:
     st.info("No surgical approach data available.")
