@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -921,39 +922,53 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
     """)
     
     if robotic_volume['volume_categories'] and len(robotic_volume['volume_categories']) > 0:
-        # Safely pick weighted percentages if available, otherwise fallback
-        y_vals = (
-            robotic_volume.get('percentages_weighted')
-            or robotic_volume.get('percentages')
-            or robotic_volume.get('percentages_mean')
-        )
+        # Per‑hospital scatter: each dot is a hospital
+        try:
+            from lib.national_utils import compute_robotic_volume_distribution
+            dist_df = compute_robotic_volume_distribution(df)
+        except Exception:
+            dist_df = pd.DataFrame()
 
-        fig = px.scatter(
-            x=robotic_volume['volume_categories'],
-            y=y_vals,
-            title="Robotic Adoption by Hospital Volume (2024)",
-            color=y_vals,
-            color_continuous_scale='Purples'
-        )
-        
-        fig.update_layout(
-            xaxis_title=None,
-            yaxis_title=None,
-            height=400,
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(size=12),
-            margin=dict(l=50, r=50, t=80, b=50)
-        )
-        
-        fig.update_traces(
-            mode='markers',
-            marker=dict(size=12, line=dict(width=0)),
-            hovertemplate='<b>%{x}</b><br>Weighted % robotic: %{y:.1f}%<br>Robotic: %{customdata}<extra></extra>',
-            customdata=robotic_volume['robotic_counts']
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
+        if not dist_df.empty:
+            # Add small horizontal jitter per bin to avoid overlapping points
+            category_to_x = {cat: i for i, cat in enumerate(sorted(dist_df['volume_category'].unique(), key=lambda c: ["<50","50–100","100–200",">200"].index(c)))}
+            dist_df = dist_df.copy()
+            dist_df['x_numeric'] = dist_df['volume_category'].map(category_to_x).astype(float)
+            rng = np.random.default_rng(42)
+            dist_df['x_jitter'] = dist_df['x_numeric'] + rng.uniform(-0.18, 0.18, size=len(dist_df))
+
+            fig = px.scatter(
+                dist_df,
+                x='x_jitter',
+                y='hospital_pct',
+                color='total_surgeries',
+                size='total_surgeries',
+                size_max=20,
+                title="Robotic Adoption by Hospital Volume (2024)",
+                color_continuous_scale='Purples'
+            )
+            # Show categorical tick labels
+            ordered_cats = ["<50","50–100","100–200",">200"]
+            x_ticks = [category_to_x[c] for c in ordered_cats if c in category_to_x]
+            fig.update_xaxes(tickmode='array', tickvals=x_ticks, ticktext=[c for c in ordered_cats if c in category_to_x])
+            fig.update_layout(
+                xaxis_title=None,
+                yaxis_title='Robotic % (per hospital)',
+                height=400,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(size=12),
+                margin=dict(l=50, r=50, t=80, b=50)
+            )
+            fig.update_traces(
+                mode='markers',
+                marker=dict(line=dict(width=0)),
+                hovertemplate='<b>%{x}</b><br>Hospital robotic %: %{y:.1f}%<br>Total surgeries: %{marker.size:,}<br>ID: %{customdata}<extra></extra>',
+                customdata=dist_df['hospital_id']
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Distribution view unavailable.")
 
         # Annotations: hospitals and average surgeries per bin
         try:
@@ -991,14 +1006,7 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
             from lib.national_utils import compute_robotic_volume_distribution
             dist_df = compute_robotic_volume_distribution(df)
             st.subheader("Per-hospital distribution by volume")
-            scatter = px.strip(
-                dist_df,
-                x='volume_category',
-                y='hospital_pct',
-                title='Per-hospital robotic share distribution',
-                color='volume_category',
-                jitter=0.3
-            )
+            scatter = px.strip(dist_df, x='volume_category', y='hospital_pct', color='volume_category')
             scatter.update_layout(
                 showlegend=False,
                 xaxis_title=None,
@@ -1007,7 +1015,7 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)'
             )
-            scatter.update_traces(marker=dict(opacity=0.6, size=8), selector=dict(type='scatter'))
+            scatter.update_traces(jitter=0.3, marker=dict(opacity=0.6, size=8))
             st.plotly_chart(scatter, use_container_width=True)
         except Exception as e:
             st.info(f"Distribution view unavailable: {e}")
