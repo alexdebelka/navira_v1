@@ -128,37 +128,23 @@ small_vol_trend = "More" if small_vol_2024 > small_vol_baseline else "Fewer"
 med_low_trend = "increased" if med_low_2024 > med_low_baseline else "decreased"
 med_high_trend = "increased" if med_high_2024 > med_high_baseline else "decreased"
 
-# Add dropdown description
-with st.expander("📊 See the description of the graph"):
-    st.markdown(f"""
+# Info bubble for Volume Distribution chart
+st.info(
+    """
     **Understanding this chart:**
 
-    This chart shows how hospitals are distributed across different volume categories based on their annual bariatric surgery procedures. The **main bars (blue)** represent the **average number of hospitals** in each volume category during the **2020-2023 period**, serving as a baseline for comparison.
+    This chart shows how hospitals are distributed across different volume categories based on their annual bariatric surgery procedures. The main bars (blue) represent the average number of hospitals in each volume category during the 2020-2023 period, serving as a baseline for comparison.
 
     **Volume Categories:**
-    - **<50 procedures/year**: Small-volume hospitals (typically smaller facilities or those just starting bariatric programs)
-    - **50-100 procedures/year**: Medium-low volume hospitals
-    - **100-200 procedures/year**: Medium-high volume hospitals  
-    - **>200 procedures/year**: High-volume hospitals (typically specialized centers of excellence)
+    - <50 procedures/year: Small-volume hospitals (typically smaller facilities or those just starting bariatric programs)
+    - 50-100 procedures/year: Medium-low volume hospitals
+    - 100-200 procedures/year: Medium-high volume hospitals
+    - >200 procedures/year: High-volume hospitals (typically specialized centers of excellence)
 
-    **When you toggle "Show 2024 comparison"**, the **overlay bars (yellow)** show the **actual 2024 distribution**, allowing you to see how hospital volumes have changed compared to the previous 4-year average.
-
-    **Key Findings:**
-
-    **Distribution Shifts:**
-    - **Small-volume hospitals (<50/year)**: {small_vol_2024} in 2024 vs {small_vol_baseline} average (2020-2023)
-    - **High-volume hospitals (>200/year)**: {high_vol_2024} in 2024 vs {high_vol_baseline} average (2020-2023)
-
-    **Growth in Medium Categories:**
-    - **Medium-low volume (50-100/year)**: {med_low_2024} in 2024 vs {med_low_baseline} average (2020-2023) - **{med_low_trend} by {abs(med_low_2024 - med_low_baseline)} hospitals**
-    - **Medium-high volume (100-200/year)**: {med_high_2024} in 2024 vs {med_high_baseline} average (2020-2023) - **{med_high_trend} by {abs(med_high_2024 - med_high_baseline)} hospitals**
-
-    **Current Distribution (2024):**
-    - **{small_vol_2024} hospitals** perform <50 procedures/year ({small_vol_pct}% of total)
-    - **{med_low_2024} hospitals** perform 50-100 procedures/year ({med_low_pct}% of total)
-    - **{med_high_2024} hospitals** perform 100-200 procedures/year ({med_high_pct}% of total)
-    - **{high_vol_2024} hospitals** perform >200 procedures/year ({high_vol_pct}% of total)
-    """)
+    When you toggle "Show 2024 comparison", the overlay bars (yellow) show the actual 2024 distribution, allowing you to see how hospital volumes have changed compared to the previous 4-year average.
+    """,
+    icon="💡"
+)
 
 # Prepare data for chart
 volume_data = []
@@ -288,24 +274,15 @@ with col2:
 # Second block: Stacked bar chart
 st.subheader("Hospital Labels by Affiliation Type")
 
-# Add description for stacked bar chart
-with st.expander("📊 See the description of the labels chart"):
-    st.markdown("""
+# Info bubble for Hospital Labels by Affiliation Type chart
+st.info(
+    """
     **Understanding this chart:**
-    
+
     This stacked bar chart shows the distribution of hospital labels (SOFFCO and CSO) across different affiliation types. Each bar represents an affiliation category, and the colored segments within each bar show how many hospitals have specific label combinations.
-    
-    **Label Categories:**
-    - **SOFFCO Label**: Hospitals designated as Centers of Excellence by SOFFCO (French Society of Obesity Surgery)
-    - **CSO Label**: Hospitals designated as Centers of Excellence by the French Health Ministry
-    - **Both**: Hospitals that have both SOFFCO and CSO labels
-    - **None**: Hospitals without either label
-    
-    **What to look for:**
-    - **Label concentration**: Which affiliation types have more labeled hospitals?
-    - **Quality indicators**: Public vs private distribution of excellence centers
-    - **Dual recognition**: Hospitals with both labels represent the highest level of recognition
-    """)
+    """,
+    icon="💡"
+)
 
 # Prepare data for stacked bar chart
 stacked_data = []
@@ -363,31 +340,21 @@ else:
 # Affiliation trends line plot
 st.subheader("Hospital Affiliation Trends (2020-2024)")
 
-# Add description for trends chart
-with st.expander("📊 See the description of the trends chart"):
-    st.markdown("""
+# Info bubble for Hospital Affiliation Trends chart
+st.info(
+    """
     **Understanding this chart:**
-    
+
     This stacked area chart shows how hospital affiliations have evolved from 2020 to 2024. The total height of the chart at any point represents the total number of hospitals, while the colored segments show the proportion of each affiliation type.
-    
+
     **Affiliation Types:**
-    - **Public – Univ.**: Public hospitals with university/academic affiliation
-    - **Public – Non-Acad.**: Public hospitals without academic affiliation
-    - **Private – For-profit**: Private for-profit hospitals
-    - **Private – Not-for-profit**: Private not-for-profit hospitals
-    
-    **What to look for:**
-    - **Total volume trends**: Is the overall number of hospitals increasing or decreasing?
-    - **Market shifts**: Which affiliation types are growing or shrinking?
-    - **Proportion changes**: How has the balance between public and private changed?
-    - **Academic trends**: Are more hospitals gaining or losing academic affiliations?
-    
-    **Key insights:**
-    - The chart shows both absolute numbers and relative proportions
-    - Growing segments indicate expanding hospital categories
-    - Shrinking segments show declining hospital types
-    - The total area represents the overall hospital landscape
-    """)
+    - Public – Univ.: Public hospitals with university/academic affiliation
+    - Public – Non-Acad.: Public hospitals without academic affiliation
+    - Private – For-profit: Private for-profit hospitals
+    - Private – Not-for-profit: Private not-for-profit hospitals
+    """,
+    icon="💡"
+)
 
 # Prepare data for line chart
 trend_data = []
@@ -501,23 +468,19 @@ with col1:
         hover_tmpl = '<b>%{x}</b><br>Total 2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
 
     if not chart_df.empty:
-        # Add dropdown description
-        with st.expander("📊 See the description of the procedures chart"):
-            st.markdown(f"""
+        # Info bubble for Procedures chart
+        st.info(
+            """
             **Understanding this chart:**
-            
+
             This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.
-            
+
             **Time Period:**
-            - **Toggle OFF**: Shows data for the entire **2020-2024 period** (5 years)
-            - **Toggle ON**: Shows data for **2024 only**
-            
-            **What to look for:**
-            - **Procedure dominance**: Which procedures are most common?
-            - **Volume trends**: How do procedure volumes compare between time periods?
-            - **Distribution patterns**: The relative proportion of each procedure type
-            - **Hover for details**: Each bar shows total count and percentage of all procedures
-            """)
+            - Toggle OFF: Shows data for the entire 2020-2024 period (5 years)
+            - Toggle ON: Shows data for 2024 only
+            """,
+            icon="💡"
+        )
         
         fig = px.bar(
             chart_df,
