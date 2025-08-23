@@ -175,14 +175,17 @@ bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedu
 if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
     left, right = st.columns([2, 1])
     with left:
+        # Compute share per year explicitly to avoid barnorm dependency
+        _totals = bariatric_df_melted.groupby('annee')['Count'].sum().replace(0, 1)
+        bariatric_share = bariatric_df_melted.copy()
+        bariatric_share['Share'] = bariatric_share['Count'] / bariatric_share['annee'].map(_totals) * 100
         fig = px.bar(
-        bariatric_df_melted,
+        bariatric_share,
         x='annee',
-        y='Count',
+        y='Share',
         color='Procedure',
         title='Bariatric Procedures by Year (share %)',
-        barmode='stack',
-        barnorm='percent'
+        barmode='stack'
         )
         fig.update_layout(
         xaxis_title='Year',
@@ -277,14 +280,17 @@ approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach'
 if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
     left2, right2 = st.columns([2, 1])
     with left2:
+        # Compute share per year explicitly
+        _tot2 = approach_df_melted.groupby('annee')['Count'].sum().replace(0, 1)
+        approach_share = approach_df_melted.copy()
+        approach_share['Share'] = approach_share['Count'] / approach_share['annee'].map(_tot2) * 100
         fig2 = px.bar(
-            approach_df_melted,
+            approach_share,
             x='annee',
-            y='Count',
+            y='Share',
             color='Approach',
             title='Surgical Approaches by Year (share %)',
-            barmode='stack',
-            barnorm='percent'
+            barmode='stack'
         )
         fig2.update_layout(
             xaxis_title='Year',
