@@ -1057,6 +1057,43 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
         except Exception as e:
             st.info(f"Distribution view unavailable: {e}")
 
+        # Continuous scatter with linear trendline
+        try:
+            from lib.national_utils import compute_robotic_volume_distribution
+            dist_df = compute_robotic_volume_distribution(df)
+            if not dist_df.empty:
+                st.subheader("Continuous relationship: volume vs robotic %")
+                cont = px.scatter(
+                    dist_df,
+                    x='total_surgeries',
+                    y='hospital_pct',
+                    color='volume_category',
+                    opacity=0.65,
+                    title='Hospital volume (continuous) vs robotic %'
+                )
+                # Linear trendline via numpy
+                try:
+                    xvals = dist_df['total_surgeries'].astype(float).values
+                    yvals = dist_df['hospital_pct'].astype(float).values
+                    if len(xvals) >= 2:
+                        slope, intercept = np.polyfit(xvals, yvals, 1)
+                        xs = np.linspace(xvals.min(), xvals.max(), 100)
+                        ys = slope * xs + intercept
+                        cont.add_trace(go.Scatter(x=xs, y=ys, mode='lines', name='Linear trend', line=dict(color='#4c78a8', width=2)))
+                except Exception:
+                    pass
+
+                cont.update_layout(
+                    xaxis_title='Total surgeries (2024)',
+                    yaxis_title='Robotic % (per hospital)',
+                    height=420,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)'
+                )
+                st.plotly_chart(cont, use_container_width=True)
+        except Exception:
+            pass
+
 # 5. Affiliation Analysis
 with st.expander("🏛️ 4. Affiliation Analysis - Hospital Affiliation vs Robotic Adoption"):
     st.markdown("""
