@@ -113,6 +113,21 @@ with metric_col1:
             label="National Avg Revision %",
             value=f"{national_revision_pct:.1f}%"
         )
+
+    # Procedure mix metrics (2020-2024): Sleeve, Bypass, Other
+    try:
+        proc_cols_present = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
+        sleeve_total = int(selected_hospital_all_data.get('SLE', pd.Series(dtype=float)).sum()) if 'SLE' in proc_cols_present else 0
+        bypass_total = int(selected_hospital_all_data.get('BPG', pd.Series(dtype=float)).sum()) if 'BPG' in proc_cols_present else 0
+        other_codes = [c for c in proc_cols_present if c not in ['SLE', 'BPG']]
+        other_total = int(selected_hospital_all_data[other_codes].sum().sum()) if other_codes else 0
+        st.markdown("#### Procedure Mix (2020-2024)")
+        p1, p2, p3 = st.columns(3)
+        p1.metric("Sleeve", f"{sleeve_total:,}")
+        p2.metric("Gastric Bypass", f"{bypass_total:,}")
+        p3.metric("Other", f"{other_total:,}")
+    except Exception:
+        pass
 with metric_col2:
     st.markdown("#### Labels & Affiliations")
     if selected_hospital_details.get('university') == 1: st.success("🎓 University Hospital")
@@ -160,17 +175,20 @@ st.caption("📊 Chart shows annual procedures. Averages compare hospital's year
 bariatric_df = hospital_annual_data[[key for key in BARIATRIC_PROCEDURE_NAMES.keys() if key in hospital_annual_data.columns]].rename(columns=BARIATRIC_PROCEDURE_NAMES)
 bariatric_summary = bariatric_df.sum()
 summary_texts = []
-for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
-    # Skip Bilio-pancreatic Diversion in the textual summary, but keep it in charts
-    if proc_code == 'DBP':
-        continue
-    count = bariatric_summary.get(proc_name, 0)
-    if count > 0:
-        avg_count = national_averages.get(proc_code, 0)
-        # Calculate hospital's average per year for fair comparison
-        hospital_avg_per_year = count / 5  # 5 years (2020-2024)
-        summary_texts.append(f"**{proc_name}**: {int(count)} total ({hospital_avg_per_year:.1f}/year) <span style='color:grey; font-style: italic;'>(National Avg: {avg_count:.1f}/year)</span>")
-if summary_texts: st.markdown(" | ".join(summary_texts), unsafe_allow_html=True)
+# Build three-category summary: Sleeve, Bypass, Other
+try:
+    sleeve_count = int(bariatric_summary.get('Sleeve Gastrectomy', 0))
+    bypass_count = int(bariatric_summary.get('Gastric Bypass', 0))
+    other_count = int(bariatric_summary.sum() - sleeve_count - bypass_count)
+    sleeve_avg_nat = float(national_averages.get('SLE', 0))
+    bypass_avg_nat = float(national_averages.get('BPG', 0))
+    other_avg_nat = float(sum(national_averages.get(code, 0) for code in BARIATRIC_PROCEDURE_NAMES.keys() if code not in ['SLE', 'BPG']))
+    summary_texts.append(f"**Sleeve**: {sleeve_count} total ({sleeve_count/5:.1f}/year) <span style='color:grey; font-style: italic;'>(National Avg: {sleeve_avg_nat:.1f}/year)</span>")
+    summary_texts.append(f"**Gastric Bypass**: {bypass_count} total ({bypass_count/5:.1f}/year) <span style='color:grey; font-style: italic;'>(National Avg: {bypass_avg_nat:.1f}/year)</span>")
+    summary_texts.append(f"**Other**: {other_count} total ({other_count/5:.1f}/year) <span style='color:grey; font-style: italic;'>(National Avg: {other_avg_nat:.1f}/year)</span>")
+    st.markdown(" | ".join(summary_texts), unsafe_allow_html=True)
+except Exception:
+    pass
 bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedure', value_name='Count')
 if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
     left, right = st.columns([2, 1])
