@@ -1006,17 +1006,54 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
             from lib.national_utils import compute_robotic_volume_distribution
             dist_df = compute_robotic_volume_distribution(df)
             st.subheader("Per-hospital distribution by volume")
-            scatter = px.strip(dist_df, x='volume_category', y='hospital_pct', color='volume_category')
-            scatter.update_layout(
+
+            # Choose representation
+            style = st.radio(
+                "Distribution style",
+                options=["Violin + beeswarm", "Box + beeswarm"],
+                horizontal=True,
+                index=0
+            )
+
+            ordered_cats = ["<50", "50–100", "100–200", ">200"]
+            fig = go.Figure()
+
+            for cat in ordered_cats:
+                sub = dist_df[dist_df['volume_category'] == cat]
+                if sub.empty:
+                    continue
+                if style == "Violin + beeswarm":
+                    fig.add_trace(go.Violin(
+                        x=[cat] * len(sub),
+                        y=sub['hospital_pct'],
+                        name=cat,
+                        points='all',
+                        jitter=0.3,
+                        pointpos=0.0,
+                        box_visible=True,
+                        meanline_visible=True,
+                        marker=dict(size=6, opacity=0.55)
+                    ))
+                else:
+                    fig.add_trace(go.Box(
+                        x=[cat] * len(sub),
+                        y=sub['hospital_pct'],
+                        name=cat,
+                        boxpoints='all',
+                        jitter=0.3,
+                        pointpos=0.0,
+                        marker=dict(size=6, opacity=0.55)
+                    ))
+
+            fig.update_layout(
                 showlegend=False,
                 xaxis_title=None,
-                yaxis_title=None,
-                height=380,
+                yaxis_title='Robotic % (per hospital)',
+                height=420,
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)'
             )
-            scatter.update_traces(jitter=0.3, marker=dict(opacity=0.6, size=8))
-            st.plotly_chart(scatter, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.info(f"Distribution view unavailable: {e}")
 
