@@ -70,15 +70,15 @@ def render_platform_overview(data, days):
     with col1:
         st.metric(
             "Total Users", 
-            data['total_users'],
+            f"{int(round(data['total_users'])):,}",
             help="Total registered users"
         )
     
     with col2:
         st.metric(
             "Active Users", 
-            data['active_users'],
-            delta=f"{data['active_users']} in last {days} days",
+            f"{int(round(data['active_users'])):,}",
+            delta=f"{int(round(data['active_users'])):,} in last {days} days",
             help="Users active in the selected period"
         )
     
@@ -87,7 +87,7 @@ def render_platform_overview(data, days):
         engagement_rate = (data['active_users'] / data['total_users'] * 100) if data['total_users'] > 0 else 0
         st.metric(
             "Engagement Rate", 
-            f"{engagement_rate:.1f}%",
+            f"{engagement_rate:.0f}%",
             help="Percentage of total users active in the period"
         )
     
@@ -96,7 +96,7 @@ def render_platform_overview(data, days):
         total_activities = sum(item['count'] for item in data['activity_by_type'])
         st.metric(
             "Total Activities", 
-            total_activities,
+            f"{int(round(total_activities)):,}",
             help="Total user activities in the period"
         )
     
@@ -173,15 +173,15 @@ def render_user_activity(analytics, days):
         
         with col1:
             total_activities = sum(item['count'] for item in user_data['activity_summary'])
-            st.metric("Total Activities", total_activities)
+            st.metric("Total Activities", f"{int(round(total_activities)):,}")
         
         with col2:
             total_views = sum(item['views'] for item in user_data['page_views'])
-            st.metric("Page Views", total_views)
+            st.metric("Page Views", f"{int(round(total_views)):,}")
         
         with col3:
             total_exports = sum(item['count'] for item in user_data['data_exports'])
-            st.metric("Data Exports", total_exports)
+            st.metric("Data Exports", f"{int(round(total_exports)):,}")
         
         # Activity details
         if user_data['activity_summary']:
@@ -259,7 +259,7 @@ def render_data_usage(analytics, days):
         
         with col1:
             total_exports = exports_df['export_count'].sum()
-            st.metric("Total Exports", total_exports)
+            st.metric("Total Exports", f"{int(round(total_exports)):,}")
         
         with col2:
             total_records = exports_df['total_records'].sum()

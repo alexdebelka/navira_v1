@@ -74,7 +74,7 @@ with col1:
 with col2:
     st.metric(
         "Total Surgeries (2024)", 
-        f"{kpis['avg_surgeries_per_year']:,.0f}" # it is total_surgeries_2024
+        f"{int(round(kpis['avg_surgeries_per_year'])):,}" # it is total_surgeries_2024
     )
 
 with col3:
@@ -83,7 +83,7 @@ with col3:
     
     st.metric(
         "Total Revisions (2024)", 
-        f"{kpis['avg_revisions_per_year']:,.0f}" # it is total_revisions_2024
+        f"{int(round(kpis['avg_revisions_per_year'])):,}" # it is total_revisions_2024
     )
     st.markdown(f"<span style='color: grey; font-size: 0.9em;'>{revision_percentage:.0f}% of total surgeries</span>", unsafe_allow_html=True)
 
@@ -91,7 +91,7 @@ with col4:
     delta_color = "normal" if delta_less_50 <= 0 else "inverse"
     st.metric(
         "Hospitals <50/year (2024)",
-        f"{volume_2024['<50']:.0f}",
+        f"{int(round(volume_2024['<50'])):,}",
         delta_color=delta_color
     )
 
@@ -99,7 +99,7 @@ with col5:
     delta_color = "normal" if delta_more_200 >= 0 else "inverse"
     st.metric(
         "Hospitals >200/year (2024)",
-        f"{volume_2024['>200']:.0f}",
+        f"{int(round(volume_2024['>200'])):,}",
         delta_color=delta_color
     )
 
@@ -248,7 +248,7 @@ with col1:
    
     st.metric(
         "Public University Hospital",
-        f"{public_univ_count}"
+        f"{int(round(public_univ_count)):,}"
     )
     st.markdown(f"<span style='color: grey; font-size: 0.9em;'>{public_univ_pct}% of total</span>", unsafe_allow_html=True)
     
@@ -258,7 +258,7 @@ with col1:
    
     st.metric(
         "Public, No Academic Affiliation",
-        f"{public_non_acad_count}"
+        f"{int(round(public_non_acad_count)):,}"
     )
     st.markdown(f"<span style='color: grey; font-size: 0.9em;'>{public_non_acad_pct}% of total</span>", unsafe_allow_html=True)
 
@@ -271,7 +271,7 @@ with col2:
     
     st.metric(
         "Private For Profit",
-        f"{private_for_profit_count}"
+        f"{int(round(private_for_profit_count)):,}"
     )
     st.markdown(f"<span style='color: grey; font-size: 0.9em;'>{private_for_profit_pct}% of total</span>", unsafe_allow_html=True)
     
@@ -281,7 +281,7 @@ with col2:
     
     st.metric(
         "Private Not For Profit",
-        f"{private_not_profit_count}"
+        f"{int(round(private_not_profit_count)):,}"
     )
     st.markdown(f"<span style='color: grey; font-size: 0.9em;'>{private_not_profit_pct}% of total</span>", unsafe_allow_html=True)
 
@@ -548,13 +548,13 @@ with col2:
         sleeve_total = procedure_totals_2020_2024.get('SLE', 0)
         st.metric(
             "Sleeve Gastrectomies (2020-2024)",
-            f"{sleeve_total:,}"
+            f"{int(round(sleeve_total)):,}"
         )
         # Total procedures 2020-2024
         total_all = procedure_totals_2020_2024.get('total_all', 0)
         st.metric(
             "Total Procedures (2020-2024)",
-            f"{total_all:,}"
+            f"{int(round(total_all)):,}"
         )
     else:
         st.subheader("2024 Totals")
@@ -562,13 +562,13 @@ with col2:
         sleeve_2024 = procedure_totals_2024.get('SLE', 0)
         st.metric(
             "Sleeve Gastrectomies (2024)",
-            f"{sleeve_2024:,}"
+            f"{int(round(sleeve_2024)):,}"
         )
         # Total procedures in 2024
         total_2024 = procedure_totals_2024.get('total_all', 0)
         st.metric(
             "Total Procedures (2024)",
-            f"{total_2024:,}"
+            f"{int(round(total_2024)):,}"
         )
 
 st.caption("Data computed across eligible hospital-years (≥25 procedures per year).")
@@ -675,7 +675,7 @@ with col2:
     
     st.metric(
         "Total Robotic Surgeries (2024)",
-        f"{robotic_2024:.0f}",
+        f"{int(round(robotic_2024)):,}",
         delta=f"{robotic_pct_2024}% of total surgeries"
     )
     

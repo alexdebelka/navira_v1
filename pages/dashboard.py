@@ -89,14 +89,14 @@ with metric_col1:
     delta_total = total_proc_hospital - avg_total_proc
     st.metric(
         label="Total Surgeries (All Types)",
-        value=f"{total_proc_hospital:.0f}",
-        delta=f"{delta_total:+.0f} vs. National Average (={avg_total_proc:.0f})",
+        value=f"{int(round(total_proc_hospital)):,}",
+        delta=f"{int(round(delta_total)):+,} vs. National Average (={int(round(avg_total_proc)):,})",
         delta_color="normal"
     )
     # Metric 2: Revision Surgeries (UPDATED)
     st.metric(
         label="Revision Surgeries",
-        value=f"{total_rev_hospital:.0f}",
+        value=f"{int(round(total_rev_hospital)):,}",
         delta=f"{hospital_revision_pct:.1f}% of hospital's total surgeries vs. National Average: {national_revision_pct:.1f}%",
         delta_color="normal"
     )
