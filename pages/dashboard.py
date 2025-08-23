@@ -103,9 +103,10 @@ with metric_col1:
             delta_color="normal"
         )
     with m2:
+        volume_vs_nat_pct = (total_proc_hospital / avg_total_proc * 100) if avg_total_proc > 0 else 0
         st.metric(
-            label="National Avg Surgeries / Hospital",
-            value=f"{int(round(avg_total_proc)):,}"
+            label="Volume vs National Avg",
+            value=f"{volume_vs_nat_pct:.0f}%"
         )
         st.metric(
             label="National Avg Revision %",
@@ -122,6 +123,37 @@ with metric_col2:
 st.markdown("---")
 st.header("Annual Statistics")
 hospital_annual_data = selected_hospital_all_data.set_index('annee')
+
+# Small sparkline trends for key metrics
+spark_col1, spark_col2 = st.columns(2)
+try:
+    # Total surgeries per year sparkline
+    total_series = selected_hospital_all_data[['annee', 'total_procedures_year']].dropna()
+    if not total_series.empty:
+        spark1 = px.line(total_series, x='annee', y='total_procedures_year', markers=True)
+        spark1.update_layout(height=120, margin=dict(l=20, r=20, t=10, b=10),
+                             xaxis_title=None, yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)',
+                             paper_bgcolor='rgba(0,0,0,0)')
+        spark1.update_xaxes(showgrid=False)
+        spark1.update_yaxes(showgrid=False)
+        spark_col1.markdown("##### Total Surgeries Trend")
+        spark_col1.plotly_chart(spark1, use_container_width=True)
+
+    # Robotic share per year sparkline (if ROB exists)
+    if 'ROB' in selected_hospital_all_data.columns:
+        rob_df = selected_hospital_all_data[['annee', 'ROB', 'total_procedures_year']].dropna()
+        if not rob_df.empty:
+            rob_df = rob_df.assign(rob_pct=lambda d: (d['ROB'] / d['total_procedures_year'] * 100))
+            spark2 = px.line(rob_df, x='annee', y='rob_pct', markers=True)
+            spark2.update_layout(height=120, margin=dict(l=20, r=20, t=10, b=10),
+                                 xaxis_title=None, yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)',
+                                 paper_bgcolor='rgba(0,0,0,0)')
+            spark2.update_xaxes(showgrid=False)
+            spark2.update_yaxes(showgrid=False)
+            spark_col2.markdown("##### Robotic Share Trend (%)")
+            spark_col2.plotly_chart(spark2, use_container_width=True)
+except Exception:
+    pass
 st.markdown("#### Bariatric Procedures by Year")
 st.caption("📊 Chart shows annual procedures. Averages compare hospital's yearly average vs. national yearly average per hospital.")
 bariatric_df = hospital_annual_data[[key for key in BARIATRIC_PROCEDURE_NAMES.keys() if key in hospital_annual_data.columns]].rename(columns=BARIATRIC_PROCEDURE_NAMES)
@@ -140,23 +172,69 @@ for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
 if summary_texts: st.markdown(" | ".join(summary_texts), unsafe_allow_html=True)
 bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedure', value_name='Count')
 if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
-    fig = px.bar(
+    left, right = st.columns([2, 1])
+    with left:
+        fig = px.bar(
         bariatric_df_melted,
         x='annee',
         y='Count',
         color='Procedure',
-        title='Bariatric Procedures by Year',
-        barmode='group'
-    )
-    fig.update_layout(
+        title='Bariatric Procedures by Year (share %)',
+        barmode='stack',
+        barnorm='percent'
+        )
+        fig.update_layout(
         xaxis_title='Year',
-        yaxis_title='Number of Procedures',
+        yaxis_title='Share of procedures (%)',
         hovermode='x unified',
         height=400,
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)'
-    )
-    st.plotly_chart(fig, use_container_width=True)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Right column: 2024 mix comparison (Hospital vs National)
+    with right:
+        try:
+            year_2024 = selected_hospital_all_data[selected_hospital_all_data['annee'] == 2024]
+            hosp_counts = {}
+            for code, name in BARIATRIC_PROCEDURE_NAMES.items():
+                if code in year_2024.columns:
+                    hosp_counts[name] = int(year_2024[code].sum())
+            hosp_total = sum(hosp_counts.values()) or 1
+            hosp_pct = {k: (v / hosp_total * 100) for k, v in hosp_counts.items()}
+
+            nat_2024 = annual[annual['annee'] == 2024]
+            if 'total_procedures_year' in nat_2024.columns:
+                nat_2024 = nat_2024[nat_2024['total_procedures_year'] >= 25]
+            nat_counts = {}
+            for code, name in BARIATRIC_PROCEDURE_NAMES.items():
+                if code in nat_2024.columns:
+                    nat_counts[name] = int(nat_2024[code].sum())
+            nat_total = sum(nat_counts.values()) or 1
+            nat_pct = {k: (v / nat_total * 100) for k, v in nat_counts.items()}
+
+            comp_rows = []
+            for name in BARIATRIC_PROCEDURE_NAMES.values():
+                if name in hosp_pct or name in nat_pct:
+                    comp_rows.append({
+                        'Procedure': name,
+                        'Hospital %': hosp_pct.get(name, 0),
+                        'National %': nat_pct.get(name, 0)
+                    })
+            comp_df = pd.DataFrame(comp_rows)
+            if not comp_df.empty:
+                comp_long = comp_df.melt('Procedure', var_name='Source', value_name='Percent')
+                comp_fig = px.bar(
+                    comp_long,
+                    x='Percent', y='Procedure', color='Source', orientation='h',
+                    title='2024 Procedure Mix: Hospital vs National'
+                )
+                comp_fig.update_layout(height=400, xaxis_title='% of procedures', yaxis_title=None,
+                                       plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(comp_fig, use_container_width=True)
+        except Exception:
+            pass
 else:
     st.info("No bariatric procedure data available.")
 st.markdown("---")
@@ -175,22 +253,58 @@ if total_approaches > 0:
 if summary_texts_approach: st.markdown(" | ".join(summary_texts_approach), unsafe_allow_html=True)
 approach_df_melted = approach_df.reset_index().melt('annee', var_name='Approach', value_name='Count')
 if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
-    fig2 = px.bar(
-        approach_df_melted,
-        x='annee',
-        y='Count',
-        color='Approach',
-        title='Surgical Approaches by Year',
-        barmode='group'
-    )
-    fig2.update_layout(
-        xaxis_title='Year',
-        yaxis_title='Number of Surgeries',
-        hovermode='x unified',
-        height=400,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)'
-    )
-    st.plotly_chart(fig2, use_container_width=True)
+    left2, right2 = st.columns([2, 1])
+    with left2:
+        fig2 = px.bar(
+            approach_df_melted,
+            x='annee',
+            y='Count',
+            color='Approach',
+            title='Surgical Approaches by Year (share %)',
+            barmode='stack',
+            barnorm='percent'
+        )
+        fig2.update_layout(
+            xaxis_title='Year',
+            yaxis_title='Share of surgeries (%)',
+            hovermode='x unified',
+            height=400,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+
+    with right2:
+        try:
+            year_2024 = selected_hospital_all_data[selected_hospital_all_data['annee'] == 2024]
+            h_counts = {}
+            for code, name in SURGICAL_APPROACH_NAMES.items():
+                if code in year_2024.columns:
+                    h_counts[name] = int(year_2024[code].sum())
+            h_tot = sum(h_counts.values()) or 1
+            h_pct = {k: (v / h_tot * 100) for k, v in h_counts.items()}
+
+            nat_2024 = annual[annual['annee'] == 2024]
+            if 'total_procedures_year' in nat_2024.columns:
+                nat_2024 = nat_2024[nat_2024['total_procedures_year'] >= 25]
+            n_counts = {}
+            for code, name in SURGICAL_APPROACH_NAMES.items():
+                if code in nat_2024.columns:
+                    n_counts[name] = int(nat_2024[code].sum())
+            n_tot = sum(n_counts.values()) or 1
+            n_pct = {k: (v / n_tot * 100) for k, v in n_counts.items()}
+
+            rows = []
+            for name in SURGICAL_APPROACH_NAMES.values():
+                if name in h_pct or name in n_pct:
+                    rows.append({'Approach': name, 'Hospital %': h_pct.get(name, 0), 'National %': n_pct.get(name, 0)})
+            dfc = pd.DataFrame(rows)
+            if not dfc.empty:
+                long = dfc.melt('Approach', var_name='Source', value_name='Percent')
+                cmp = px.bar(long, x='Percent', y='Approach', color='Source', orientation='h', title='2024 Approach Mix: Hospital vs National')
+                cmp.update_layout(height=400, xaxis_title='% of surgeries', yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(cmp, use_container_width=True)
+        except Exception:
+            pass
 else:
     st.info("No surgical approach data available.")
