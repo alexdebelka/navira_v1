@@ -190,6 +190,19 @@ try:
 except Exception:
     pass
 bariatric_df_melted = bariatric_df.reset_index().melt('annee', var_name='Procedure', value_name='Count')
+# Collapse procedures into three categories: Sleeve, Gastric Bypass, Other
+if not bariatric_df_melted.empty:
+    def _proc_cat(name: str) -> str:
+        if name.lower().startswith('sleeve'):
+            return 'Sleeve'
+        if name.lower().startswith('gastric bypass'):
+            return 'Gastric Bypass'
+        return 'Other'
+    bariatric_df_melted['Procedure3'] = bariatric_df_melted['Procedure'].map(_proc_cat)
+    bariatric_df_melted = (bariatric_df_melted
+                           .groupby(['annee', 'Procedure3'], as_index=False)['Count']
+                           .sum())
+
 if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
     left, right = st.columns([2, 1])
     with left:
@@ -201,7 +214,7 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
         bariatric_share,
         x='annee',
         y='Share',
-        color='Procedure',
+        color='Procedure3',
         title='Bariatric Procedures by Year (share %)',
         barmode='stack'
         )
@@ -220,17 +233,24 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
                 nat_df = nat_df[nat_df['total_procedures_year'] >= 25]
             proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in nat_df.columns]
             nat_year = nat_df.groupby('annee')[proc_codes].sum().reset_index()
-            nat_year['__total__'] = nat_year[proc_codes].sum(axis=1).replace(0, 1)
-            for code, name in BARIATRIC_PROCEDURE_NAMES.items():
-                if code in nat_year.columns:
-                    pct = nat_year[code] / nat_year['__total__'] * 100
-                    fig.add_trace(
-                        go.Scatter(
-                            x=nat_year['annee'], y=pct,
-                            mode='lines+markers', name=f"{name} (Nat)",
-                            line=dict(dash='dash', width=2), marker=dict(size=5)
-                        )
+            # Build three-category national shares per year
+            def _row_pct(row, cols):
+                total = row[cols].sum()
+                return 0 if total == 0 else (row / total * 100)
+            nat_year['Sleeve'] = nat_year.get('SLE', 0)
+            nat_year['Gastric Bypass'] = nat_year.get('BPG', 0)
+            other_cols = [c for c in proc_codes if c not in ['SLE', 'BPG']]
+            nat_year['Other'] = nat_year[other_cols].sum(axis=1) if other_cols else 0
+            nat_year['__total__'] = nat_year[['Sleeve', 'Gastric Bypass', 'Other']].sum(axis=1).replace(0, 1)
+            for cat in ['Sleeve', 'Gastric Bypass', 'Other']:
+                pct = nat_year[cat] / nat_year['__total__'] * 100
+                fig.add_trace(
+                    go.Scatter(
+                        x=nat_year['annee'], y=pct,
+                        mode='lines+markers', name=f"{cat} (Nat)",
+                        line=dict(dash='dash', width=2), marker=dict(size=5)
                     )
+                )
         except Exception:
             pass
 
