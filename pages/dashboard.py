@@ -109,10 +109,10 @@ with metric_col1:
             label="Volume vs National Avg",
             value=f"{volume_vs_nat_pct:.0f}%"
         )
-        st.metric(
-            label="National Avg Revision %",
-            value=f"{national_revision_pct:.1f}%"
-        )
+        # st.metric(
+        #     label="National Avg Revision %",
+        #     value=f"{national_revision_pct:.1f}%"
+        # )
 
     # Procedure mix metrics (2020-2024): Sleeve, Bypass, Other
     try:
@@ -290,7 +290,15 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
                     if code in year_2024.columns:
                         hosp_counts[name] = int(year_2024[code].sum())
                 hosp_total = sum(hosp_counts.values()) or 1
-                hosp_pct = {k: (v / hosp_total * 100) for k, v in hosp_counts.items()}
+                # Collapse to three categories
+                hosp_sleeve = hosp_counts.get('Sleeve Gastrectomy', 0)
+                hosp_bypass = hosp_counts.get('Gastric Bypass', 0)
+                hosp_other = hosp_total - hosp_sleeve - hosp_bypass
+                hosp_pct3 = {
+                    'Sleeve': hosp_sleeve / hosp_total * 100,
+                    'Gastric Bypass': hosp_bypass / hosp_total * 100,
+                    'Other': hosp_other / hosp_total * 100
+                }
 
                 nat_2024 = annual[annual['annee'] == 2024]
                 if 'total_procedures_year' in nat_2024.columns:
@@ -300,18 +308,26 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
                     if code in nat_2024.columns:
                         nat_counts[name] = int(nat_2024[code].sum())
                 nat_total = sum(nat_counts.values()) or 1
-                nat_pct = {k: (v / nat_total * 100) for k, v in nat_counts.items()}
+                # Collapse to three categories
+                nat_sleeve = nat_counts.get('Sleeve Gastrectomy', 0)
+                nat_bypass = nat_counts.get('Gastric Bypass', 0)
+                nat_other = nat_total - nat_sleeve - nat_bypass
+                nat_pct3 = {
+                    'Sleeve': nat_sleeve / nat_total * 100,
+                    'Gastric Bypass': nat_bypass / nat_total * 100,
+                    'Other': nat_other / nat_total * 100
+                }
 
                 comp_rows = []
-                for name in BARIATRIC_PROCEDURE_NAMES.values():
-                    if name in hosp_pct or name in nat_pct:
-                        comp_rows.append({'Procedure': name, 'Hospital %': hosp_pct.get(name, 0), 'National %': nat_pct.get(name, 0)})
+                for name in ['Sleeve', 'Gastric Bypass', 'Other']:
+                    comp_rows.append({'Procedure': name, 'Hospital %': hosp_pct3.get(name, 0), 'National %': nat_pct3.get(name, 0)})
                 comp_df = pd.DataFrame(comp_rows)
                 if not comp_df.empty:
                     comp_long = comp_df.melt('Procedure', var_name='Source', value_name='Percent')
                     comp_fig = px.bar(comp_long, x='Percent', y='Procedure', color='Source', orientation='h', title='2024 Procedure Mix: Hospital vs National')
                     comp_fig.update_layout(height=360, xaxis_title='% of procedures', yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                     st.plotly_chart(comp_fig, use_container_width=True)
+                    st.markdown(f"National mix — Sleeve: {nat_pct3['Sleeve']:.1f}%, Gastric Bypass: {nat_pct3['Gastric Bypass']:.1f}%, Other: {nat_pct3['Other']:.1f}%")
             except Exception:
                 pass
 else:
@@ -431,6 +447,14 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
                     cmp = px.bar(long, x='Percent', y='Approach', color='Source', orientation='h', title='2024 Approach Mix: Hospital vs National')
                     cmp.update_layout(height=360, xaxis_title='% of surgeries', yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                     st.plotly_chart(cmp, use_container_width=True)
+                    # National mix text
+                    try:
+                        open_pct = n_pct.get('Open Surgery', 0)
+                        coel_pct = n_pct.get('Coelioscopy', 0)
+                        rob_pct = n_pct.get('Robotic', 0)
+                        st.markdown(f"National mix — Open: {open_pct:.1f}%, Coelioscopy: {coel_pct:.1f}%, Robotic: {rob_pct:.1f}%")
+                    except Exception:
+                        pass
             except Exception:
                 pass
 else:
