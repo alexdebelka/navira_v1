@@ -928,7 +928,7 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
             or robotic_volume.get('percentages_mean')
         )
 
-        fig = px.bar(
+        fig = px.scatter(
             x=robotic_volume['volume_categories'],
             y=y_vals,
             title="Robotic Adoption by Hospital Volume (2024)",
@@ -947,6 +947,8 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
         )
         
         fig.update_traces(
+            mode='markers',
+            marker=dict(size=12, line=dict(width=0)),
             hovertemplate='<b>%{x}</b><br>Weighted % robotic: %{y:.1f}%<br>Robotic: %{customdata}<extra></extra>',
             customdata=robotic_volume['robotic_counts']
         )
@@ -989,12 +991,24 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
             from lib.national_utils import compute_robotic_volume_distribution
             dist_df = compute_robotic_volume_distribution(df)
             st.subheader("Per-hospital distribution by volume")
-            box = px.box(dist_df, x='volume_category', y='hospital_pct', points='all',
-                         title='Per-hospital robotic share distribution', color='volume_category')
-            box.update_layout(showlegend=False, xaxis_title=None, yaxis_title=None, height=380,
-                              plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-            box.update_traces(jitter=0.3, marker_opacity=0.5)
-            st.plotly_chart(box, use_container_width=True)
+            scatter = px.strip(
+                dist_df,
+                x='volume_category',
+                y='hospital_pct',
+                title='Per-hospital robotic share distribution',
+                color='volume_category',
+                jitter=0.3
+            )
+            scatter.update_layout(
+                showlegend=False,
+                xaxis_title=None,
+                yaxis_title=None,
+                height=380,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+            scatter.update_traces(marker=dict(opacity=0.6, size=8), selector=dict(type='scatter'))
+            st.plotly_chart(scatter, use_container_width=True)
         except Exception as e:
             st.info(f"Distribution view unavailable: {e}")
 
