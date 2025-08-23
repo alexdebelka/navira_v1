@@ -620,6 +620,15 @@ with col1:
         )
         fig.update_traces(hovertemplate=hover_tmpl)
         st.plotly_chart(fig, use_container_width=True)
+        with st.expander("Understanding this chart"):
+            st.markdown("""
+            **What to look for:**
+            - Differences in weighted robotic% between volume bins
+            - Whether higher volume correlates with higher robotic adoption
+
+            **Key findings:**
+            - Weighted vs mean deltas below indicate whether large centers drive the rate
+            """)
 
 with col2:
     if not toggle_2024_only:
@@ -972,6 +981,22 @@ with st.expander("🗺️ 1. Geographic Analysis - Regional Robotic Adoption"):
         )
         
         st.plotly_chart(fig, use_container_width=True)
+        # Dropdown additions
+        try:
+            top_idx = int(pd.Series(robotic_geographic['percentages']).idxmax())
+            top_region = robotic_geographic['regions'][top_idx]
+            top_pct = robotic_geographic['percentages'][top_idx]
+            with st.expander("Understanding this chart"):
+                st.markdown(f"""
+                **What to look for:**
+                - Regions with notably higher robotic percentages
+                - Regional disparities in access to robotic surgery
+
+                **Key findings:**
+                - Highest regional adoption: **{top_region}** at **{top_pct:.1f}%**
+                """)
+        except Exception:
+            pass
     else:
         st.info("No geographic data available. Region information may not be included in the dataset.")
 
@@ -1033,6 +1058,23 @@ with st.expander("🏥 2. Institutional Analysis - Hospital Type vs Robotic Adop
                 hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<extra></extra>'
             )
             st.plotly_chart(fig2, use_container_width=True)
+        # Dropdown additions
+        try:
+            acad_vals = robotic_institutional['academic']['percentages']
+            types = robotic_institutional['academic']['types']
+            if acad_vals and types:
+                max_i = int(pd.Series(acad_vals).idxmax())
+                with st.expander("Understanding this chart"):
+                    st.markdown(f"""
+                    **What to look for:**
+                    - Difference between academic and non‑academic adoption
+                    - Public vs private contrast
+
+                    **Key findings:**
+                    - Highest adoption among: **{types[max_i]}** (**{acad_vals[max_i]:.1f}%**)
+                    """)
+        except Exception:
+            pass
     else:
         st.info("No institutional data available for analysis.")
 
