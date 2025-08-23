@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import plotly.express as px
+import plotly.graph_objects as go
 from navira.data_loader import get_dataframes
 from auth_wrapper import add_auth_to_page
 from navigation_utils import handle_navigation_request
@@ -191,6 +192,27 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)'
         )
+        # Overlay national averages as dashed lines (share % per year)
+        try:
+            nat_df = annual.copy()
+            if 'total_procedures_year' in nat_df.columns:
+                nat_df = nat_df[nat_df['total_procedures_year'] >= 25]
+            proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in nat_df.columns]
+            nat_year = nat_df.groupby('annee')[proc_codes].sum().reset_index()
+            nat_year['__total__'] = nat_year[proc_codes].sum(axis=1).replace(0, 1)
+            for code, name in BARIATRIC_PROCEDURE_NAMES.items():
+                if code in nat_year.columns:
+                    pct = nat_year[code] / nat_year['__total__'] * 100
+                    fig.add_trace(
+                        go.Scatter(
+                            x=nat_year['annee'], y=pct,
+                            mode='lines+markers', name=f"{name} (Nat)",
+                            line=dict(dash='dash', width=2), marker=dict(size=5)
+                        )
+                    )
+        except Exception:
+            pass
+
         st.plotly_chart(fig, use_container_width=True)
 
     # Right column: 2024 mix comparison (Hospital vs National)
@@ -272,6 +294,27 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)'
         )
+        # Overlay national approach shares as dashed lines
+        try:
+            nat_df2 = annual.copy()
+            if 'total_procedures_year' in nat_df2.columns:
+                nat_df2 = nat_df2[nat_df2['total_procedures_year'] >= 25]
+            appr_codes = [c for c in SURGICAL_APPROACH_NAMES.keys() if c in nat_df2.columns]
+            nat_year2 = nat_df2.groupby('annee')[appr_codes].sum().reset_index()
+            nat_year2['__total__'] = nat_year2[appr_codes].sum(axis=1).replace(0, 1)
+            for code, name in SURGICAL_APPROACH_NAMES.items():
+                if code in nat_year2.columns:
+                    pct = nat_year2[code] / nat_year2['__total__'] * 100
+                    fig2.add_trace(
+                        go.Scatter(
+                            x=nat_year2['annee'], y=pct,
+                            mode='lines+markers', name=f"{name} (Nat)",
+                            line=dict(dash='dash', width=2), marker=dict(size=5)
+                        )
+                    )
+        except Exception:
+            pass
+
         st.plotly_chart(fig2, use_container_width=True)
 
     with right2:
