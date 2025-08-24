@@ -11,7 +11,7 @@ make parquet
 python scripts/build_parquet.py
 ```
 
-Inputs (semicolon-delimited): `data/01_hospitals.csv`, `data/02_tab_tcn.csv`, `data/03_tab_vda.csv`, `data/04_tab_redo.csv`
+Inputs (semicolon-delimited): `data/01_hospitals.csv`, `data/06_tab_tcn_redo_new.csv`, `data/03_tab_vda_new.csv`, `data/04_tab_redo.csv`
 
 Outputs: `data/processed/establishments.parquet`, `data/processed/annual_procedures.parquet`
 
