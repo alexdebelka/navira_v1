@@ -95,8 +95,8 @@ proc_pivot = tcn.pivot_table(
 ).reset_index()
 
 # Bring yearly totals
-yearly_totals = tcn[['id', 'annee', 'TOT']].drop_duplicates()
-yearly_totals = yearly_totals.rename(columns={'TOT': 'total_procedures_year'})
+yearly_totals = tcn[['id', 'annee', 'TOT_y']].drop_duplicates()
+yearly_totals = yearly_totals.rename(columns={'TOT_y': 'total_procedures_year'})
 
 procedures_df = pd.merge(proc_pivot, yearly_totals, on=['id', 'annee'], how='left')
 

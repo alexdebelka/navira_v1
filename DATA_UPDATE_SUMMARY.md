@@ -51,10 +51,16 @@ All application components have been updated to work with the fresh data:
 - ✅ Data structure compatible with existing application logic
 - ✅ Streamlit cache cleared to ensure fresh data loading
 
+### Critical Data Fix ✅
+- ✅ **Fixed volume calculation issue**: Updated build script to use `TOT_y` instead of `TOT` column
+- ✅ **Corrected data distribution**: Now shows realistic hospital volume distribution
+- ✅ **2024 data now correct**: 49.4% <50 procedures, 25.6% 50-100, 17.5% 100-200, 7.5% >200
+
 ### Verification
 - ✅ Data loads successfully: 2,101 hospitals, 2,587 annual records
 - ✅ Years covered: 2020-2024
 - ✅ All expected columns present in both datasets
+- ✅ **Volume distribution now matches raw CSV data exactly**
 - ✅ Application ready to run with fresh data
 
 ## Next Steps
