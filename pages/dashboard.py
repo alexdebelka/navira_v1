@@ -19,6 +19,25 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- Cache Control ---
+if st.button("♻️ Clear cache"):
+    try:
+        st.cache_data.clear()
+    except Exception:
+        pass
+    try:
+        st.cache_resource.clear()
+    except Exception:
+        pass
+    st.success("Cache cleared. Reloading…")
+    try:
+        st.rerun()
+    except Exception:
+        try:
+            st.experimental_rerun()
+        except Exception:
+            pass
+
 # --- HIDE THE DEFAULT STREAMLIT NAVIGATION ---
 st.markdown("""
     <style>
@@ -156,17 +175,51 @@ hospital_annual_data = selected_hospital_all_data.set_index('annee')
 
 # Small sparkline trends for key metrics
 try:
-    # Total surgeries per year sparkline
+    # Total surgeries per year: Hospital vs National (dots only, hide Y axis)
     total_series = selected_hospital_all_data[['annee', 'total_procedures_year']].dropna()
-    if not total_series.empty:
-        spark1 = px.line(total_series, x='annee', y='total_procedures_year', markers=True)
-        spark1.update_layout(height=120, margin=dict(l=20, r=20, t=10, b=10),
-                             xaxis_title=None, yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)',
-                             paper_bgcolor='rgba(0,0,0,0)')
-        spark1.update_xaxes(showgrid=False)
-        spark1.update_yaxes(showgrid=False)
-        st.markdown("##### Total Surgeries Trend")
-        st.plotly_chart(spark1, use_container_width=True)
+    nat_df_ = annual.copy()
+    if 'total_procedures_year' in nat_df_.columns:
+        nat_df_ = nat_df_[nat_df_['total_procedures_year'] >= 25]
+    nat_series = (
+        nat_df_
+        .groupby('annee', as_index=False)['total_procedures_year']
+        .sum()
+        .dropna()
+    )
+    if not total_series.empty and not nat_series.empty:
+        fig_total = go.Figure()
+        fig_total.add_trace(
+            go.Scatter(
+                x=total_series['annee'],
+                y=total_series['total_procedures_year'],
+                mode='markers',
+                name='Hospital',
+                marker=dict(size=8)
+            )
+        )
+        fig_total.add_trace(
+            go.Scatter(
+                x=nat_series['annee'],
+                y=nat_series['total_procedures_year'],
+                mode='markers',
+                name='National',
+                marker=dict(size=8)
+            )
+        )
+        fig_total.update_layout(
+            height=120,
+            margin=dict(l=20, r=20, t=10, b=10),
+            xaxis_title=None,
+            yaxis_title=None,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            hovermode='x unified',
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+        )
+        fig_total.update_xaxes(showgrid=False)
+        fig_total.update_yaxes(showgrid=False, visible=False, showticklabels=False)
+        st.markdown("##### Total Surgeries: Hospital vs National (shape)")
+        st.plotly_chart(fig_total, use_container_width=True)
 except Exception:
     pass
 st.markdown("#### Bariatric Procedures by Year")
