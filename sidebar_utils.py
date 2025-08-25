@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 from auth import logout_user
 from navigation_utils import (
 	navigate_to_dashboard,
@@ -61,10 +62,26 @@ def add_sidebar_to_page():
 		if st.button("📊 Hospital Analysis", use_container_width=True):
 			_track("Hospital Analysis")
 			navigate_to_hospital_dashboard()
-		if st.button("💬 Assistant", use_container_width=True):
-			_track("Assistant")
-			from navigation_utils import navigate_to_assistant
-			navigate_to_assistant()
+		# Assistant feature flag
+		_assistant_enabled = False
+		try:
+			val = None
+			if hasattr(st, "secrets") and st.secrets:
+				val = (
+					st.secrets.get("features", {}).get("assistant_enabled")
+					or st.secrets.get("ASSISTANT_ENABLED")
+				)
+			if val is None:
+				val = os.environ.get("ASSISTANT_ENABLED", "0")
+			_assistant_enabled = str(val).strip().lower() in ("1", "true", "yes", "on")
+		except Exception:
+			_assistant_enabled = False
+
+		if _assistant_enabled:
+			if st.button("💬 Assistant", use_container_width=True):
+				_track("Assistant")
+				from navigation_utils import navigate_to_assistant
+				navigate_to_assistant()
 		
 		# Admin section (only for admin users)
 		if st.session_state.user['role'] == 'admin':

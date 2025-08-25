@@ -9,6 +9,21 @@ from navigation_utils import (
     navigate_to_hospital_dashboard,
 )
 
+# Feature flag: early exit if disabled to minimize cost and imports
+def _assistant_enabled() -> bool:
+    try:
+        val = None
+        if hasattr(st, "secrets") and st.secrets:
+            val = (
+                st.secrets.get("features", {}).get("assistant_enabled")
+                or st.secrets.get("ASSISTANT_ENABLED")
+            )
+        if val is None:
+            val = os.environ.get("ASSISTANT_ENABLED", "0")
+        return str(val).strip().lower() in ("1", "true", "yes", "on")
+    except Exception:
+        return False
+
 # Page config
 st.set_page_config(
     page_title="Assistant",
@@ -26,6 +41,14 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+# If disabled, show message and exit early without initializing chat/OpenAI
+if not _assistant_enabled():
+    from auth_wrapper import add_auth_to_page as _add_auth
+    _add_auth()
+    st.title("💬 Navira Assistant")
+    st.info("Assistant is temporarily disabled. Please contact the administrator if you need access.")
+    st.stop()
 
 # Ensure auth + sidebar
 add_auth_to_page()

@@ -4,6 +4,7 @@ Provides consistent navigation functions that work in both local and deployed en
 """
 
 import streamlit as st
+import os
 
 
 def navigate_to_dashboard():
@@ -38,7 +39,27 @@ def navigate_to_login():
 
 def navigate_to_assistant():
     """Navigate to the assistant chat page."""
-    st.switch_page("pages/assistant.py")
+    # Feature flag to disable Assistant without removing code
+    def _assistant_enabled() -> bool:
+        try:
+            val = None
+            if hasattr(st, "secrets") and st.secrets:
+                # Prefer secrets if available
+                val = (
+                    st.secrets.get("features", {}).get("assistant_enabled")
+                    or st.secrets.get("ASSISTANT_ENABLED")
+                )
+            if val is None:
+                val = os.environ.get("ASSISTANT_ENABLED", "0")
+            return str(val).strip().lower() in ("1", "true", "yes", "on")
+        except Exception:
+            return False
+
+    if _assistant_enabled():
+        st.switch_page("pages/assistant.py")
+    else:
+        st.warning("Assistant is temporarily disabled.")
+        st.switch_page("pages/user_dashboard.py")
 
 
 def navigate_to_page(page_name: str):
