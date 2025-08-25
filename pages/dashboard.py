@@ -136,26 +136,8 @@ with metric_col2:
     else: st.warning("➖ No SOFFCO Centre Label")
     if selected_hospital_details.get('cso') == 1: st.success("✅ Centre of Excellence (Health Ministry)")
     else: st.warning("➖ No Health Ministry Centre Label")
-st.markdown("---")
-st.header("Annual Statistics")
-hospital_annual_data = selected_hospital_all_data.set_index('annee')
-
-# Small sparkline trends for key metrics
-spark_col1, spark_col2 = st.columns(2)
-try:
-    # Total surgeries per year sparkline
-    total_series = selected_hospital_all_data[['annee', 'total_procedures_year']].dropna()
-    if not total_series.empty:
-        spark1 = px.line(total_series, x='annee', y='total_procedures_year', markers=True)
-        spark1.update_layout(height=120, margin=dict(l=20, r=20, t=10, b=10),
-                             xaxis_title=None, yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)',
-                             paper_bgcolor='rgba(0,0,0,0)')
-        spark1.update_xaxes(showgrid=False)
-        spark1.update_yaxes(showgrid=False)
-        spark_col1.markdown("##### Total Surgeries Trend")
-        spark_col1.plotly_chart(spark1, use_container_width=True)
-
-    # Robotic share per year sparkline (if ROB exists)
+    
+    # Robotic share trend chart moved from Annual Statistics
     if 'ROB' in selected_hospital_all_data.columns:
         rob_df = selected_hospital_all_data[['annee', 'ROB', 'total_procedures_year']].dropna()
         if not rob_df.empty:
@@ -166,8 +148,25 @@ try:
                                  paper_bgcolor='rgba(0,0,0,0)')
             spark2.update_xaxes(showgrid=False)
             spark2.update_yaxes(showgrid=False)
-            spark_col2.markdown("##### Robotic Share Trend (%)")
-            spark_col2.plotly_chart(spark2, use_container_width=True)
+            st.markdown("##### Robotic Share Trend (%)")
+            st.plotly_chart(spark2, use_container_width=True)
+st.markdown("---")
+st.header("Annual Statistics")
+hospital_annual_data = selected_hospital_all_data.set_index('annee')
+
+# Small sparkline trends for key metrics
+try:
+    # Total surgeries per year sparkline
+    total_series = selected_hospital_all_data[['annee', 'total_procedures_year']].dropna()
+    if not total_series.empty:
+        spark1 = px.line(total_series, x='annee', y='total_procedures_year', markers=True)
+        spark1.update_layout(height=120, margin=dict(l=20, r=20, t=10, b=10),
+                             xaxis_title=None, yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)',
+                             paper_bgcolor='rgba(0,0,0,0)')
+        spark1.update_xaxes(showgrid=False)
+        spark1.update_yaxes(showgrid=False)
+        st.markdown("##### Total Surgeries Trend")
+        st.plotly_chart(spark1, use_container_width=True)
 except Exception:
     pass
 st.markdown("#### Bariatric Procedures by Year")
