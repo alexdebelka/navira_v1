@@ -186,28 +186,30 @@ try:
         .sum()
         .dropna()
     )
-    if not total_series.empty and not nat_series.empty:
+    if not total_series.empty or not nat_series.empty:
         fig_total = go.Figure()
-        fig_total.add_trace(
-            go.Scatter(
-                x=total_series['annee'],
-                y=total_series['total_procedures_year'],
-                mode='markers',
-                name='Hospital',
-                marker=dict(size=8)
+        if not total_series.empty:
+            fig_total.add_trace(
+                go.Scatter(
+                    x=total_series['annee'],
+                    y=total_series['total_procedures_year'],
+                    mode='lines+markers',
+                    name='Hospital',
+                    marker=dict(size=8)
+                )
             )
-        )
-        fig_total.add_trace(
-            go.Scatter(
-                x=nat_series['annee'],
-                y=nat_series['total_procedures_year'],
-                mode='markers',
-                name='National',
-                marker=dict(size=8)
+        if not nat_series.empty:
+            fig_total.add_trace(
+                go.Scatter(
+                    x=nat_series['annee'],
+                    y=nat_series['total_procedures_year'],
+                    mode='lines+markers',
+                    name='National',
+                    marker=dict(size=8)
+                )
             )
-        )
         fig_total.update_layout(
-            height=120,
+            height=320,
             margin=dict(l=20, r=20, t=10, b=10),
             xaxis_title=None,
             yaxis_title=None,
@@ -220,6 +222,8 @@ try:
         fig_total.update_yaxes(showgrid=False, visible=False, showticklabels=False)
         st.markdown("##### Total Surgeries: Hospital vs National (shape)")
         st.plotly_chart(fig_total, use_container_width=True)
+    else:
+        st.info("No total surgeries data available to plot.")
 except Exception:
     pass
 st.markdown("#### Bariatric Procedures by Year")
