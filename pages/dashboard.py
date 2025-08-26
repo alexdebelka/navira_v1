@@ -277,7 +277,7 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
     with left:
         # Consistent color palette across all bariatric charts
         PROC_COLORS = {
-            'Sleeve': '#f472b6',          # pink
+            'Sleeve': '#ffae91',          # pink
             'Gastric Bypass': '#60a5fa',  # blue
             'Other': '#fbbf24'            # amber
         }
