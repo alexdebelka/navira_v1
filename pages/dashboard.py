@@ -434,13 +434,19 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
         _tot2 = approach_df_melted.groupby('annee')['Count'].sum().replace(0, 1)
         approach_share = approach_df_melted.copy()
         approach_share['Share'] = approach_share['Count'] / approach_share['annee'].map(_tot2) * 100
+        APPROACH_COLORS = {
+            'Robotic': '#FF7518',
+            'Coelioscopy': '#50C878',
+            'Open Surgery': '#8e4585'
+        }
         fig2 = px.bar(
             approach_share,
             x='annee',
             y='Share',
             color='Approach',
             title='Surgical Approaches by Year (share %)',
-            barmode='stack'
+            barmode='stack',
+            color_discrete_map=APPROACH_COLORS
         )
         fig2.update_layout(
             xaxis_title='Year',
@@ -450,26 +456,7 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)'
         )
-        # Overlay national approach shares as dashed lines
-        try:
-            nat_df2 = annual.copy()
-            if 'total_procedures_year' in nat_df2.columns:
-                nat_df2 = nat_df2[nat_df2['total_procedures_year'] >= 25]
-            appr_codes = [c for c in SURGICAL_APPROACH_NAMES.keys() if c in nat_df2.columns]
-            nat_year2 = nat_df2.groupby('annee')[appr_codes].sum().reset_index()
-            nat_year2['__total__'] = nat_year2[appr_codes].sum(axis=1).replace(0, 1)
-            for code, name in SURGICAL_APPROACH_NAMES.items():
-                if code in nat_year2.columns:
-                    pct = nat_year2[code] / nat_year2['__total__'] * 100
-                    fig2.add_trace(
-                        go.Scatter(
-                            x=nat_year2['annee'], y=pct,
-                            mode='lines+markers', name=f"{name} (Nat)",
-                            line=dict(dash='dash', width=2), marker=dict(size=5)
-                        )
-                    )
-        except Exception:
-            pass
+        # Removed dashed national overlays per request
 
         st.plotly_chart(fig2, use_container_width=True)
 
@@ -490,7 +477,7 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
                             nat_long2.append({'annee': int(r['annee']), 'Approach': name, 'Share': r[code]/total*100})
                 nat_share2 = pd.DataFrame(nat_long2)
                 if not nat_share2.empty:
-                    nat_fig2 = px.bar(nat_share2, x='annee', y='Share', color='Approach', title='National approaches (share %)', barmode='stack')
+                    nat_fig2 = px.bar(nat_share2, x='annee', y='Share', color='Approach', title='National approaches (share %)', barmode='stack', color_discrete_map=APPROACH_COLORS)
                     nat_fig2.update_layout(height=360, xaxis_title='Year', yaxis_title='% of surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                     nat_fig2.update_traces(opacity=0.85)
                     st.plotly_chart(nat_fig2, use_container_width=True)
@@ -517,16 +504,41 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
                 n_tot = sum(n_counts.values()) or 1
                 n_pct = {k: (v / n_tot * 100) for k, v in n_counts.items()}
 
-                rows = []
-                for name in SURGICAL_APPROACH_NAMES.values():
-                    if name in h_pct or name in n_pct:
-                        rows.append({'Approach': name, 'Hospital %': h_pct.get(name, 0), 'National %': n_pct.get(name, 0)})
-                dfc = pd.DataFrame(rows)
-                if not dfc.empty:
-                    long = dfc.melt('Approach', var_name='Source', value_name='Percent')
-                    cmp = px.bar(long, x='Percent', y='Approach', color='Source', orientation='h', title='2024 Approach Mix: Hospital vs National')
-                    cmp.update_layout(height=360, xaxis_title='% of surgeries', yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(cmp, use_container_width=True)
+                # Build custom grouped bars with light/dark approach colors
+                ORDER = ['Robotic', 'Coelioscopy', 'Open Surgery']
+                LIGHT = {
+                    'Robotic': '#FF7518',      # hospital
+                    'Coelioscopy': '#50C878',
+                    'Open Surgery': '#8e4585'
+                }
+                DARK = {
+                    'Robotic': '#e06712',      # national (slightly darker pastel)
+                    'Coelioscopy': '#3fb96f',
+                    'Open Surgery': '#73376b'
+                }
+
+                mix2 = go.Figure()
+                for appr in ORDER:
+                    mix2.add_trace(
+                        go.Bar(
+                            y=[appr], x=[h_pct.get(appr, 0)], name='Hospital %', orientation='h',
+                            marker=dict(color=LIGHT[appr]),
+                            hovertemplate=f'Approach: {appr}<br>Hospital: %{{x:.0f}}%<extra></extra>'
+                        )
+                    )
+                    mix2.add_trace(
+                        go.Bar(
+                            y=[appr], x=[n_pct.get(appr, 0)], name='National %', orientation='h',
+                            marker=dict(color=DARK[appr]),
+                            hovertemplate=f'Approach: {appr}<br>National: %{{x:.0f}}%<extra></extra>'
+                        )
+                    )
+                mix2.update_layout(
+                    barmode='group', height=360, title='2024 Approach Mix: Hospital vs National',
+                    xaxis_title='% of surgeries', yaxis_title=None,
+                    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+                )
+                st.plotly_chart(mix2, use_container_width=True)
                     # National mix text
                     try:
                         open_pct = n_pct.get('Open Surgery', 0)
