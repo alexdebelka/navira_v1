@@ -512,9 +512,9 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
                     'Open Surgery': '#8e4585'
                 }
                 DARK = {
-                    'Robotic': '#e06712',      # national (slightly darker pastel)
-                    'Coelioscopy': '#3fb96f',
-                    'Open Surgery': '#73376b'
+                    'Robotic': '#d47e30',      # national (slightly darker pastel)
+                    'Coelioscopy': '#2c5f34',
+                    'Open Surgery': '#722F37'
                 }
 
                 mix2 = go.Figure()
