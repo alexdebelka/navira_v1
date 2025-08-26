@@ -267,14 +267,20 @@ if not bariatric_df_melted.empty:
         if name.lower().startswith('gastric bypass'):
             return 'Gastric Bypass'
         return 'Other'
-    bariatric_df_melted['Procedure3'] = bariatric_df_melted['Procedure'].map(_proc_cat)
+    bariatric_df_melted['Procedures'] = bariatric_df_melted['Procedure'].map(_proc_cat)
     bariatric_df_melted = (bariatric_df_melted
-                           .groupby(['annee', 'Procedure3'], as_index=False)['Count']
+                           .groupby(['annee', 'Procedures'], as_index=False)['Count']
                            .sum())
 
 if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
     left, right = st.columns([2, 1])
     with left:
+        # Consistent color palette across all bariatric charts
+        PROC_COLORS = {
+            'Sleeve': '#f472b6',          # pink
+            'Gastric Bypass': '#60a5fa',  # blue
+            'Other': '#fbbf24'            # amber
+        }
         # Compute share per year explicitly to avoid barnorm dependency
         _totals = bariatric_df_melted.groupby('annee')['Count'].sum().replace(0, 1)
         bariatric_share = bariatric_df_melted.copy()
@@ -283,7 +289,8 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
         bariatric_share,
         x='annee',
         y='Share',
-        color='Procedure3',
+        color='Procedures',
+        color_discrete_map=PROC_COLORS,
         title='Bariatric Procedures by Year (share %)',
         barmode='stack'
         )
@@ -295,33 +302,9 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)'
         )
-        # Overlay national averages as dashed lines (share % per year)
-        try:
-            nat_df = annual.copy()
-            if 'total_procedures_year' in nat_df.columns:
-                nat_df = nat_df[nat_df['total_procedures_year'] >= 25]
-            proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in nat_df.columns]
-            nat_year = nat_df.groupby('annee')[proc_codes].sum().reset_index()
-            # Build three-category national shares per year
-            def _row_pct(row, cols):
-                total = row[cols].sum()
-                return 0 if total == 0 else (row / total * 100)
-            nat_year['Sleeve'] = nat_year.get('SLE', 0)
-            nat_year['Gastric Bypass'] = nat_year.get('BPG', 0)
-            other_cols = [c for c in proc_codes if c not in ['SLE', 'BPG']]
-            nat_year['Other'] = nat_year[other_cols].sum(axis=1) if other_cols else 0
-            nat_year['__total__'] = nat_year[['Sleeve', 'Gastric Bypass', 'Other']].sum(axis=1).replace(0, 1)
-            for cat in ['Sleeve', 'Gastric Bypass', 'Other']:
-                pct = nat_year[cat] / nat_year['__total__'] * 100
-                fig.add_trace(
-                    go.Scatter(
-                        x=nat_year['annee'], y=pct,
-                        mode='lines+markers', name=f"{cat} (Nat)",
-                        line=dict(dash='dash', width=2), marker=dict(size=5)
-                    )
-                )
-        except Exception:
-            pass
+        # Round hover values to whole percentages
+        fig.update_traces(hovertemplate='Year: %{x}<br>%{fullData.name}: %{y:.0f}%<extra></extra>')
+        fig.update_yaxes(range=[0, 100], tick0=0, dtick=20)
 
         st.plotly_chart(fig, use_container_width=True)
 
@@ -342,12 +325,13 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
                     bypass = r.get('BPG', 0)
                     other = sum(r[c] for c in proc_codes if c not in ['SLE', 'BPG'])
                     for label, val in [("Sleeve", sleeve), ("Gastric Bypass", bypass), ("Other", other)]:
-                        nat_long.append({'annee': int(r['annee']), 'Procedure3': label, 'Share': val/total*100})
+                        nat_long.append({'annee': int(r['annee']), 'Procedures': label, 'Share': val/total*100})
                 nat_share_df = pd.DataFrame(nat_long)
                 if not nat_share_df.empty:
-                    nat_fig = px.bar(nat_share_df, x='annee', y='Share', color='Procedure3', title='National procedures (share %)', barmode='stack')
+                    nat_fig = px.bar(nat_share_df, x='annee', y='Share', color='Procedures', title='National procedures (share %)', barmode='stack', color_discrete_map=PROC_COLORS)
                     nat_fig.update_layout(height=360, xaxis_title='Year', yaxis_title='% of procedures', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                    nat_fig.update_traces(opacity=0.85)
+                    nat_fig.update_traces(opacity=0.95, hovertemplate='Year: %{x}<br>%{fullData.name}: %{y:.0f}%<extra></extra>')
+                    nat_fig.update_yaxes(range=[0, 100], tick0=0, dtick=20)
                     st.plotly_chart(nat_fig, use_container_width=True)
             except Exception:
                 pass
@@ -387,15 +371,42 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
                     'Other': nat_other / nat_total * 100
                 }
 
-                comp_rows = []
-                for name in ['Sleeve', 'Gastric Bypass', 'Other']:
-                    comp_rows.append({'Procedure': name, 'Hospital %': hosp_pct3.get(name, 0), 'National %': nat_pct3.get(name, 0)})
-                comp_df = pd.DataFrame(comp_rows)
-                if not comp_df.empty:
-                    comp_long = comp_df.melt('Procedure', var_name='Source', value_name='Percent')
-                    comp_fig = px.bar(comp_long, x='Percent', y='Procedure', color='Source', orientation='h', title='2024 Procedure Mix: Hospital vs National')
-                    comp_fig.update_layout(height=360, xaxis_title='% of procedures', yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(comp_fig, use_container_width=True)
+                # Build custom grouped horizontal bars with light/dark procedure colors
+                PROC_ORDER = ['Sleeve', 'Gastric Bypass', 'Other']
+                LIGHT = {
+                    'Sleeve': '#f8a8c8',
+                    'Gastric Bypass': '#9ec5ff',
+                    'Other': '#ffd48a'
+                }
+                DARK = {
+                    'Sleeve': '#db2777',
+                    'Gastric Bypass': '#2563eb',
+                    'Other': '#d97706'
+                }
+
+                mix_fig = go.Figure()
+                for proc in PROC_ORDER:
+                    mix_fig.add_trace(
+                        go.Bar(
+                            y=[proc], x=[hosp_pct3.get(proc, 0)], name='Hospital %',
+                            orientation='h', marker=dict(color=LIGHT[proc]),
+                            hovertemplate=f'Procedure: {proc}<br>Hospital: %{{x:.0f}}%<extra></extra>'
+                        )
+                    )
+                    mix_fig.add_trace(
+                        go.Bar(
+                            y=[proc], x=[nat_pct3.get(proc, 0)], name='National %',
+                            orientation='h', marker=dict(color=DARK[proc]),
+                            hovertemplate=f'Procedure: {proc}<br>National: %{{x:.0f}}%<extra></extra>'
+                        )
+                    )
+
+                mix_fig.update_layout(
+                    barmode='group', height=360, title='2024 Procedure Mix: Hospital vs National',
+                    xaxis_title='% of procedures', yaxis_title=None,
+                    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+                )
+                st.plotly_chart(mix_fig, use_container_width=True)
                     st.markdown(f"National mix — Sleeve: {nat_pct3['Sleeve']:.1f}%, Gastric Bypass: {nat_pct3['Gastric Bypass']:.1f}%, Other: {nat_pct3['Other']:.1f}%")
             except Exception:
                 pass
