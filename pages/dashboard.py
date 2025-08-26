@@ -539,14 +539,14 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
                     plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
                 )
                 st.plotly_chart(mix2, use_container_width=True)
-                    # National mix text
-                    try:
-                        open_pct = n_pct.get('Open Surgery', 0)
-                        coel_pct = n_pct.get('Coelioscopy', 0)
-                        rob_pct = n_pct.get('Robotic', 0)
-                        st.markdown(f"National mix — Open: {open_pct:.1f}%, Coelioscopy: {coel_pct:.1f}%, Robotic: {rob_pct:.1f}%")
-                    except Exception:
-                        pass
+                # National mix text
+                try:
+                    open_pct = n_pct.get('Open Surgery', 0)
+                    coel_pct = n_pct.get('Coelioscopy', 0)
+                    rob_pct = n_pct.get('Robotic', 0)
+                    st.markdown(f"National mix — Open: {open_pct:.1f}%, Coelioscopy: {coel_pct:.1f}%, Robotic: {rob_pct:.1f}%")
+                except Exception:
+                    pass
             except Exception:
                 pass
 else:
