@@ -186,52 +186,55 @@ try:
         .sum()
         .dropna()
     )
-    if not total_series.empty or not nat_series.empty:
-        fig_total = go.Figure()
-        if not total_series.empty:
-            hosp_vals = total_series['total_procedures_year'].astype(float)
-            hosp_min = float(hosp_vals.min()) if not hosp_vals.empty else 0.0
-            hosp_max = float(hosp_vals.max()) if not hosp_vals.empty else 0.0
-            hosp_range = (hosp_max - hosp_min) if (hosp_max - hosp_min) != 0 else 1.0
-            hosp_shape = (hosp_vals - hosp_min) / hosp_range
-            fig_total.add_trace(
-                go.Scatter(
-                    x=total_series['annee'],
-                    y=hosp_shape,
-                    mode='lines+markers',
-                    name='Hospital',
-                    marker=dict(size=8)
-                )
+    if not total_series.empty:
+        fig_hosp = go.Figure(
+            go.Scatter(
+                x=total_series['annee'].astype(str),
+                y=total_series['total_procedures_year'],
+                mode='lines+markers',
+                name='Hospital',
+                marker=dict(size=8),
+                hovertemplate='Year: %{x}<br>Total surgeries: %{y:,}<extra></extra>'
             )
-        if not nat_series.empty:
-            nat_vals = nat_series['total_procedures_year'].astype(float)
-            nat_min = float(nat_vals.min()) if not nat_vals.empty else 0.0
-            nat_max = float(nat_vals.max()) if not nat_vals.empty else 0.0
-            nat_range = (nat_max - nat_min) if (nat_max - nat_min) != 0 else 1.0
-            nat_shape = (nat_vals - nat_min) / nat_range
-            fig_total.add_trace(
-                go.Scatter(
-                    x=nat_series['annee'],
-                    y=nat_shape,
-                    mode='lines+markers',
-                    name='National',
-                    marker=dict(size=8)
-                )
-            )
-        fig_total.update_layout(
-            height=320,
+        )
+        fig_hosp.update_layout(
+            height=300,
             margin=dict(l=20, r=20, t=10, b=10),
             xaxis_title=None,
             yaxis_title=None,
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             hovermode='x unified',
-            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+            showlegend=False
         )
-        fig_total.update_xaxes(showgrid=False)
-        fig_total.update_yaxes(showgrid=False, visible=False, showticklabels=False)
-        st.markdown("##### Total Surgeries: Hospital vs National (shape)")
-        st.plotly_chart(fig_total, use_container_width=True)
+        fig_hosp.update_xaxes(showgrid=False)
+        st.markdown("##### Total Surgeries — Hospital")
+        st.plotly_chart(fig_hosp, use_container_width=True)
+
+    if not nat_series.empty:
+        fig_nat = go.Figure(
+            go.Scatter(
+                x=nat_series['annee'].astype(str),
+                y=nat_series['total_procedures_year'],
+                mode='lines+markers',
+                name='National',
+                marker=dict(size=8),
+                hovertemplate='Year: %{x}<br>Total surgeries: %{y:,}<extra></extra>'
+            )
+        )
+        fig_nat.update_layout(
+            height=300,
+            margin=dict(l=20, r=20, t=10, b=10),
+            xaxis_title=None,
+            yaxis_title=None,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            hovermode='x unified',
+            showlegend=False
+        )
+        fig_nat.update_xaxes(showgrid=False)
+        st.markdown("##### Total Surgeries — National")
+        st.plotly_chart(fig_nat, use_container_width=True)
     else:
         st.info("No total surgeries data available to plot.")
 except Exception:
