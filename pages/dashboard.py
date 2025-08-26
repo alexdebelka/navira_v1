@@ -374,14 +374,14 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
                 # Build custom grouped horizontal bars with light/dark procedure colors
                 PROC_ORDER = ['Sleeve', 'Gastric Bypass', 'Other']
                 LIGHT = {
-                    'Sleeve': '#f8a8c8',
-                    'Gastric Bypass': '#9ec5ff',
-                    'Other': '#ffd48a'
+                    'Sleeve': '#ffae91',
+                    'Gastric Bypass': '#60a5fa',
+                    'Other': '#fbbf24'
                 }
                 DARK = {
-                    'Sleeve': '#db2777',
-                    'Gastric Bypass': '#2563eb',
-                    'Other': '#d97706'
+                    'Sleeve': '#CC8B74',
+                    'Gastric Bypass': '#4C84C8',
+                    'Other': '#C8981C'
                 }
 
                 mix_fig = go.Figure()
