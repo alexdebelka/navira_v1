@@ -189,20 +189,30 @@ try:
     if not total_series.empty or not nat_series.empty:
         fig_total = go.Figure()
         if not total_series.empty:
+            hosp_vals = total_series['total_procedures_year'].astype(float)
+            hosp_min = float(hosp_vals.min()) if not hosp_vals.empty else 0.0
+            hosp_max = float(hosp_vals.max()) if not hosp_vals.empty else 0.0
+            hosp_range = (hosp_max - hosp_min) if (hosp_max - hosp_min) != 0 else 1.0
+            hosp_shape = (hosp_vals - hosp_min) / hosp_range
             fig_total.add_trace(
                 go.Scatter(
                     x=total_series['annee'],
-                    y=total_series['total_procedures_year'],
+                    y=hosp_shape,
                     mode='lines+markers',
                     name='Hospital',
                     marker=dict(size=8)
                 )
             )
         if not nat_series.empty:
+            nat_vals = nat_series['total_procedures_year'].astype(float)
+            nat_min = float(nat_vals.min()) if not nat_vals.empty else 0.0
+            nat_max = float(nat_vals.max()) if not nat_vals.empty else 0.0
+            nat_range = (nat_max - nat_min) if (nat_max - nat_min) != 0 else 1.0
+            nat_shape = (nat_vals - nat_min) / nat_range
             fig_total.add_trace(
                 go.Scatter(
                     x=nat_series['annee'],
-                    y=nat_series['total_procedures_year'],
+                    y=nat_shape,
                     mode='lines+markers',
                     name='National',
                     marker=dict(size=8)
