@@ -407,7 +407,7 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
                     plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
                 )
                 st.plotly_chart(mix_fig, use_container_width=True)
-                    st.markdown(f"National mix — Sleeve: {nat_pct3['Sleeve']:.1f}%, Gastric Bypass: {nat_pct3['Gastric Bypass']:.1f}%, Other: {nat_pct3['Other']:.1f}%")
+                st.markdown(f"National mix — Sleeve: {nat_pct3['Sleeve']:.1f}%, Gastric Bypass: {nat_pct3['Gastric Bypass']:.1f}%, Other: {nat_pct3['Other']:.1f}%")
             except Exception:
                 pass
 else:
