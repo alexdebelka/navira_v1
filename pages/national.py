@@ -647,14 +647,22 @@ with col1:
         st.plotly_chart(fig, use_container_width=True)
 
         # Procedure mix trends (shares) — below the bar plot
+        # Update title and tooltip based on toggle state
+        if toggle_2024_only:
+            time_period = "2024"
+            tooltip_text = "This chart shows the procedure mix breakdown for 2024 data only. Each segment represents the percentage share of Sleeve, Gastric Bypass, and Other procedures."
+        else:
+            time_period = "2020–2024"
+            tooltip_text = "Stacked area shows annual shares of Sleeve, Gastric Bypass, and Other across eligible hospitals. Each year sums to 100%."
+        
         st.markdown(
-            """
+            f"""
             <div class=\"nv-info-wrap\">
-              <div class=\"nv-h3\">Procedure Mix Trends (2020–2024)</div>
+              <div class=\"nv-h3\">Procedure Mix Trends ({time_period})</div>
               <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
                 <div class=\"nv-tooltiptext\">
                   <b>Understanding this chart:</b><br/>
-                  Stacked area shows annual shares of Sleeve, Gastric Bypass, and Other across eligible hospitals. Each year sums to 100%.
+                  {tooltip_text}
                 </div>
               </div>
             </div>
@@ -669,7 +677,13 @@ with col1:
         # Check if required columns exist (note: 'annee' is renamed to 'year' in data loading)
         year_col = 'year' if 'year' in df.columns else 'annee'
         if year_col in df.columns and available:
-            for year in sorted(df[year_col].unique()):
+            # Filter years based on toggle state
+            if toggle_2024_only:
+                years_to_process = [2024]
+            else:
+                years_to_process = sorted(df[year_col].unique())
+            
+            for year in years_to_process:
                 yearly = df[df[year_col] == year]
                 if yearly.empty:
                     continue
@@ -686,35 +700,80 @@ with col1:
         proc_trend_df = pd.DataFrame(proc_trend_rows)
         if not proc_trend_df.empty:
             proc_colors = {'Sleeve': '#4C84C8', 'Gastric Bypass': '#7aa7f7', 'Other': '#f59e0b'}
-            proc_area = px.area(
-                    proc_trend_df, x='Year', y='Share', color='Procedure',
-                    title='Procedure Mix Trends Over Time',
-                    color_discrete_map=proc_colors,
-                    category_orders={'Procedure': ['Sleeve', 'Gastric Bypass', 'Other']}
+            
+            # Choose chart type based on toggle state
+            if toggle_2024_only:
+                # For 2024 only, show a pie chart instead of area chart
+                fig = px.pie(
+                    proc_trend_df, 
+                    values='Share', 
+                    names='Procedure',
+                    title=f'Procedure Mix ({time_period})',
+                    color_discrete_map=proc_colors
                 )
-            proc_area.update_layout(
-                height=380, 
-                xaxis_title='Year', 
-                yaxis_title='% of procedures', 
-                plot_bgcolor='rgba(0,0,0,0)', 
-                paper_bgcolor='rgba(0,0,0,0)'
-            )
-            proc_area.update_traces(line=dict(width=0), opacity=0.9)
-            st.plotly_chart(proc_area, use_container_width=True)
+                fig.update_layout(
+                    height=380,
+                    showlegend=True,
+                    font=dict(size=12)
+                )
+                fig.update_traces(
+                    hovertemplate='<b>%{label}</b><br>Share: %{value:.1f}%<extra></extra>',
+                    textposition='outside',
+                    textinfo='label+percent'
+                )
+            else:
+                # For multi-year data, show area chart
+                proc_area = px.area(
+                        proc_trend_df, x='Year', y='Share', color='Procedure',
+                        title=f'Procedure Mix Trends Over Time ({time_period})',
+                        color_discrete_map=proc_colors,
+                        category_orders={'Procedure': ['Sleeve', 'Gastric Bypass', 'Other']}
+                    )
+                proc_area.update_layout(
+                    height=380, 
+                    xaxis_title='Year', 
+                    yaxis_title='% of procedures', 
+                    plot_bgcolor='rgba(0,0,0,0)', 
+                    paper_bgcolor='rgba(0,0,0,0)'
+                )
+                proc_area.update_traces(line=dict(width=0), opacity=0.9)
+                fig = proc_area
+            
+            st.plotly_chart(fig, use_container_width=True)
             
             with st.expander("What to look for and key findings"):
                 try:
-                    last = proc_trend_df[proc_trend_df['Year']==proc_trend_df['Year'].max()].sort_values('Share', ascending=False).iloc[0]
-                    st.markdown(f"""
-                    **What to look for:**
-                    - Stability vs shifts in procedure mix
-                    - Which procedures gain or lose share across years
+                    if toggle_2024_only:
+                        # For 2024 only data, show breakdown analysis
+                        total_procedures = proc_trend_df['Share'].sum()
+                        dominant = proc_trend_df.sort_values('Share', ascending=False).iloc[0]
+                        st.markdown(f"""
+                        **What to look for:**
+                        - Relative size of each procedure type segment
+                        - Dominant procedure type in 2024
+                        - Share distribution between major procedures
 
-                    **Key findings:**
-                    - Dominant procedure in {int(proc_trend_df['Year'].max())}: **{last['Procedure']}** (~{last['Share']:.0f}%)
-                    """)
+                        **Key findings:**
+                        - Dominant procedure in 2024: **{dominant['Procedure']}** (~{dominant['Share']:.0f}%)
+                        - Procedure breakdown: {', '.join([f"**{row['Procedure']}**: {row['Share']:.1f}%" for _, row in proc_trend_df.sort_values('Share', ascending=False).iterrows()])}
+                        """)
+                    else:
+                        # For multi-year data, show trend analysis
+                        last = proc_trend_df[proc_trend_df['Year']==proc_trend_df['Year'].max()].sort_values('Share', ascending=False).iloc[0]
+                        st.markdown(f"""
+                        **What to look for:**
+                        - Stability vs shifts in procedure mix
+                        - Which procedures gain or lose share across years
+                        - Year-over-year trends in procedure dominance
+
+                        **Key findings:**
+                        - Dominant procedure in {int(proc_trend_df['Year'].max())}: **{last['Procedure']}** (~{last['Share']:.0f}%)
+                        """)
                 except Exception:
-                    st.markdown("Review the stacked areas for dominant procedures each year.")
+                    if toggle_2024_only:
+                        st.markdown("Review the pie chart segments for procedure distribution in 2024.")
+                    else:
+                        st.markdown("Review the stacked areas for dominant procedures each year.")
         else:
             st.info("Procedure trends chart unavailable - insufficient data or missing columns.")
 
