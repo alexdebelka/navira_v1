@@ -153,21 +153,8 @@ small_vol_trend = "More" if small_vol_2024 > small_vol_baseline else "Fewer"
 med_low_trend = "increased" if med_low_2024 > med_low_baseline else "decreased"
 med_high_trend = "increased" if med_high_2024 > med_high_baseline else "decreased"
 
-# Dropdown with full description
-with st.expander("Understanding this chart"):
-    st.markdown(
-        """
-        This chart shows how hospitals are distributed across different volume categories based on their annual bariatric surgery procedures. The main bars (blue) represent the average number of hospitals in each volume category during the 2020–2023 period, serving as a baseline for comparison.
-
-        **Volume Categories:**
-        - <50 procedures/year: Small‑volume hospitals (typically smaller facilities or those just starting bariatric programs)
-        - 50–100 procedures/year: Medium‑low volume hospitals
-        - 100–200 procedures/year: Medium‑high volume hospitals
-        - >200 procedures/year: High‑volume hospitals (typically specialized centers of excellence)
-
-        When you toggle "Show 2024 comparison", the overlay bars (yellow) show the actual 2024 distribution, allowing you to see how hospital volumes have changed compared to the previous 4‑year average.
-        """
-    )
+# Dropdown with only What to look for + Key findings (understanding lives in the info tooltip above)
+with st.expander("What to look for and key findings"):
     st.markdown(
         f"""
         **What to look for:**
@@ -329,10 +316,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-with st.expander("Understanding this chart"):
-    # Static explanation
-    st.markdown("This stacked bar chart shows the distribution of hospital labels (SOFFCO and CSO) across different affiliation types. Each bar represents an affiliation category, and the colored segments within each bar show how many hospitals have specific label combinations.")
-
+with st.expander("What to look for and key findings"):
     # Computed key findings from label_breakdown
     try:
         totals = {k: 0 for k in ['SOFFCO Label', 'CSO Label', 'Both', 'None']}
@@ -442,18 +426,28 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-with st.expander("Understanding this chart"):
-    st.markdown(
-        """
-        This stacked area chart shows how hospital affiliations have evolved from 2020 to 2024. The total height of the chart at any point represents the total number of hospitals, while the colored segments show the proportion of each affiliation type.
+with st.expander("What to look for and key findings"):
+    try:
+        # Compute key changes 2020 -> 2024
+        base_year = 2020
+        last_year = 2024
+        diffs = {cat: affiliation_trends[cat].get(last_year, 0) - affiliation_trends[cat].get(base_year, 0) for cat in ['Public – Univ.', 'Public – Non-Acad.', 'Private – For-profit', 'Private – Not-for-profit']}
+        top_inc_cat = max(diffs.items(), key=lambda x: x[1])[0] if diffs else None
+        top_dec_cat = min(diffs.items(), key=lambda x: x[1])[0] if diffs else None
+        st.markdown(
+            f"""
+            **What to look for:**
+            - Shifts in affiliation mix between 2020 and 2024
+            - Whether public or private segments gained share
+            - Academic vs non‑academic trajectories
 
-        **Affiliation Types:**
-        - Public – Univ.: Public hospitals with university/academic affiliation
-        - Public – Non‑Acad.: Public hospitals without academic affiliation
-        - Private – For‑profit: Private for‑profit hospitals
-        - Private – Not‑for‑profit: Private not‑for‑profit hospitals
-        """
-    )
+            **Key findings:**
+            - Largest increase: **{top_inc_cat if top_inc_cat else 'n/a'}** ({diffs.get(top_inc_cat, 0):+d})
+            - Largest decrease: **{top_dec_cat if top_dec_cat else 'n/a'}** ({diffs.get(top_dec_cat, 0):+d})
+            """
+        )
+    except Exception:
+        st.markdown("**What to look for:** Compare the stacked areas across years to spot increases or decreases by affiliation.\n\n**Key findings:** Data sufficient to compute detailed deltas was not available.")
 
 # Removed previous blue info box in favor of hover tooltip + dropdown
 
@@ -545,7 +539,7 @@ with col1:
             """,
             unsafe_allow_html=True
         )
-        with st.expander("Understanding this chart"):
+        with st.expander("What to look for and key findings"):
             st.markdown(
                 """
                 This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.
@@ -591,7 +585,7 @@ with col1:
             """,
             unsafe_allow_html=True
         )
-        with st.expander("Understanding this chart"):
+        with st.expander("What to look for and key findings"):
             st.markdown(
                 """
                 This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.
@@ -623,13 +617,13 @@ with col1:
     if not chart_df.empty:
         # (Removed previous info block in favor of hover tooltip)
         
+        # Use a single blue color for all bars to emphasize totals
         fig = px.bar(
             chart_df,
             x='Procedure',
             y='Value',
             title=chart_title,
-            color='Value',
-            color_continuous_scale='Blues',
+            color_discrete_sequence=['#4C84C8'],
             custom_data=['Percentage']
         )
         fig.update_layout(
@@ -666,7 +660,7 @@ with col1:
                     )
         except Exception:
             pass
-        with st.expander("Understanding this chart"):
+        with st.expander("What to look for and key findings"):
             st.markdown("""
             **What to look for:**
             - Differences in weighted robotic% between volume bins
@@ -780,7 +774,7 @@ if approach_mix_2024:
             robotic_cnt = int(pie_df[pie_df['Approach'] == 'Robotic']['Count'].sum()) if 'Robotic' in pie_df['Approach'].values else 0
             robotic_share = (robotic_cnt / total_approaches * 100) if total_approaches > 0 else 0
             top_row = pie_df.sort_values('Count', ascending=False).iloc[0]
-            with st.expander("Understanding this chart"):
+            with st.expander("What to look for and key findings"):
                 st.markdown(f"""
                 **What to look for:**
                 - Dominant approach segment size
@@ -853,7 +847,7 @@ with col1:
         rob_start = int(approach_trends['robotic'].get(first_year, 0))
         rob_end = int(approach_trends['robotic'].get(last_year, 0))
         pct_rob_2024 = (approach_trends['robotic'].get(2024, 0) / max(approach_trends['all'].get(2024, 1), 1)) * 100 if approach_trends['all'].get(2024, 0) else 0
-        with st.expander("Understanding this chart"):
+        with st.expander("What to look for and key findings"):
             st.markdown(f"""
             **What to look for:**
             - Year‑over‑year growth or dips
@@ -1032,7 +1026,7 @@ with st.expander("🗺️ 1. Geographic Analysis - Regional Robotic Adoption"):
             top_idx = int(pd.Series(robotic_geographic['percentages']).idxmax())
             top_region = robotic_geographic['regions'][top_idx]
             top_pct = robotic_geographic['percentages'][top_idx]
-            with st.expander("Understanding this chart"):
+            with st.expander("What to look for and key findings"):
                 st.markdown(f"""
                 **What to look for:**
                 - Regions with notably higher robotic percentages
