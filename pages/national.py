@@ -769,10 +769,10 @@ if approach_mix_2024:
         )
         
         fig.update_traces(
-            hovertemplate='<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent:.0f}%<extra></extra>',
+            hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent:.0f}%<extra></extra>',
             textposition='outside',
             textinfo='percent+label',
-            textfont=dict(size=11)
+            textfont=dict(size=14)
         )
         
         st.plotly_chart(fig, use_container_width=True)
