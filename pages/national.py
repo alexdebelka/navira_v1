@@ -750,6 +750,10 @@ if approach_mix_2024:
     pie_df = pd.DataFrame(pie_data)
     
     if not pie_df.empty:
+        # Precompute integer percentage labels (no decimals)
+        total_cnt = max(1, int(pie_df['Count'].sum()))
+        pie_df['PctLabel'] = (pie_df['Count'] / total_cnt * 100).round(0).astype(int).astype(str) + '%'
+
         fig = px.pie(
             pie_df,
             values='Count',
@@ -771,8 +775,9 @@ if approach_mix_2024:
         fig.update_traces(
             hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent:.0f}%<extra></extra>',
             textposition='outside',
-            textinfo='percent+label',
-            textfont=dict(size=14)
+            text=pie_df['PctLabel'],
+            textinfo='text+label',
+            textfont=dict(size=16)
         )
         
         st.plotly_chart(fig, use_container_width=True)
