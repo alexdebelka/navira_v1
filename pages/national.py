@@ -974,144 +974,57 @@ robotic_institutional = compute_robotic_institutional_analysis(df)
 #         with col3:
 #             st.metric("2024", f"{robotic_temporal['percentages'][4]}%")
 
-# 2. Geographic Analysis
-with st.expander("🗺️ 1. Geographic Analysis - Regional Robotic Adoption"):
-    st.markdown("""
-    **Understanding this analysis:**
-    
-    This chart shows robotic surgery adoption rates across different geographic regions of France. It reveals which regions are leading in robotic technology adoption and which may need more support.
-    
-    **How we calculated this:**
-    - **Data source**: 2024 data for all eligible hospitals (≥25 procedures/year)
-    - **Grouping**: Hospitals grouped by their geographic region (lib_reg column)
-    - **Robotic count**: Sum of robotic procedures (ROB column) per region
-    - **Total procedures**: Sum of all bariatric procedures per region
-    - **Percentage**: (Robotic procedures / Total procedures) × 100 per region
-    - **Filtering**: Only regions with >0 robotic procedures and valid percentages
-    
-    **What the percentages mean:**
-    - **Percentage**: Shows what % of ALL bariatric surgeries in that region are performed robotically
-    - **Example**: If ILE-DE-FRANCE shows 5.4%, it means 5.4% of all bariatric surgeries in Île-de-France are robotic
-    - **Robotic count**: The actual number of robotic procedures performed in that region
-    
-    """)
-    
-    if robotic_geographic['regions'] and len(robotic_geographic['regions']) > 0:
-        fig = px.bar(
-            x=robotic_geographic['regions'],
-            y=robotic_geographic['percentages'],
-            title="Robotic Surgery Adoption by Region (2024)",
-            color=robotic_geographic['percentages'],
-            color_continuous_scale='Oranges'
-        )
-        
-        fig.update_layout(
-            xaxis_title="Region",
-            yaxis_title="Robotic Surgery Percentage (%)",
-            height=400,
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(size=12),
-            margin=dict(l=50, r=50, t=80, b=50)
-        )
-        
-        fig.update_traces(
-            hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<br>Robotic: %{customdata}<extra></extra>',
-            customdata=robotic_geographic['robotic_counts']
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        # Dropdown additions
-        try:
-            top_idx = int(pd.Series(robotic_geographic['percentages']).idxmax())
-            top_region = robotic_geographic['regions'][top_idx]
-            top_pct = robotic_geographic['percentages'][top_idx]
-            with st.expander("What to look for and key findings"):
-                st.markdown(f"""
-                **What to look for:**
-                - Regions with notably higher robotic percentages
-                - Regional disparities in access to robotic surgery
-
-                **Key findings:**
-                - Highest regional adoption: **{top_region}** at **{top_pct:.1f}%**
-                """)
-        except Exception:
-            pass
-    else:
-        st.info("No geographic data available. Region information may not be included in the dataset.")
+## 2. Geographic Analysis (merged into Volume-based Analysis)
+st.info("Geographic regional analysis has been merged into the volume-based section to simplify comparisons.")
 
 # 3. Institutional Analysis
-with st.expander("🏥 2. Institutional Analysis - Hospital Type vs Robotic Adoption"):
+with st.expander("🏥 2. Institutional Analysis - Hospital Sector (Public vs Private)"):
     st.markdown("""
     **Understanding this analysis:**
     
-    This chart compares robotic surgery adoption between different types of hospitals: academic vs non-academic, and public vs private institutions.
+    This chart compares robotic surgery adoption between hospital sectors: public vs private institutions.
     
     **How we calculated this:**
     - **Data source**: 2024 data for all eligible hospitals (≥25 procedures/year)
-    - **Academic grouping**: Hospitals grouped by academic_affiliation (1=Academic, 0=Non-academic)
     - **Sector grouping**: Hospitals grouped by sector (public vs private)
     - **Robotic count**: Sum of robotic procedures (ROB column) per hospital type
     - **Total procedures**: Sum of all bariatric procedures per hospital type
     - **Percentage**: (Robotic procedures / Total procedures) × 100 per hospital type
     
     **What the percentages mean:**
-    - **Percentage**: Shows what % of ALL bariatric surgeries in that hospital type are performed robotically
-    - **Example**: If Academic shows 8.2%, it means 8.2% of all bariatric surgeries in academic hospitals are robotic
-    - **Robotic count**: The actual number of robotic procedures performed in that hospital type
-    
-    **Key insights:**
-    - **Academic advantage**: University hospitals may have better access to new technology
-    - **Public vs private**: Different funding models may affect technology adoption
-    - **Resource allocation**: Which hospital types are investing in robotic technology
+    - **Percentage**: Share of all bariatric surgeries in that sector that are robotic
+    - **Robotic count**: The actual number of robotic procedures performed in that sector
     """)
     
-    if robotic_institutional['academic']['types'] and len(robotic_institutional['academic']['types']) > 0:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Academic vs Non-Academic
-            fig1 = px.bar(
-                x=robotic_institutional['academic']['types'],
-                y=robotic_institutional['academic']['percentages'],
-                title="Academic vs Non-Academic (2024)",
-                color=robotic_institutional['academic']['percentages'],
-                color_continuous_scale='Blues'
-            )
-            fig1.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis_title=None, yaxis_title=None)
-            fig1.update_traces(
-                hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<extra></extra>'
-            )
-            st.plotly_chart(fig1, use_container_width=True)
-        
-        with col2:
-            # Public vs Private
-            fig2 = px.bar(
-                x=robotic_institutional['sector']['types'],
-                y=robotic_institutional['sector']['percentages'],
-                title="Public vs Private (2024)",
-                color=robotic_institutional['sector']['percentages'],
-                color_continuous_scale='Greens'
-            )
-            fig2.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis_title=None, yaxis_title=None)
-            fig2.update_traces(
-                hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<extra></extra>'
-            )
-            st.plotly_chart(fig2, use_container_width=True)
-        # Dropdown additions
+    if robotic_institutional['sector']['types'] and len(robotic_institutional['sector']['types']) > 0:
+        fig2 = px.bar(
+            x=robotic_institutional['sector']['types'],
+            y=robotic_institutional['sector']['percentages'],
+            title="Public vs Private (2024)",
+            color=robotic_institutional['sector']['percentages'],
+            color_continuous_scale='Greens'
+        )
+        fig2.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis_title=None, yaxis_title=None)
+        fig2.update_traces(
+            hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<extra></extra>',
+            marker_line_width=0
+        )
+        st.plotly_chart(fig2, use_container_width=True)
         try:
-            acad_vals = robotic_institutional['academic']['percentages']
-            types = robotic_institutional['academic']['types']
-            if acad_vals and types:
-                max_i = int(pd.Series(acad_vals).idxmax())
-                with st.expander("Understanding this chart"):
+            vals = robotic_institutional['sector']['percentages']
+            types = robotic_institutional['sector']['types']
+            if vals and types:
+                max_i = int(pd.Series(vals).idxmax())
+                min_i = int(pd.Series(vals).idxmin())
+                with st.expander("What to look for and key findings"):
                     st.markdown(f"""
                     **What to look for:**
-                    - Difference between academic and non‑academic adoption
-                    - Public vs private contrast
+                    - Contrast in adoption between public and private sectors
+                    - Sector with higher technological uptake
 
                     **Key findings:**
-                    - Highest adoption among: **{types[max_i]}** (**{acad_vals[max_i]:.1f}%**)
+                    - Higher adoption: **{types[max_i]}** (**{vals[max_i]:.1f}%**)
+                    - Lower adoption: **{types[min_i]}** (**{vals[min_i]:.1f}%**)
                     """)
         except Exception:
             pass
