@@ -91,7 +91,7 @@ with col3:
         "Total Revisions (2024)", 
         f"{int(round(kpis['avg_revisions_per_year'])):,}" # it is total_revisions_2024
     )
-    st.markdown(f"<span style='color: grey; font-size: 0.9em;'>{revision_percentage:.0f}% of total surgeries</span>", unsafe_allow_html=True)
+    st.markdown(f"<span style='color: grey; font-size: 0.9em; display:block; margin-top:-8px;'>{revision_percentage:.0f}% of total surgeries</span>", unsafe_allow_html=True)
 
 with col4:
     delta_color = "normal" if delta_less_50 <= 0 else "inverse"
@@ -1271,17 +1271,7 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
                 opacity=0.65,
                 title='Hospital volume (continuous) vs robotic %'
             )
-            # Linear trendline via numpy
-            try:
-                xvals = dist_df['total_surgeries'].astype(float).values
-                yvals = dist_df['hospital_pct'].astype(float).values
-                if len(xvals) >= 2:
-                    slope, intercept = np.polyfit(xvals, yvals, 1)
-                    xs = np.linspace(xvals.min(), xvals.max(), 100)
-                    ys = slope * xs + intercept
-                    cont.add_trace(go.Scatter(x=xs, y=ys, mode='lines', name='Linear trend', line=dict(color='#4c78a8', width=2)))
-            except Exception:
-                pass
+            # Linear trendline removed per request
             cont.update_layout(
                 xaxis_title='Total surgeries (2024)',
                 yaxis_title='Robotic % (per hospital)',
