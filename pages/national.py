@@ -620,23 +620,28 @@ with col1:
         # Use a single blue color for all bars to emphasize totals
         fig = px.bar(
             chart_df,
-            x='Procedure',
-            y='Value',
+            x='Value',
+            y='Procedure',
+            orientation='h',
             title=chart_title,
             color_discrete_sequence=['#4C84C8'],
-            custom_data=['Percentage']
+            custom_data=['Percentage'],
+            text='Percentage'
         )
         fig.update_layout(
-            xaxis_title="Procedure Type",
-            yaxis_title=y_title,
-            hovermode='x unified',
-            height=400,
+            xaxis_title=y_title,
+            yaxis_title="Procedure Type",
+            hovermode='y unified',
+            height=440,
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             font=dict(size=12),
-            margin=dict(l=50, r=50, t=80, b=50)
+            margin=dict(l=160, r=50, t=80, b=40),
+            yaxis=dict(automargin=True)
         )
-        fig.update_traces(hovertemplate=hover_tmpl)
+        # Horizontal hover shows category on Y
+        hover_tmpl_h = hover_tmpl.replace('%{x}', '%{y}').replace('%{y:,}', '%{x:,}')
+        fig.update_traces(hovertemplate=hover_tmpl_h, texttemplate='%{text:.0f}%', textposition='outside', cliponaxis=False)
         st.plotly_chart(fig, use_container_width=True)
         # Add WTLF + Key findings for procedures
         # try:
@@ -998,27 +1003,31 @@ with st.expander("🗺️ 1. Geographic Analysis - Regional Robotic Adoption"):
     
     if robotic_geographic['regions'] and len(robotic_geographic['regions']) > 0:
         fig = px.bar(
-            x=robotic_geographic['regions'],
-            y=robotic_geographic['percentages'],
+            x=robotic_geographic['percentages'],
+            y=robotic_geographic['regions'],
+            orientation='h',
             title="Robotic Surgery Adoption by Region (2024)",
             color=robotic_geographic['percentages'],
-            color_continuous_scale='Oranges'
+            color_continuous_scale='Oranges',
+            text=[f"{p:.1f}%" for p in robotic_geographic['percentages']]
         )
         
         fig.update_layout(
-            xaxis_title="Region",
-            yaxis_title="Robotic Surgery Percentage (%)",
-            height=400,
+            xaxis_title="Robotic Surgery Percentage (%)",
+            yaxis_title="Region",
+            height=440,
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             font=dict(size=12),
-            margin=dict(l=50, r=50, t=80, b=50)
+            margin=dict(l=160, r=50, t=80, b=40),
+            yaxis=dict(automargin=True)
         )
         
         fig.update_traces(
-            hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<br>Robotic: %{customdata}<extra></extra>',
+            hovertemplate='<b>%{y}</b><br>Percentage: %{x:.1f}%<br>Robotic: %{customdata}<extra></extra>',
             customdata=robotic_geographic['robotic_counts']
         )
+        fig.update_traces(textposition='outside', cliponaxis=False)
         
         st.plotly_chart(fig, use_container_width=True)
         try:
