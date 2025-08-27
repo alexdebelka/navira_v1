@@ -978,7 +978,7 @@ robotic_institutional = compute_robotic_institutional_analysis(df)
 st.info("Geographic regional analysis has been merged into the volume-based section to simplify comparisons.")
 
 # 3. Institutional Analysis
-with st.expander("🏥 2. Institutional Analysis - Hospital Sector (Public vs Private)"):
+with st.expander("🏥 2. Institutional Analysis & 🏛️ 4. Affiliation Analysis (Merged)"):
     st.markdown("""
     **Understanding this analysis:**
     
@@ -996,40 +996,52 @@ with st.expander("🏥 2. Institutional Analysis - Hospital Sector (Public vs Pr
     - **Robotic count**: The actual number of robotic procedures performed in that sector
     """)
     
-    if robotic_institutional['sector']['types'] and len(robotic_institutional['sector']['types']) > 0:
-        fig2 = px.bar(
-            x=robotic_institutional['sector']['types'],
-            y=robotic_institutional['sector']['percentages'],
-            title="Public vs Private (2024)",
-            color=robotic_institutional['sector']['percentages'],
-            color_continuous_scale='Greens'
-        )
-        fig2.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis_title=None, yaxis_title=None)
-        fig2.update_traces(
-            hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<extra></extra>',
-            marker_line_width=0
-        )
-        st.plotly_chart(fig2, use_container_width=True)
-        try:
-            vals = robotic_institutional['sector']['percentages']
-            types = robotic_institutional['sector']['types']
-            if vals and types:
-                max_i = int(pd.Series(vals).idxmax())
-                min_i = int(pd.Series(vals).idxmin())
-                with st.expander("What to look for and key findings"):
-                    st.markdown(f"""
-                    **What to look for:**
-                    - Contrast in adoption between public and private sectors
-                    - Sector with higher technological uptake
+    # Merged bar chart: sector and affiliation side-by-side
+    merged_x = []
+    merged_y = []
+    merged_color = []
+    try:
+        if robotic_institutional['sector']['types'] and robotic_institutional['sector']['percentages']:
+            for t, v in zip(robotic_institutional['sector']['types'], robotic_institutional['sector']['percentages']):
+                merged_x.append(f"Sector – {t}")
+                merged_y.append(v)
+                merged_color.append('Sector')
+    except Exception:
+        pass
+    try:
+        if robotic_affiliation['affiliations'] and robotic_affiliation['percentages']:
+            for t, v in zip(robotic_affiliation['affiliations'], robotic_affiliation['percentages']):
+                merged_x.append(f"Affil – {t}")
+                merged_y.append(v)
+                merged_color.append('Affiliation')
+    except Exception:
+        pass
+    if merged_x:
+        fig_merge = px.bar(x=merged_x, y=merged_y, color=merged_color, title="Robotic Adoption by Sector and Affiliation (2024)",
+                           color_discrete_map={'Sector':'#34a853','Affiliation':'#db4437'})
+        fig_merge.update_layout(height=380, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis_title=None, yaxis_title='Robotic Surgery Percentage (%)')
+        fig_merge.update_traces(hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<extra></extra>', marker_line_width=0)
+        st.plotly_chart(fig_merge, use_container_width=True)
+        with st.expander("What to look for and key findings"):
+            try:
+                import numpy as np
+                sector_vals = np.array(robotic_institutional.get('sector',{}).get('percentages',[]) or [])
+                aff_vals = np.array(robotic_affiliation.get('percentages',[]) or [])
+                s_max = sector_vals.max() if sector_vals.size else None
+                a_max = aff_vals.max() if aff_vals.size else None
+                st.markdown(f"""
+                **What to look for:**
+                - Sector vs affiliation differences in adoption
+                - Which subgroups stand out at the high end
 
-                    **Key findings:**
-                    - Higher adoption: **{types[max_i]}** (**{vals[max_i]:.1f}%**)
-                    - Lower adoption: **{types[min_i]}** (**{vals[min_i]:.1f}%**)
-                    """)
-        except Exception:
-            pass
+                **Key findings:**
+                - Highest sector value: **{s_max:.1f}%** if available
+                - Highest affiliation value: **{a_max:.1f}%** if available
+                """)
+            except Exception:
+                st.markdown("Insights unavailable due to missing values.")
     else:
-        st.info("No institutional data available for analysis.")
+        st.info("No sector/affiliation data available for the merged comparison.")
 
 # 4. Volume-based Analysis
 with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Adoption"):
@@ -1061,72 +1073,41 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
     """)
     
     if robotic_volume['volume_categories'] and len(robotic_volume['volume_categories']) > 0:
-        # Per‑hospital scatter: each dot is a hospital
+        # Keep only the continuous scatter with trendline (as per screenshot)
         try:
             from lib.national_utils import compute_robotic_volume_distribution
             dist_df = compute_robotic_volume_distribution(df)
         except Exception:
             dist_df = pd.DataFrame()
-
         if not dist_df.empty:
-            # Add small horizontal jitter per bin to avoid overlapping points
-            category_to_x = {cat: i for i, cat in enumerate(sorted(dist_df['volume_category'].unique(), key=lambda c: ["<50","50–100","100–200",">200"].index(c)))}
-            dist_df = dist_df.copy()
-            dist_df['x_numeric'] = dist_df['volume_category'].map(category_to_x).astype(float)
-            rng = np.random.default_rng(42)
-            dist_df['x_jitter'] = dist_df['x_numeric'] + rng.uniform(-0.18, 0.18, size=len(dist_df))
-
-            fig = px.scatter(
+            st.subheader("Continuous relationship: volume vs robotic %")
+            cont = px.scatter(
                 dist_df,
-                x='x_jitter',
+                x='total_surgeries',
                 y='hospital_pct',
-                color='total_surgeries',
-                size='total_surgeries',
-                size_max=20,
-                title="Robotic Adoption by Hospital Volume (2024)",
-                color_continuous_scale='Purples'
+                color='volume_category',
+                opacity=0.65,
+                title='Hospital volume (continuous) vs robotic %'
             )
-            # Show categorical tick labels
-            ordered_cats = ["<50","50–100","100–200",">200"]
-            x_ticks = [category_to_x[c] for c in ordered_cats if c in category_to_x]
-            fig.update_xaxes(tickmode='array', tickvals=x_ticks, ticktext=[c for c in ordered_cats if c in category_to_x])
-            fig.update_layout(
-                xaxis_title=None,
-                yaxis_title='Robotic % (per hospital)',
-                height=400,
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font=dict(size=12),
-                margin=dict(l=50, r=50, t=80, b=50)
-            )
-            fig.update_traces(
-                mode='markers',
-                marker=dict(line=dict(width=0)),
-                hovertemplate='<b>%{x}</b><br>Hospital robotic %: %{y:.1f}%<br>Total surgeries: %{marker.size:,}<br>ID: %{customdata}<extra></extra>',
-                customdata=dist_df['hospital_id']
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            # WTLF + Key findings for distribution view
+            # Linear trendline via numpy
             try:
-                med = dist_df.groupby('volume_category', observed=False)['hospital_pct'].median().to_dict()
-                q25 = dist_df.groupby('volume_category', observed=False)['hospital_pct'].quantile(0.25).to_dict()
-                q75 = dist_df.groupby('volume_category', observed=False)['hospital_pct'].quantile(0.75).to_dict()
-                with st.expander("What to look for and key findings"):
-                    bullets = "\n".join([f"- {k}: median **{med.get(k, 0):.1f}%**, IQR **{(q25.get(k,0)):.1f}%–{(q75.get(k,0)):.1f}%**" for k in ["<50","50–100","100–200",">200"] if k in med])
-                    st.markdown(
-                        f"""
-                        **What to look for:**
-                        - Spread of robotic% within each volume bin (dense clusters, outliers)
-                        - Whether medians rise with volume
-
-                        **Key findings:**
-                        {bullets}
-                        """
-                    )
+                xvals = dist_df['total_surgeries'].astype(float).values
+                yvals = dist_df['hospital_pct'].astype(float).values
+                if len(xvals) >= 2:
+                    slope, intercept = np.polyfit(xvals, yvals, 1)
+                    xs = np.linspace(xvals.min(), xvals.max(), 100)
+                    ys = slope * xs + intercept
+                    cont.add_trace(go.Scatter(x=xs, y=ys, mode='lines', name='Linear trend', line=dict(color='#4c78a8', width=2)))
             except Exception:
                 pass
-        else:
-            st.info("Distribution view unavailable.")
+            cont.update_layout(
+                xaxis_title='Total surgeries (2024)',
+                yaxis_title='Robotic % (per hospital)',
+                height=420,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+            st.plotly_chart(cont, use_container_width=True)
 
         # Annotations: hospitals and average surgeries per bin
         try:
@@ -1325,58 +1306,4 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
             pass
 
 # 5. Affiliation Analysis
-with st.expander("🏛️ 4. Affiliation Analysis - Hospital Affiliation vs Robotic Adoption"):
-    st.markdown("""
-    **Understanding this analysis:**
-    
-    This chart shows robotic surgery adoption across different hospital affiliation types: public university, public non-academic, private for-profit, and private not-for-profit.
-    
-    **How we calculated this:**
-    - **Data source**: 2024 data for all eligible hospitals (≥25 procedures/year)
-    - **Affiliation categorization**: Hospitals grouped by combination of sector and academic status:
-      * Public – Univ. (public sector + academic affiliation)
-      * Public – Non-Acad. (public sector + no academic affiliation)
-      * Private – For-profit (private sector + for-profit status)
-      * Private – Not-for-profit (private sector + not-for-profit status)
-    - **Robotic count**: Sum of robotic procedures (ROB column) per affiliation type
-    - **Total procedures**: Sum of all bariatric procedures per affiliation type
-    - **Percentage**: (Robotic procedures / Total procedures) × 100 per affiliation type
-    
-    **What the percentages mean:**
-    - **Percentage**: Shows what % of ALL bariatric surgeries in that affiliation type are performed robotically
-    - **Example**: If Private For-profit shows 6.8%, it means 6.8% of all bariatric surgeries in private for-profit hospitals are robotic
-    - **Robotic count**: The actual number of robotic procedures performed in that affiliation type
-    
-    **Key insights:**
-    - **Funding models**: Different affiliation types may have different access to capital
-    - **Mission alignment**: Some hospital types may prioritize technology differently
-    - **Patient populations**: Different affiliations may serve different patient needs
-    """)
-    
-    if robotic_affiliation['affiliations'] and len(robotic_affiliation['affiliations']) > 0:
-        fig = px.bar(
-            x=robotic_affiliation['affiliations'],
-            y=robotic_affiliation['percentages'],
-            title="Robotic Adoption by Hospital Affiliation (2024)",
-            color=robotic_affiliation['percentages'],
-            color_continuous_scale='Reds'
-        )
-        
-        fig.update_layout(
-            xaxis_title="Hospital Affiliation Type",
-            yaxis_title="Robotic Surgery Percentage (%)",
-            height=400,
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(size=12),
-            margin=dict(l=50, r=50, t=80, b=50)
-        )
-        
-        fig.update_traces(
-            hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<br>Robotic: %{customdata}<extra></extra>',
-            customdata=robotic_affiliation['robotic_counts']
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("No affiliation data available for analysis.")
+# Removed separate affiliation analysis (merged above)
