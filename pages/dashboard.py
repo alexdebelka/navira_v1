@@ -172,6 +172,20 @@ with metric_col2:
 st.markdown("---")
 st.header("Annual Statistics")
 hospital_annual_data = selected_hospital_all_data.set_index('annee')
+# Tooltip helpers (shared style)
+st.markdown(
+    """
+    <style>
+      .nv-info-wrap { display:inline-flex; align-items:center; gap:8px; }
+      .nv-info-badge { width:18px; height:18px; border-radius:50%; background:#444; color:#fff; font-weight:600; font-size:12px; display:inline-flex; align-items:center; justify-content:center; cursor:help; }
+      .nv-tooltip { position:relative; display:inline-block; }
+      .nv-tooltip .nv-tooltiptext { visibility:hidden; opacity:0; transition:opacity .15s ease; position:absolute; z-index:9999; top:22px; left:50%; transform:translateX(-50%); width:min(420px, 80vw); background:#2b2b2b; color:#fff; border:1px solid rgba(255,255,255,.1); border-radius:6px; padding:10px 12px; box-shadow:0 4px 14px rgba(0,0,0,.35); text-align:left; font-size:0.9rem; line-height:1.25rem; }
+      .nv-tooltip:hover .nv-tooltiptext { visibility:visible; opacity:1; }
+      .nv-h3 { font-weight:600; font-size:1.05rem; margin:0; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # Small sparkline trends for key metrics
 try:
@@ -187,6 +201,21 @@ try:
         .dropna()
     )
     if not total_series.empty:
+        # Info header + tooltip
+        st.markdown(
+            """
+            <div class="nv-info-wrap">
+              <div class="nv-h3">Total Surgeries — Hospital</div>
+              <div class="nv-tooltip"><span class="nv-info-badge">i</span>
+                <div class="nv-tooltiptext">
+                  <b>Understanding this chart:</b><br/>
+                  Annual total surgeries performed at the selected hospital (2020–2024).
+                </div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         fig_hosp = go.Figure(
             go.Scatter(
                 x=total_series['annee'].astype(str),
@@ -208,10 +237,44 @@ try:
             showlegend=False
         )
         fig_hosp.update_xaxes(showgrid=False)
-        st.markdown("##### Total Surgeries — Hospital")
         st.plotly_chart(fig_hosp, use_container_width=True)
+        try:
+            # Key findings
+            ts = total_series.copy()
+            ts = ts.sort_values('annee')
+            peak_row = ts.loc[ts['total_procedures_year'].idxmax()]
+            last_row = ts.iloc[-1]
+            with st.expander("What to look for and key findings"):
+                st.markdown(
+                    f"""
+                    **What to look for:**
+                    - Year‑to‑year changes in volume
+                    - Peak year vs recent year
+                    - Direction of the latest trend
+
+                    **Key findings:**
+                    - Peak year: **{int(peak_row['annee'])}** with **{int(peak_row['total_procedures_year']):,}** surgeries
+                    - 2024 value: **{int(last_row['total_procedures_year']):,}**
+                    """
+                )
+        except Exception:
+            pass
 
     if not nat_series.empty:
+        st.markdown(
+            """
+            <div class="nv-info-wrap">
+              <div class="nv-h3">Total Surgeries — National</div>
+              <div class="nv-tooltip"><span class="nv-info-badge">i</span>
+                <div class="nv-tooltiptext">
+                  <b>Understanding this chart:</b><br/>
+                  Sum of annual surgeries across all eligible hospitals (≥25 surgeries/year) for each year.
+                </div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         fig_nat = go.Figure(
             go.Scatter(
                 x=nat_series['annee'].astype(str),
@@ -233,8 +296,23 @@ try:
             showlegend=False
         )
         fig_nat.update_xaxes(showgrid=False)
-        st.markdown("##### Total Surgeries — National")
         st.plotly_chart(fig_nat, use_container_width=True)
+        try:
+            ns = nat_series.copy().sort_values('annee')
+            pk = ns.loc[ns['total_procedures_year'].idxmax()]
+            with st.expander("What to look for and key findings"):
+                st.markdown(
+                    f"""
+                    **What to look for:**
+                    - Overall national trend
+                    - How 2024 compares to the peak year
+
+                    **Key findings:**
+                    - National peak year: **{int(pk['annee'])}** with **{int(pk['total_procedures_year']):,}** surgeries
+                    """
+                )
+        except Exception:
+            pass
     else:
         st.info("No total surgeries data available to plot.")
 except Exception:
@@ -285,14 +363,28 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
         _totals = bariatric_df_melted.groupby('annee')['Count'].sum().replace(0, 1)
         bariatric_share = bariatric_df_melted.copy()
         bariatric_share['Share'] = bariatric_share['Count'] / bariatric_share['annee'].map(_totals) * 100
+        st.markdown(
+            """
+            <div class=\"nv-info-wrap\">
+              <div class=\"nv-h3\">Bariatric Procedures by Year (share %)</div>
+              <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+                <div class=\"nv-tooltiptext\">
+                  <b>Understanding this chart:</b><br/>
+                  Stacked shares of procedure types within the hospital for each year. Each bar sums to 100%.
+                </div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         fig = px.bar(
-        bariatric_share,
-        x='annee',
-        y='Share',
-        color='Procedures',
-        color_discrete_map=PROC_COLORS,
-        title='Bariatric Procedures by Year (share %)',
-        barmode='stack'
+            bariatric_share,
+            x='annee',
+            y='Share',
+            color='Procedures',
+            color_discrete_map=PROC_COLORS,
+            title='Bariatric Procedures by Year (share %)',
+            barmode='stack'
         )
         fig.update_layout(
         xaxis_title='Year',
@@ -307,6 +399,18 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
         fig.update_yaxes(range=[0, 100], tick0=0, dtick=20)
 
         st.plotly_chart(fig, use_container_width=True)
+        with st.expander("What to look for and key findings"):
+            st.markdown(
+                """
+                **What to look for:**
+                - Changes in procedure mix over time
+                - Stability vs shifts between Sleeve and Bypass
+                - Size of the Other category
+
+                **Key findings:**
+                - Bars sum to 100%; compare shares year over year
+                """
+            )
 
     # Right column: National analytics in tabs (won't overshadow hospital charts)
     with right:
@@ -459,6 +563,18 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
         # Removed dashed national overlays per request
 
         st.plotly_chart(fig2, use_container_width=True)
+        with st.expander("What to look for and key findings"):
+            st.markdown(
+                """
+                **What to look for:**
+                - Mix shifts among approaches over time
+                - Robotic share relative to Coelioscopy and Open Surgery
+                - Sudden changes in any year
+
+                **Key findings:**
+                - Bars sum to 100%; compare within each year
+                """
+            )
 
     with right2:
         tabs2 = st.tabs(["National over time", "2024 mix"])
