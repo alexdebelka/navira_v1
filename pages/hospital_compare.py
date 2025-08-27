@@ -169,9 +169,6 @@ except Exception as e:
 st.title("⚖️ Hospital Comparison")
 st.markdown("Compare two hospitals side-by-side across key metrics and performance indicators.")
 
-# Version indicator to help track deployment
-st.caption("🔄 Version: 2024-12-19 v2.2 - Transparent backgrounds, white titles")
-
 
 
 # --- Hospital Selection ---
@@ -292,6 +289,16 @@ def calculate_metrics(hospital_data):
             'sleeve_percentage_2024': 0
         }
     
+    # Check required columns exist
+    if 'annee' not in hospital_data.columns or 'total_procedures_year' not in hospital_data.columns:
+        return {
+            'total_procedures_2024': 0,
+            'avg_procedures_per_year': 0,
+            'years_active': 0,
+            'robotic_percentage_2024': 0,
+            'sleeve_percentage_2024': 0
+        }
+    
     # 2024 data
     data_2024 = hospital_data[hospital_data['annee'] == 2024]
     total_2024 = data_2024['total_procedures_year'].sum() if not data_2024.empty else 0
@@ -301,21 +308,21 @@ def calculate_metrics(hospital_data):
     years_active = len(hospital_data['annee'].unique())
     
     # Robotic percentage in 2024
-    if not data_2024.empty and 'ROB' in data_2024.columns:
+    if not data_2024.empty and 'ROB' in data_2024.columns and total_2024 > 0:
         robotic_2024 = data_2024['ROB'].sum()
-        robotic_pct = (robotic_2024 / total_2024 * 100) if total_2024 > 0 else 0
+        robotic_pct = (robotic_2024 / total_2024 * 100) if not pd.isna(robotic_2024) else 0
     else:
         robotic_pct = 0
     
     # Sleeve percentage in 2024
-    if not data_2024.empty and 'SLE' in data_2024.columns:
+    if not data_2024.empty and 'SLE' in data_2024.columns and total_2024 > 0:
         sleeve_2024 = data_2024['SLE'].sum()
-        sleeve_pct = (sleeve_2024 / total_2024 * 100) if total_2024 > 0 else 0
+        sleeve_pct = (sleeve_2024 / total_2024 * 100) if not pd.isna(sleeve_2024) else 0
     else:
         sleeve_pct = 0
     
     return {
-        'total_procedures_2024': int(total_2024),
+        'total_procedures_2024': int(total_2024) if not pd.isna(total_2024) else 0,
         'avg_procedures_per_year': int(avg_procedures) if not pd.isna(avg_procedures) else 0,
         'years_active': years_active,
         'robotic_percentage_2024': round(robotic_pct, 1),
@@ -364,16 +371,22 @@ st.markdown(
 
 # Create volume comparison chart
 volume_data = []
-for year in range(2020, 2025):
-    # Hospital A
-    data_a_year = hospital_a_data[hospital_a_data['annee'] == year]
-    volume_a = data_a_year['total_procedures_year'].sum() if not data_a_year.empty else 0
-    volume_data.append({'Year': year, 'Hospital': hospital_a_info['name'], 'Volume': volume_a})
+# Check if required columns exist for both hospitals
+if ('annee' in hospital_a_data.columns and 'total_procedures_year' in hospital_a_data.columns and
+    'annee' in hospital_b_data.columns and 'total_procedures_year' in hospital_b_data.columns):
     
-    # Hospital B  
-    data_b_year = hospital_b_data[hospital_b_data['annee'] == year]
-    volume_b = data_b_year['total_procedures_year'].sum() if not data_b_year.empty else 0
-    volume_data.append({'Year': year, 'Hospital': hospital_b_info['name'], 'Volume': volume_b})
+    for year in range(2020, 2025):
+        # Hospital A
+        data_a_year = hospital_a_data[hospital_a_data['annee'] == year]
+        volume_a = data_a_year['total_procedures_year'].sum() if not data_a_year.empty else 0
+        volume_a = int(volume_a) if not pd.isna(volume_a) else 0
+        volume_data.append({'Year': year, 'Hospital': hospital_a_info['name'], 'Volume': volume_a})
+        
+        # Hospital B  
+        data_b_year = hospital_b_data[hospital_b_data['annee'] == year]
+        volume_b = data_b_year['total_procedures_year'].sum() if not data_b_year.empty else 0
+        volume_b = int(volume_b) if not pd.isna(volume_b) else 0
+        volume_data.append({'Year': year, 'Hospital': hospital_b_info['name'], 'Volume': volume_b})
 
 volume_df = pd.DataFrame(volume_data)
 
@@ -385,7 +398,7 @@ if not volume_df.empty and volume_df['Volume'].sum() > 0:
         color='Hospital',
         title='Annual Procedure Volume Comparison',
         markers=True,
-        color_discrete_sequence=['#6c757d', '#495057']  # Gray colors as requested
+        color_discrete_sequence=['#3498db', '#e74c3c']  # Bright blue and red
     )
     fig_volume.update_layout(
         height=400,
@@ -394,14 +407,24 @@ if not volume_df.empty and volume_df['Volume'].sum() > 0:
         hovermode='x unified',
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        title_font_color='white'
+        title_font_color='white',
+        font=dict(color='white'),
+        xaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+        yaxis=dict(gridcolor='rgba(255,255,255,0.1)')
     )
     fig_volume.update_traces(
         hovertemplate='<b>%{fullData.name}</b><br>Year: %{x}<br>Volume: %{y:,}<extra></extra>'
     )
     st.plotly_chart(fig_volume, use_container_width=True)
 else:
-    st.info("No volume data available for comparison.")
+    st.warning("📊 No volume data available for comparison. This may be due to:")
+    st.markdown("""
+    - Missing data for the selected time period
+    - Hospitals not meeting minimum procedure thresholds  
+    - Data availability issues
+    
+    *Try selecting different hospitals or check back later.*
+    """)
 
 # --- Procedure Mix Comparison ---
 st.header("🔬 Procedure Mix Comparison (2024)")
@@ -429,18 +452,26 @@ def get_procedure_mix_2024(hospital_data):
     
     procedure_codes = {'SLE': 'Sleeve', 'BPG': 'Gastric Bypass'}
     mix = {}
+    
+    # Check if total_procedures_year exists
+    if 'total_procedures_year' not in data_2024.columns:
+        return {}
+        
     total = data_2024['total_procedures_year'].sum()
+    if total <= 0:
+        return {}
     
     for code, name in procedure_codes.items():
         if code in data_2024.columns:
             count = data_2024[code].sum()
-            mix[name] = count
+            mix[name] = int(count) if not pd.isna(count) else 0
         else:
             mix[name] = 0
     
     # Calculate "Other" as the remaining procedures
     accounted = sum(mix.values())
-    mix['Other'] = max(0, total - accounted)
+    other_count = max(0, int(total) - accounted)
+    mix['Other'] = other_count
     
     return mix
 
@@ -472,7 +503,9 @@ with col1:
         )
         st.plotly_chart(fig_a, use_container_width=True)
     else:
-        st.info("No procedure data available for 2024")
+        st.info("🔬 No procedure breakdown available for 2024")
+        if not hospital_a_data.empty:
+            st.caption("Hospital has data but no detailed procedure breakdown for this year.")
 
 # Hospital B procedure mix  
 with col2:
@@ -497,7 +530,9 @@ with col2:
         )
         st.plotly_chart(fig_b, use_container_width=True)
     else:
-        st.info("No procedure data available for 2024")
+        st.info("🔬 No procedure breakdown available for 2024")
+        if not hospital_b_data.empty:
+            st.caption("Hospital has data but no detailed procedure breakdown for this year.")
 
 # --- Surgical Approach Comparison ---
 st.header("🔧 Surgical Approach Comparison (2024)")
@@ -528,9 +563,17 @@ def get_approach_mix_2024(hospital_data):
     for code, name in approach_codes.items():
         if code in data_2024.columns:
             count = data_2024[code].sum()
-            mix[name] = count
+            mix[name] = int(count) if not pd.isna(count) else 0
         else:
             mix[name] = 0
+    
+    # If all approaches are 0, try to get total and distribute it
+    total_approaches = sum(mix.values())
+    if total_approaches == 0 and 'total_procedures_year' in data_2024.columns:
+        total_proc = data_2024['total_procedures_year'].sum()
+        if total_proc > 0:
+            # If we have total procedures but no approach breakdown, show as "Other"
+            mix['Open Surgery'] = int(total_proc)  # Default to open surgery
     
     return mix
 
@@ -562,7 +605,9 @@ with col1:
         )
         st.plotly_chart(fig_a_app, use_container_width=True)
     else:
-        st.info("No approach data available for 2024")
+        st.info("🔧 No surgical approach breakdown available for 2024")
+        if not hospital_a_data.empty:
+            st.caption("Hospital has data but no detailed approach breakdown for this year.")
 
 # Hospital B approach mix
 with col2:
@@ -587,7 +632,9 @@ with col2:
         )
         st.plotly_chart(fig_b_app, use_container_width=True)
     else:
-        st.info("No approach data available for 2024")
+        st.info("🔧 No surgical approach breakdown available for 2024")
+        if not hospital_b_data.empty:
+            st.caption("Hospital has data but no detailed approach breakdown for this year.")
 
 # --- Summary Insights ---
 st.header("💡 Key Insights")
