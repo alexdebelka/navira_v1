@@ -914,71 +914,71 @@ robotic_volume = compute_robotic_volume_analysis(df)
 robotic_temporal = compute_robotic_temporal_analysis(df)
 robotic_institutional = compute_robotic_institutional_analysis(df)
 
-# # 1. Temporal Analysis
-# with st.expander("📈 1. Temporal Analysis - Robotic Adoption Over Time"):
-#     st.markdown("""
-#     **Understanding this analysis:**
+#  1. Temporal Analysis
+with st.expander("📈 1. Temporal Analysis - Robotic Adoption Over Time"):
+    st.markdown("""
+    **Understanding this analysis:**
     
-#     This chart shows how robotic surgery adoption has evolved from 2020 to 2024. It tracks both the absolute number of robotic procedures and the percentage of all surgeries that are performed robotically.
+    This chart shows how robotic surgery adoption has evolved from 2020 to 2024. It tracks both the absolute number of robotic procedures and the percentage of all surgeries that are performed robotically.
     
-#     **How we calculated this:**
-#     - **Data source**: Annual procedures data (2020-2024) for all eligible hospitals
-#     - **Filtering**: Only hospitals with ≥25 procedures/year in each year
-#     - **Robotic count**: Sum of all robotic procedures (ROB column) per year
-#     - **Total procedures**: Sum of all bariatric procedures per year
-#     - **Percentage**: (Robotic procedures / Total procedures) × 100 for each year
+    **How we calculated this:**
+    - **Data source**: Annual procedures data (2020-2024) for all eligible hospitals
+    - **Filtering**: Only hospitals with ≥25 procedures/year in each year
+    - **Robotic count**: Sum of all robotic procedures (ROB column) per year
+    - **Total procedures**: Sum of all bariatric procedures per year
+    - **Percentage**: (Robotic procedures / Total procedures) × 100 for each year
     
-#     **Key metrics:**
-#     - **Absolute growth**: Total number of robotic surgeries each year
-#     - **Relative growth**: Percentage of all surgeries that are robotic
-#     - **Adoption rate**: How quickly hospitals are adopting robotic technology
+    **Key metrics:**
+    - **Absolute growth**: Total number of robotic surgeries each year
+    - **Relative growth**: Percentage of all surgeries that are robotic
+    - **Adoption rate**: How quickly hospitals are adopting robotic technology
     
-#     **What to look for:**
-#     - **Acceleration**: Is robotic adoption speeding up or slowing down?
-#     - **Market penetration**: How much room is there for further growth?
-#     - **Year-over-year changes**: Which years saw the biggest increases?
-#     """)
+    **What to look for:**
+    - **Acceleration**: Is robotic adoption speeding up or slowing down?
+    - **Market penetration**: How much room is there for further growth?
+    - **Year-over-year changes**: Which years saw the biggest increases?
+    """)
     
-#     if robotic_temporal['years']:
-#         fig = go.Figure()
+    if robotic_temporal['years']:
+        fig = go.Figure()
         
-#         fig.add_trace(go.Bar(
-#             x=robotic_temporal['years'],
-#             y=robotic_temporal['robotic_counts'],
-#             name='Robotic Surgeries',
-#             marker_color='#F7931E',
-#             hovertemplate='<b>%{x}</b><br>Robotic: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>',
-#             customdata=robotic_temporal['percentages']
-#         ))
+        fig.add_trace(go.Bar(
+            x=robotic_temporal['years'],
+            y=robotic_temporal['robotic_counts'],
+            name='Robotic Surgeries',
+            marker_color='#F7931E',
+            hovertemplate='<b>%{x}</b><br>Robotic: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>',
+            customdata=robotic_temporal['percentages']
+        ))
         
-#         fig.update_layout(
-#             title="Robotic Surgery Adoption (2020-2024)",
-#             xaxis_title="Year",
-#             yaxis_title="Number of Robotic Surgeries",
-#             height=400,
-#             showlegend=True,
-#             plot_bgcolor='rgba(0,0,0,0)',
-#             paper_bgcolor='rgba(0,0,0,0)',
-#             font=dict(size=12),
-#             margin=dict(l=50, r=50, t=80, b=50)
-#         )
+        fig.update_layout(
+            title="Robotic Surgery Adoption (2020-2024)",
+            xaxis_title="Year",
+            yaxis_title="Number of Robotic Surgeries",
+            height=400,
+            showlegend=True,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12),
+            margin=dict(l=50, r=50, t=80, b=50)
+        )
         
-#         st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
         
-#         # Show percentage trend
-#         col1, col2, col3 = st.columns(3)
-#         with col1:
-#             st.metric("2020", f"{robotic_temporal['percentages'][0]}%")
-#         with col2:
-#             st.metric("2022", f"{robotic_temporal['percentages'][2]}%")
-#         with col3:
-#             st.metric("2024", f"{robotic_temporal['percentages'][4]}%")
+        # Show percentage trend
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("2020", f"{robotic_temporal['percentages'][0]}%")
+        with col2:
+            st.metric("2022", f"{robotic_temporal['percentages'][2]}%")
+        with col3:
+            st.metric("2024", f"{robotic_temporal['percentages'][4]}%")
 
 ## 2. Geographic Analysis (merged into Volume-based Analysis)
 st.info("Geographic regional analysis has been merged into the volume-based section to simplify comparisons.")
 
 # 3. Institutional Analysis
-with st.expander("🏥 2. Institutional Analysis & 🏛️ 4. Affiliation Analysis (Merged)"):
+with st.expander("🏥 2. Affiliation Analysis"):
     st.markdown("""
     **Understanding this analysis:**
     
@@ -1124,186 +1124,183 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
         except Exception:
             pass
 
-        # ECDF by volume bin
-        try:
-            from lib.national_utils import compute_robotic_volume_distribution
-            dist_df = compute_robotic_volume_distribution(df)
-            if not dist_df.empty:
-                st.subheader("ECDF of hospital robotic% by volume bin")
-                show_ge = st.toggle("Show ≥ threshold (instead of ≤)", value=False)
-                ordered_cats = ["<50", "50–100", "100–200", ">200"]
-                ecdf_records = []
-                for cat in ordered_cats:
-                    sub = dist_df[dist_df['volume_category'] == cat]['hospital_pct'].dropna().astype(float)
-                    if len(sub) == 0:
-                        continue
-                    vals = np.sort(sub.values)
-                    frac = np.arange(1, len(vals) + 1) / len(vals)
-                    for v, f in zip(vals, frac):
-                        ecdf_records.append({
-                            'volume_category': cat,
-                            'hospital_pct': v,
-                            'ecdf': f
-                        })
+        # # ECDF by volume bin
+        # try:
+        #     from lib.national_utils import compute_robotic_volume_distribution
+        #     dist_df = compute_robotic_volume_distribution(df)
+        #     if not dist_df.empty:
+        #         st.subheader("ECDF of hospital robotic% by volume bin")
+        #         show_ge = st.toggle("Show ≥ threshold (instead of ≤)", value=False)
+        #         ordered_cats = ["<50", "50–100", "100–200", ">200"]
+        #         ecdf_records = []
+        #         for cat in ordered_cats:
+        #             sub = dist_df[dist_df['volume_category'] == cat]['hospital_pct'].dropna().astype(float)
+        #             if len(sub) == 0:
+        #                 continue
+        #             vals = np.sort(sub.values)
+        #             frac = np.arange(1, len(vals) + 1) / len(vals)
+        #             for v, f in zip(vals, frac):
+        #                 ecdf_records.append({
+        #                     'volume_category': cat,
+        #                     'hospital_pct': v,
+        #                     'ecdf': f
+        #                 })
 
-                ecdf_df = pd.DataFrame(ecdf_records)
-                if not ecdf_df.empty:
-                    # Invert if showing ≥ threshold
-                    ecdf_df['ecdf_plot'] = 1 - ecdf_df['ecdf'] if show_ge else ecdf_df['ecdf']
-                    operator = '≥' if show_ge else '≤'
-                    ecdf_fig = px.line(
-                        ecdf_df,
-                        x='hospital_pct',
-                        y='ecdf_plot',
-                        color='volume_category',
-                        title=f'ECDF: Share of hospitals with robotic% {operator} threshold',
-                        line_shape='hv'
-                    )
-                    ecdf_fig.update_layout(
-                        xaxis_title='Robotic % (threshold)',
-                        yaxis_title='Cumulative share of hospitals',
-                        height=420,
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        paper_bgcolor='rgba(0,0,0,0)'
-                    )
-                    ecdf_fig.update_yaxes(tickformat='.0%')
-                    ecdf_fig.update_traces(
-                        hovertemplate=f'%{{fullData.name}}<br>{operator} %{{x:.1f}}% -> %{{y:.0%}}<extra></extra>'
-                    )
-                    # Add vertical guide lines at key thresholds
-                    for thr in [5, 10, 20]:
-                        ecdf_fig.add_vline(x=thr, line_dash='dot', line_color='gray', opacity=0.5)
-                        ecdf_fig.add_annotation(x=thr, y=1.02, xref='x', yref='paper',
-                                                text=f'{thr}%', showarrow=False, font=dict(size=10, color='gray'))
-                    st.plotly_chart(ecdf_fig, use_container_width=True)
-        except Exception:
-            pass
+        #         ecdf_df = pd.DataFrame(ecdf_records)
+        #         if not ecdf_df.empty:
+        #             # Invert if showing ≥ threshold
+        #             ecdf_df['ecdf_plot'] = 1 - ecdf_df['ecdf'] if show_ge else ecdf_df['ecdf']
+        #             operator = '≥' if show_ge else '≤'
+        #             ecdf_fig = px.line(
+        #                 ecdf_df,
+        #                 x='hospital_pct',
+        #                 y='ecdf_plot',
+        #                 color='volume_category',
+        #                 title=f'ECDF: Share of hospitals with robotic% {operator} threshold',
+        #                 line_shape='hv'
+        #             )
+        #             ecdf_fig.update_layout(
+        #                 xaxis_title='Robotic % (threshold)',
+        #                 yaxis_title='Cumulative share of hospitals',
+        #                 height=420,
+        #                 plot_bgcolor='rgba(0,0,0,0)',
+        #                 paper_bgcolor='rgba(0,0,0,0)'
+        #             )
+        #             ecdf_fig.update_yaxes(tickformat='.0%')
+        #             ecdf_fig.update_traces(
+        #                 hovertemplate=f'%{{fullData.name}}<br>{operator} %{{x:.1f}}% -> %{{y:.0%}}<extra></extra>'
+        #             )
+        #             # Add vertical guide lines at key thresholds
+        #             for thr in [5, 10, 20]:
+        #                 ecdf_fig.add_vline(x=thr, line_dash='dot', line_color='gray', opacity=0.5)
+        #                 ecdf_fig.add_annotation(x=thr, y=1.02, xref='x', yref='paper',
+        #                                         text=f'{thr}%', showarrow=False, font=dict(size=10, color='gray'))
+        #             st.plotly_chart(ecdf_fig, use_container_width=True)
+        # except Exception:
+        #     pass
 
-        # Δ between weighted and mean
-        try:
-            weighted = robotic_volume.get('percentages_weighted') or [None]*len(robotic_volume['volume_categories'])
-            mean_vals = robotic_volume.get('percentages_mean') or [None]*len(robotic_volume['volume_categories'])
-            deltas = []
-            for w, m in zip(weighted, mean_vals):
-                if w is not None and m is not None:
-                    deltas.append(round(w - m, 1))
-                else:
-                    deltas.append(None)
-            st.markdown("**Δ (weighted − mean) by volume bin:** " + ", ".join(
-                [f"{cat}: {d:+.1f}%" if d is not None else f"{cat}: n/a" for cat, d in zip(robotic_volume['volume_categories'], deltas)]
-            ))
-        except Exception:
-            pass
+        # # Δ between weighted and mean
+        # try:
+        #     weighted = robotic_volume.get('percentages_weighted') or [None]*len(robotic_volume['volume_categories'])
+        #     mean_vals = robotic_volume.get('percentages_mean') or [None]*len(robotic_volume['volume_categories'])
+        #     deltas = []
+        #     for w, m in zip(weighted, mean_vals):
+        #         if w is not None and m is not None:
+        #             deltas.append(round(w - m, 1))
+        #         else:
+        #             deltas.append(None)
+        #     st.markdown("**Δ (weighted − mean) by volume bin:** " + ", ".join(
+        #         [f"{cat}: {d:+.1f}%" if d is not None else f"{cat}: n/a" for cat, d in zip(robotic_volume['volume_categories'], deltas)]
+        #     ))
+        # except Exception:
+        #     pass
 
-        # Distribution plot (per-hospital robotic share) by volume bin
-        try:
-            from lib.national_utils import compute_robotic_volume_distribution
-            dist_df = compute_robotic_volume_distribution(df)
-            st.subheader("Per-hospital distribution by volume")
+        # # Distribution plot (per-hospital robotic share) by volume bin
+        # try:
+        #     from lib.national_utils import compute_robotic_volume_distribution
+        #     dist_df = compute_robotic_volume_distribution(df)
+        #     st.subheader("Per-hospital distribution by volume")
 
-            # Choose representation
-            style = st.radio(
-                "Distribution style",
-                options=["Violin + beeswarm", "Box + beeswarm"],
-                horizontal=True,
-                index=0
-            )
+        #     # Choose representation
+        #     style = st.radio(
+        #         "Distribution style",
+        #         options=["Violin + beeswarm", "Box + beeswarm"],
+        #         horizontal=True,
+        #         index=0
+        #     )
 
-            ordered_cats = ["<50", "50–100", "100–200", ">200"]
-            fig = go.Figure()
+        #     ordered_cats = ["<50", "50–100", "100–200", ">200"]
+        #     fig = go.Figure()
 
-            for cat in ordered_cats:
-                sub = dist_df[dist_df['volume_category'] == cat]
-                if sub.empty:
-                    continue
-                if style == "Violin + beeswarm":
-                    fig.add_trace(go.Violin(
-                        x=[cat] * len(sub),
-                        y=sub['hospital_pct'],
-                        name=cat,
-                        points='all',
-                        jitter=0.3,
-                        pointpos=0.0,
-                        box_visible=True,
-                        meanline_visible=True,
-                        marker=dict(size=6, opacity=0.55)
-                    ))
-                else:
-                    fig.add_trace(go.Box(
-                        x=[cat] * len(sub),
-                        y=sub['hospital_pct'],
-                        name=cat,
-                        boxpoints='all',
-                        jitter=0.3,
-                        pointpos=0.0,
-                        marker=dict(size=6, opacity=0.55)
-                    ))
+        #     for cat in ordered_cats:
+        #         sub = dist_df[dist_df['volume_category'] == cat]
+        #         if sub.empty:
+        #             continue
+        #         if style == "Violin + beeswarm":
+        #             fig.add_trace(go.Violin(
+        #                 x=[cat] * len(sub),
+        #                 y=sub['hospital_pct'],
+        #                 name=cat,
+        #                 points='all',
+        #                 jitter=0.3,
+        #                 pointpos=0.0,
+        #                 box_visible=True,
+        #                 meanline_visible=True,
+        #                 marker=dict(size=6, opacity=0.55)
+        #             ))
+        #         else:
+        #             fig.add_trace(go.Box(
+        #                 x=[cat] * len(sub),
+        #                 y=sub['hospital_pct'],
+        #                 name=cat,
+        #                 boxpoints='all',
+        #                 jitter=0.3,
+        #                 pointpos=0.0,
+        #                 marker=dict(size=6, opacity=0.55)
+        #             ))
 
-            fig.update_layout(
-                showlegend=False,
-                xaxis_title=None,
-                yaxis_title='Robotic % (per hospital)',
-                height=420,
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)'
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        except Exception as e:
-            st.info(f"Distribution view unavailable: {e}")
+        #     fig.update_layout(
+        #         showlegend=False,
+        #         xaxis_title=None,
+        #         yaxis_title='Robotic % (per hospital)',
+        #         height=420,
+        #         plot_bgcolor='rgba(0,0,0,0)',
+        #         paper_bgcolor='rgba(0,0,0,0)'
+        #     )
+        #     st.plotly_chart(fig, use_container_width=True)
+        # except Exception as e:
+        #     st.info(f"Distribution view unavailable: {e}")
 
-        # Continuous scatter with linear trendline
-        try:
-            from lib.national_utils import compute_robotic_volume_distribution
-            dist_df = compute_robotic_volume_distribution(df)
-            if not dist_df.empty:
-                st.subheader("Continuous relationship: volume vs robotic %")
-                cont = px.scatter(
-                    dist_df,
-                    x='total_surgeries',
-                    y='hospital_pct',
-                    color='volume_category',
-                    opacity=0.65,
-                    title='Hospital volume (continuous) vs robotic %'
-                )
-                # Linear trendline via numpy
-                try:
-                    xvals = dist_df['total_surgeries'].astype(float).values
-                    yvals = dist_df['hospital_pct'].astype(float).values
-                    if len(xvals) >= 2:
-                        slope, intercept = np.polyfit(xvals, yvals, 1)
-                        xs = np.linspace(xvals.min(), xvals.max(), 100)
-                        ys = slope * xs + intercept
-                        cont.add_trace(go.Scatter(x=xs, y=ys, mode='lines', name='Linear trend', line=dict(color='#4c78a8', width=2)))
-                except Exception:
-                    pass
+        # # Continuous scatter with linear trendline
+        # try:
+        #     from lib.national_utils import compute_robotic_volume_distribution
+        #     dist_df = compute_robotic_volume_distribution(df)
+        #     if not dist_df.empty:
+        #         st.subheader("Continuous relationship: volume vs robotic %")
+        #         cont = px.scatter(
+        #             dist_df,
+        #             x='total_surgeries',
+        #             y='hospital_pct',
+        #             color='volume_category',
+        #             opacity=0.65,
+        #             title='Hospital volume (continuous) vs robotic %'
+        #         )
+        #         # Linear trendline via numpy
+        #         try:
+        #             xvals = dist_df['total_surgeries'].astype(float).values
+        #             yvals = dist_df['hospital_pct'].astype(float).values
+        #             if len(xvals) >= 2:
+        #                 slope, intercept = np.polyfit(xvals, yvals, 1)
+        #                 xs = np.linspace(xvals.min(), xvals.max(), 100)
+        #                 ys = slope * xs + intercept
+        #                 cont.add_trace(go.Scatter(x=xs, y=ys, mode='lines', name='Linear trend', line=dict(color='#4c78a8', width=2)))
+        #         except Exception:
+        #             pass
 
-                cont.update_layout(
-                    xaxis_title='Total surgeries (2024)',
-                    yaxis_title='Robotic % (per hospital)',
-                    height=420,
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)'
-                )
-                st.plotly_chart(cont, use_container_width=True)
-                # WTLF + key findings for continuous scatter
-                try:
-                    r = float(np.corrcoef(xvals, yvals)[0,1]) if len(xvals) > 1 else 0.0
-                    with st.expander("What to look for and key findings"):
-                        st.markdown(
-                            f"""
-                            **What to look for:**
-                            - Overall relationship slope between volume and robotic%
-                            - Clusters and outliers at high/low volumes
+        #         cont.update_layout(
+        #             xaxis_title='Total surgeries (2024)',
+        #             yaxis_title='Robotic % (per hospital)',
+        #             height=420,
+        #             plot_bgcolor='rgba(0,0,0,0)',
+        #             paper_bgcolor='rgba(0,0,0,0)'
+        #         )
+        #         st.plotly_chart(cont, use_container_width=True)
+        #         # WTLF + key findings for continuous scatter
+        #         try:
+        #             r = float(np.corrcoef(xvals, yvals)[0,1]) if len(xvals) > 1 else 0.0
+        #             with st.expander("What to look for and key findings"):
+        #                 st.markdown(
+        #                     f"""
+        #                     **What to look for:**
+        #                     - Overall relationship slope between volume and robotic%
+        #                     - Clusters and outliers at high/low volumes
 
-                            **Key findings:**
-                            - Linear trend slope: **{slope:.3f}** percentage points per surgery (approx)
-                            - Correlation (r): **{r:.2f}**
-                            """
-                        )
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-# 5. Affiliation Analysis
-# Removed separate affiliation analysis (merged above)
+        #                     **Key findings:**
+        #                     - Linear trend slope: **{slope:.3f}** percentage points per surgery (approx)
+        #                     - Correlation (r): **{r:.2f}**
+        #                     """
+        #                 )
+        #         except Exception:
+        #             pass
+        # except Exception:
+        #     pass
