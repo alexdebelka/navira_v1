@@ -618,6 +618,9 @@ with col1:
         # (Removed previous info block in favor of hover tooltip)
         
         # Use a single blue color for all bars to emphasize totals
+        # Build label: show one decimal for percentages <1%, otherwise whole number
+        chart_df = chart_df.assign(Label=chart_df['Percentage'].apply(lambda p: f"{p:.1f}%" if p < 1 else f"{p:.0f}%"))
+
         fig = px.bar(
             chart_df,
             x='Value',
@@ -626,7 +629,7 @@ with col1:
             title=chart_title,
             color_discrete_sequence=['#4C84C8'],
             custom_data=['Percentage'],
-            text='Percentage'
+            text='Label'
         )
         fig.update_layout(
             xaxis_title=y_title,
@@ -639,9 +642,9 @@ with col1:
             margin=dict(l=160, r=50, t=80, b=40),
             yaxis=dict(automargin=True)
         )
-        # Horizontal hover shows category on Y
+        # Horizontal hover shows category on Y; text already includes % with proper decimals
         hover_tmpl_h = hover_tmpl.replace('%{x}', '%{y}').replace('%{y:,}', '%{x:,}')
-        fig.update_traces(hovertemplate=hover_tmpl_h, texttemplate='%{text:.0f}%', textposition='outside', cliponaxis=False)
+        fig.update_traces(hovertemplate=hover_tmpl_h, textposition='outside', cliponaxis=False)
         st.plotly_chart(fig, use_container_width=True)
         # Add WTLF + Key findings for procedures
         # try:
