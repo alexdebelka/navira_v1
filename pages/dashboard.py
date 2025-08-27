@@ -318,7 +318,7 @@ try:
 except Exception:
     pass
 st.markdown("#### Bariatric Procedures by Year")
-st.caption("📊 Chart shows annual procedures. Averages compare hospital's yearly average vs. national yearly average per hospital.")
+st.caption("📊 Hospital chart shows stacked shares by year (bars sum to 100%). National reference available in the tabs.")
 bariatric_df = hospital_annual_data[[key for key in BARIATRIC_PROCEDURE_NAMES.keys() if key in hospital_annual_data.columns]].rename(columns=BARIATRIC_PROCEDURE_NAMES)
 bariatric_summary = bariatric_df.sum()
 summary_texts = []
@@ -383,6 +383,7 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
             y='Share',
             color='Procedures',
             color_discrete_map=PROC_COLORS,
+            category_orders={'Procedures': ['Sleeve', 'Gastric Bypass', 'Other']},
             title='Bariatric Procedures by Year (share %)',
             barmode='stack'
         )
@@ -432,7 +433,16 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
                         nat_long.append({'annee': int(r['annee']), 'Procedures': label, 'Share': val/total*100})
                 nat_share_df = pd.DataFrame(nat_long)
                 if not nat_share_df.empty:
-                    nat_fig = px.bar(nat_share_df, x='annee', y='Share', color='Procedures', title='National procedures (share %)', barmode='stack', color_discrete_map=PROC_COLORS)
+                    nat_fig = px.bar(
+                        nat_share_df,
+                        x='annee',
+                        y='Share',
+                        color='Procedures',
+                        title='National procedures (share %)',
+                        barmode='stack',
+                        color_discrete_map=PROC_COLORS,
+                        category_orders={'Procedures': ['Sleeve', 'Gastric Bypass', 'Other']}
+                    )
                     nat_fig.update_layout(height=360, xaxis_title='Year', yaxis_title='% of procedures', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                     nat_fig.update_traces(opacity=0.95, hovertemplate='Year: %{x}<br>%{fullData.name}: %{y:.0f}%<extra></extra>')
                     nat_fig.update_yaxes(range=[0, 100], tick0=0, dtick=20)
@@ -550,7 +560,8 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
             color='Approach',
             title='Surgical Approaches by Year (share %)',
             barmode='stack',
-            color_discrete_map=APPROACH_COLORS
+            color_discrete_map=APPROACH_COLORS,
+            category_orders={'Approach': ['Sleeve', 'Gastric Bypass', 'Other']} # placeholder to ensure consistent legend order if mapped names appear elsewhere
         )
         fig2.update_layout(
             xaxis_title='Year',
