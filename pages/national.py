@@ -265,7 +265,7 @@ with col1:
         "Public University Hospital",
         f"{int(round(public_univ_count)):,}"
     )
-    st.markdown(f"<span style='color: grey; font-size: 0.9em;'>{public_univ_pct}% of total</span>", unsafe_allow_html=True)
+    st.markdown(f"<span style='color: grey; font-size: 0.9em; display:block; margin-top:-8px;'>{public_univ_pct}% of total</span>", unsafe_allow_html=True)
     
     # Public non-academic hospitals
     public_non_acad_count = affiliation_counts.get('Public – Non-Acad.', 0)
@@ -275,7 +275,7 @@ with col1:
         "Public, No Academic Affiliation",
         f"{int(round(public_non_acad_count)):,}"
     )
-    st.markdown(f"<span style='color: grey; font-size: 0.9em;'>{public_non_acad_pct}% of total</span>", unsafe_allow_html=True)
+    st.markdown(f"<span style='color: grey; font-size: 0.9em; display:block; margin-top:-8px;'>{public_non_acad_pct}% of total</span>", unsafe_allow_html=True)
 
 with col2:
     st.subheader("Private")
@@ -288,7 +288,7 @@ with col2:
         "Private For Profit",
         f"{int(round(private_for_profit_count)):,}"
     )
-    st.markdown(f"<span style='color: grey; font-size: 0.9em;'>{private_for_profit_pct}% of total</span>", unsafe_allow_html=True)
+    st.markdown(f"<span style='color: grey; font-size: 0.9em; display:block; margin-top:-8px;'>{private_for_profit_pct}% of total</span>", unsafe_allow_html=True)
     
     # Private not-for-profit hospitals
     private_not_profit_count = affiliation_counts.get('Private – Not-for-profit', 0)
@@ -298,7 +298,7 @@ with col2:
         "Private Not For Profit",
         f"{int(round(private_not_profit_count)):,}"
     )
-    st.markdown(f"<span style='color: grey; font-size: 0.9em;'>{private_not_profit_pct}% of total</span>", unsafe_allow_html=True)
+    st.markdown(f"<span style='color: grey; font-size: 0.9em; display:block; margin-top:-8px;'>{private_not_profit_pct}% of total</span>", unsafe_allow_html=True)
 
 # Second block: Stacked bar chart
 st.markdown(
@@ -615,8 +615,57 @@ with col1:
         hover_tmpl = '<b>%{x}</b><br>Total 2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
 
     if not chart_df.empty:
-        # (Removed previous info block in favor of hover tooltip)
-        
+        # Area chart of procedures over time (shares), like Affiliation Trends
+        try:
+            proc_long = []
+            for year in sorted(df['annee'].unique()):
+                yearly = df[df['annee'] == year]
+                totals = {code: yearly.get(code, 0).sum() if code in yearly.columns else 0 for code in BARIATRIC_PROCEDURE_NAMES.keys()}
+                total_sum = sum(totals.values()) or 1
+                for code, name in BARIATRIC_PROCEDURE_NAMES.items():
+                    if code in totals:
+                        proc_long.append({'Year': int(year), 'Procedure': name, 'Share': totals[code] / total_sum * 100})
+            proc_df = pd.DataFrame(proc_long)
+            if not proc_df.empty:
+                st.markdown(
+                    """
+                    <div class=\"nv-info-wrap\">
+                      <div class=\"nv-h3\">Procedure Mix Trends (2020–2024)</div>
+                      <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+                        <div class=\"nv-tooltiptext\">
+                          <b>Understanding this chart:</b><br/>
+                          Stacked area shows procedure shares per year across all eligible hospitals. Each year sums to 100%.
+                        </div>
+                      </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+                proc_fig = px.area(
+                    proc_df,
+                    x='Year', y='Share', color='Procedure',
+                    title='Procedure Mix Trends Over Time',
+                    color_discrete_map={'Sleeve Gastrectomy':'#4C84C8','Gastric Bypass':'#7aa7f7','Band Removal':'#9ca3af','Other':'#f59e0b','Gastric Banding':'#a78bfa','Bilio-pancreatic Diversion':'#ef4444','Calibrated Vertical Gastroplasty':'#10b981','Not Defined':'#6b7280'}
+                )
+                proc_fig.update_layout(height=380, xaxis_title='Year', yaxis_title='% of procedures', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                proc_fig.update_traces(line=dict(width=0), opacity=0.9)
+                st.plotly_chart(proc_fig, use_container_width=True)
+                with st.expander("What to look for and key findings"):
+                    try:
+                        last = proc_df[proc_df['Year']==proc_df['Year'].max()].sort_values('Share', ascending=False).iloc[0]
+                        st.markdown(f"""
+                        **What to look for:**
+                        - Stability vs shifts in procedure mix
+                        - Which procedures gain or lose share across years
+
+                        **Key findings:**
+                        - Dominant procedure in {int(proc_df['Year'].max())}: **{last['Procedure']}** (~{last['Share']:.0f}%)
+                        """)
+                    except Exception:
+                        st.markdown("Review the stacked areas for dominant procedures each year.")
+        except Exception:
+            pass
+
         # Use a single blue color for all bars to emphasize totals
         # Build label: show one decimal for percentages <1%, otherwise whole number
         chart_df = chart_df.assign(Label=chart_df['Percentage'].apply(lambda p: f"{p:.1f}%" if p < 1 else f"{p:.0f}%"))
