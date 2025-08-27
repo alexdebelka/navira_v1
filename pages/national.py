@@ -639,36 +639,36 @@ with col1:
         fig.update_traces(hovertemplate=hover_tmpl)
         st.plotly_chart(fig, use_container_width=True)
         # Add WTLF + Key findings for procedures
-        try:
-            if not chart_df.empty:
-                top_row = chart_df.iloc[0]
-                top_name = str(top_row['Procedure'])
-                top_val = int(top_row['Value'])
-                top_pct = float(top_row.get('Percentage', 0))
-                total_sum = int(chart_df['Value'].sum())
-                with st.expander("What to look for and key findings"):
-                    st.markdown(
-                        f"""
-                        **What to look for:**
-                        - Which procedure dominates overall volume
-                        - Relative mix shifts when toggling the time period
-                        - Tail procedures with very small shares
+        # try:
+        #     if not chart_df.empty:
+        #         top_row = chart_df.iloc[0]
+        #         top_name = str(top_row['Procedure'])
+        #         top_val = int(top_row['Value'])
+        #         top_pct = float(top_row.get('Percentage', 0))
+        #         total_sum = int(chart_df['Value'].sum())
+        #         with st.expander("What to look for and key findings"):
+        #             st.markdown(
+        #                 f"""
+        #                 **What to look for:**
+        #                 - Which procedure dominates overall volume
+        #                 - Relative mix shifts when toggling the time period
+        #                 - Tail procedures with very small shares
 
-                        **Key findings:**
-                        - Top procedure: **{top_name}** with **{top_val:,}** cases ({top_pct:.0f}% of total {total_sum:,})
-                        """
-                    )
-        except Exception:
-            pass
-        with st.expander("What to look for and key findings"):
-            st.markdown("""
-            **What to look for:**
-            - Differences in weighted robotic% between volume bins
-            - Whether higher volume correlates with higher robotic adoption
+        #                 **Key findings:**
+        #                 - Top procedure: **{top_name}** with **{top_val:,}** cases ({top_pct:.0f}% of total {total_sum:,})
+        #                 """
+        #             )
+        # except Exception:
+        #     pass
+        # with st.expander("What to look for and key findings"):
+        #     st.markdown("""
+        #     **What to look for:**
+        #     - Differences in weighted robotic% between volume bins
+        #     - Whether higher volume correlates with higher robotic adoption
 
-            **Key findings:**
-            - Weighted vs mean deltas below indicate whether large centers drive the rate
-            """)
+        #     **Key findings:**
+        #     - Weighted vs mean deltas below indicate whether large centers drive the rate
+        #     """)
 
 with col2:
     if not toggle_2024_only:
