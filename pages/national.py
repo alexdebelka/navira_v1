@@ -665,19 +665,24 @@ with col1:
         known_codes = ['SLE','BPG','ANN','REV','ABL','DBP','GVC','NDD']
         available = [c for c in known_codes if c in df.columns]
         proc_trend_rows = []
-        for year in sorted(df['annee'].unique()):
-            yearly = df[df['annee'] == year]
-            if not available:
-                continue
-            totals = yearly[available].sum(numeric_only=True)
-            sleeve = float(totals.get('SLE', 0))
-            bypass = float(totals.get('BPG', 0))
-            other = float(totals.sum() - sleeve - bypass)
-            total_sum = sleeve + bypass + other
-            if total_sum <= 0:
-                continue
-            for name, val in [('Sleeve', sleeve), ('Gastric Bypass', bypass), ('Other', other)]:
-                proc_trend_rows.append({'Year': int(year), 'Procedure': name, 'Share': val / total_sum * 100})
+        
+        # Check if required columns exist (note: 'annee' is renamed to 'year' in data loading)
+        year_col = 'year' if 'year' in df.columns else 'annee'
+        if year_col in df.columns and available:
+            for year in sorted(df[year_col].unique()):
+                yearly = df[df[year_col] == year]
+                if yearly.empty:
+                    continue
+                totals = yearly[available].sum(numeric_only=True)
+                sleeve = float(totals.get('SLE', 0))
+                bypass = float(totals.get('BPG', 0))
+                other = float(totals.sum() - sleeve - bypass)
+                total_sum = sleeve + bypass + other
+                if total_sum <= 0:
+                    continue
+                for name, val in [('Sleeve', sleeve), ('Gastric Bypass', bypass), ('Other', other)]:
+                    proc_trend_rows.append({'Year': int(year), 'Procedure': name, 'Share': val / total_sum * 100})
+        
         proc_trend_df = pd.DataFrame(proc_trend_rows)
         if not proc_trend_df.empty:
             proc_colors = {'Sleeve': '#4C84C8', 'Gastric Bypass': '#7aa7f7', 'Other': '#f59e0b'}
@@ -710,6 +715,8 @@ with col1:
                     """)
                 except Exception:
                     st.markdown("Review the stacked areas for dominant procedures each year.")
+        else:
+            st.info("Procedure trends chart unavailable - insufficient data or missing columns.")
 
 
 with col2:
