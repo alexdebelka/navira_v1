@@ -6,10 +6,14 @@ import plotly.graph_objects as go
 from navira.data_loader import get_dataframes
 from auth_wrapper import add_auth_to_page
 from navigation_utils import handle_navigation_request
+from sidebar_utils import add_sidebar_to_page
 handle_navigation_request()
 
 # Add authentication check
 add_auth_to_page()
+
+# Add the custom sidebar
+add_sidebar_to_page()
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -17,6 +21,18 @@ st.set_page_config(
     page_icon="⚖️",
     layout="wide"
 )
+
+# --- HIDE THE DEFAULT STREAMLIT NAVIGATION ---
+st.markdown("""
+    <style>
+        [data-testid="stSidebarNav"] {
+            display: none;
+        }
+        [data-testid="stPageNav"] {
+            display: none;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- Cache Control ---
 if st.button("♻️ Clear cache and reload"):
