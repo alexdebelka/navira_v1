@@ -615,56 +615,6 @@ with col1:
         hover_tmpl = '<b>%{x}</b><br>Total 2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
 
     if not chart_df.empty:
-        # Area chart of procedures over time (shares), like Affiliation Trends
-        try:
-            proc_long = []
-            for year in sorted(df['annee'].unique()):
-                yearly = df[df['annee'] == year]
-                totals = {code: yearly.get(code, 0).sum() if code in yearly.columns else 0 for code in BARIATRIC_PROCEDURE_NAMES.keys()}
-                total_sum = sum(totals.values()) or 1
-                for code, name in BARIATRIC_PROCEDURE_NAMES.items():
-                    if code in totals:
-                        proc_long.append({'Year': int(year), 'Procedure': name, 'Share': totals[code] / total_sum * 100})
-            proc_df = pd.DataFrame(proc_long)
-            if not proc_df.empty:
-                st.markdown(
-                    """
-                    <div class=\"nv-info-wrap\">
-                      <div class=\"nv-h3\">Procedure Mix Trends (2020–2024)</div>
-                      <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
-                        <div class=\"nv-tooltiptext\">
-                          <b>Understanding this chart:</b><br/>
-                          Stacked area shows procedure shares per year across all eligible hospitals. Each year sums to 100%.
-                        </div>
-                      </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-                proc_fig = px.area(
-                    proc_df,
-                    x='Year', y='Share', color='Procedure',
-                    title='Procedure Mix Trends Over Time',
-                    color_discrete_map={'Sleeve Gastrectomy':'#4C84C8','Gastric Bypass':'#7aa7f7','Band Removal':'#9ca3af','Other':'#f59e0b','Gastric Banding':'#a78bfa','Bilio-pancreatic Diversion':'#ef4444','Calibrated Vertical Gastroplasty':'#10b981','Not Defined':'#6b7280'}
-                )
-                proc_fig.update_layout(height=380, xaxis_title='Year', yaxis_title='% of procedures', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                proc_fig.update_traces(line=dict(width=0), opacity=0.9)
-                st.plotly_chart(proc_fig, use_container_width=True)
-                with st.expander("What to look for and key findings"):
-                    try:
-                        last = proc_df[proc_df['Year']==proc_df['Year'].max()].sort_values('Share', ascending=False).iloc[0]
-                        st.markdown(f"""
-                        **What to look for:**
-                        - Stability vs shifts in procedure mix
-                        - Which procedures gain or lose share across years
-
-                        **Key findings:**
-                        - Dominant procedure in {int(proc_df['Year'].max())}: **{last['Procedure']}** (~{last['Share']:.0f}%)
-                        """)
-                    except Exception:
-                        st.markdown("Review the stacked areas for dominant procedures each year.")
-        except Exception:
-            pass
 
         # Use a single blue color for all bars to emphasize totals
         # Build label: show one decimal for percentages <1%, otherwise whole number
@@ -697,96 +647,70 @@ with col1:
         st.plotly_chart(fig, use_container_width=True)
 
         # Procedure mix trends (shares) — below the bar plot
-        try:
-            # Collapse to Sleeve, Gastric Bypass, Other
-            known_codes = ['SLE','BPG','ANN','REV','ABL','DBP','GVC','NDD']
-            available = [c for c in known_codes if c in df.columns]
-            proc_trend_rows = []
-            for year in sorted(df['annee'].unique()):
-                yearly = df[df['annee'] == year]
-                if not available:
-                    continue
-                totals = yearly[available].sum(numeric_only=True)
-                sleeve = float(totals.get('SLE', 0))
-                bypass = float(totals.get('BPG', 0))
-                other = float(totals.sum() - sleeve - bypass)
-                total_sum = sleeve + bypass + other
-                if total_sum <= 0:
-                    continue
-                for name, val in [('Sleeve', sleeve), ('Gastric Bypass', bypass), ('Other', other)]:
-                    proc_trend_rows.append({'Year': int(year), 'Procedure3': name, 'Share': val / total_sum * 100})
-            proc_trend_df = pd.DataFrame(proc_trend_rows)
-            if not proc_trend_df.empty:
-                st.markdown(
-                    """
-                    <div class=\"nv-info-wrap\">
-                      <div class=\"nv-h3\">Procedure Mix Trends (2020–2024)</div>
-                      <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
-                        <div class=\"nv-tooltiptext\">
-                          <b>Understanding this chart:</b><br/>
-                          Stacked area shows annual shares of Sleeve, Gastric Bypass, and Other across eligible hospitals. Each year sums to 100%.
-                        </div>
-                      </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                proc_colors = {'Sleeve': '#4C84C8', 'Gastric Bypass': '#7aa7f7', 'Other': '#f59e0b'}
-                proc_area = px.area(
-                    proc_trend_df, x='Year', y='Share', color='Procedure3',
+        st.markdown(
+            """
+            <div class=\"nv-info-wrap\">
+              <div class=\"nv-h3\">Procedure Mix Trends (2020–2024)</div>
+              <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+                <div class=\"nv-tooltiptext\">
+                  <b>Understanding this chart:</b><br/>
+                  Stacked area shows annual shares of Sleeve, Gastric Bypass, and Other across eligible hospitals. Each year sums to 100%.
+                </div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        # Collapse to Sleeve, Gastric Bypass, Other
+        known_codes = ['SLE','BPG','ANN','REV','ABL','DBP','GVC','NDD']
+        available = [c for c in known_codes if c in df.columns]
+        proc_trend_rows = []
+        for year in sorted(df['annee'].unique()):
+            yearly = df[df['annee'] == year]
+            if not available:
+                continue
+            totals = yearly[available].sum(numeric_only=True)
+            sleeve = float(totals.get('SLE', 0))
+            bypass = float(totals.get('BPG', 0))
+            other = float(totals.sum() - sleeve - bypass)
+            total_sum = sleeve + bypass + other
+            if total_sum <= 0:
+                continue
+            for name, val in [('Sleeve', sleeve), ('Gastric Bypass', bypass), ('Other', other)]:
+                proc_trend_rows.append({'Year': int(year), 'Procedure': name, 'Share': val / total_sum * 100})
+        proc_trend_df = pd.DataFrame(proc_trend_rows)
+        if not proc_trend_df.empty:
+            proc_colors = {'Sleeve': '#4C84C8', 'Gastric Bypass': '#7aa7f7', 'Other': '#f59e0b'}
+            proc_area = px.area(
+                    proc_trend_df, x='Year', y='Share', color='Procedure',
                     title='Procedure Mix Trends Over Time',
                     color_discrete_map=proc_colors,
-                    category_orders={'Procedure3': ['Sleeve', 'Gastric Bypass', 'Other']}
+                    category_orders={'Procedure': ['Sleeve', 'Gastric Bypass', 'Other']}
                 )
-                proc_area.update_layout(height=360, xaxis_title='Year', yaxis_title='% of procedures', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                proc_area.update_traces(line=dict(width=0), opacity=0.9)
-                st.plotly_chart(proc_area, use_container_width=True)
-                with st.expander("What to look for and key findings"):
-                    last_year = int(proc_trend_df['Year'].max())
-                    last_row = proc_trend_df[proc_trend_df['Year'] == last_year].sort_values('Share', ascending=False).iloc[0]
-                    st.markdown(
-                        f"""
-                        **What to look for:**
-                        - Relative share changes between Sleeve, Gastric Bypass, and Other
-                        - Stability vs. shifts year‑to‑year
+            proc_area.update_layout(
+                height=380, 
+                xaxis_title='Year', 
+                yaxis_title='% of procedures', 
+                plot_bgcolor='rgba(0,0,0,0)', 
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+            proc_area.update_traces(line=dict(width=0), opacity=0.9)
+            st.plotly_chart(proc_area, use_container_width=True)
+            
+            with st.expander("What to look for and key findings"):
+                try:
+                    last = proc_trend_df[proc_trend_df['Year']==proc_trend_df['Year'].max()].sort_values('Share', ascending=False).iloc[0]
+                    st.markdown(f"""
+                    **What to look for:**
+                    - Stability vs shifts in procedure mix
+                    - Which procedures gain or lose share across years
 
-                        **Key findings:**
-                        - Dominant procedure in {last_year}: **{last_row['Procedure3']}** (~{last_row['Share']:.0f}%)
-                        """
-                    )
-        except Exception:
-            pass
-        # Add WTLF + Key findings for procedures
-        # try:
-        #     if not chart_df.empty:
-        #         top_row = chart_df.iloc[0]
-        #         top_name = str(top_row['Procedure'])
-        #         top_val = int(top_row['Value'])
-        #         top_pct = float(top_row.get('Percentage', 0))
-        #         total_sum = int(chart_df['Value'].sum())
-        #         with st.expander("What to look for and key findings"):
-        #             st.markdown(
-        #                 f"""
-        #                 **What to look for:**
-        #                 - Which procedure dominates overall volume
-        #                 - Relative mix shifts when toggling the time period
-        #                 - Tail procedures with very small shares
+                    **Key findings:**
+                    - Dominant procedure in {int(proc_trend_df['Year'].max())}: **{last['Procedure']}** (~{last['Share']:.0f}%)
+                    """)
+                except Exception:
+                    st.markdown("Review the stacked areas for dominant procedures each year.")
 
-        #                 **Key findings:**
-        #                 - Top procedure: **{top_name}** with **{top_val:,}** cases ({top_pct:.0f}% of total {total_sum:,})
-        #                 """
-        #             )
-        # except Exception:
-        #     pass
-        # with st.expander("What to look for and key findings"):
-        #     st.markdown("""
-        #     **What to look for:**
-        #     - Differences in weighted robotic% between volume bins
-        #     - Whether higher volume correlates with higher robotic adoption
-
-        #     **Key findings:**
-        #     - Weighted vs mean deltas below indicate whether large centers drive the rate
-        #     """)
 
 with col2:
     if not toggle_2024_only:
