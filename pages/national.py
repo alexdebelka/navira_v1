@@ -732,7 +732,7 @@ with col1:
             )
             # For single-year view, keep standard 2020–2024 ticks but the data is flat
             if toggle_2024_only:
-                fig.update_layout(xaxis=dict(tickmode='array', tickvals=[2020, 2021, 2022, 2023, 2024], ticktext=['2020','2021','2022','2023','2024']))
+                fig.update_layout(xaxis=dict(tickmode='array', tickvals=[2024], ticktext=['2024']))
             fig.update_traces(line=dict(width=0), opacity=0.9)
             
             st.plotly_chart(fig, use_container_width=True)
