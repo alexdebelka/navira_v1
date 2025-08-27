@@ -650,7 +650,7 @@ with col1:
         # Update title and tooltip based on toggle state
         if toggle_2024_only:
             time_period = "2024"
-            tooltip_text = "This chart shows the procedure mix breakdown for 2024 data only. Each segment represents the percentage share of Sleeve, Gastric Bypass, and Other procedures."
+            tooltip_text = "Stacked area shows the procedure mix for 2024 only. The segments represent the percentage share of Sleeve, Gastric Bypass, and Other procedures, totaling 100%."
         else:
             time_period = "2020–2024"
             tooltip_text = "Stacked area shows annual shares of Sleeve, Gastric Bypass, and Other across eligible hospitals. Each year sums to 100%."
@@ -701,43 +701,22 @@ with col1:
         if not proc_trend_df.empty:
             proc_colors = {'Sleeve': '#4C84C8', 'Gastric Bypass': '#7aa7f7', 'Other': '#f59e0b'}
             
-            # Choose chart type based on toggle state
-            if toggle_2024_only:
-                # For 2024 only, show a pie chart instead of area chart
-                fig = px.pie(
-                    proc_trend_df, 
-                    values='Share', 
-                    names='Procedure',
-                    title=f'Procedure Mix ({time_period})',
-                    color_discrete_map=proc_colors
+            # Always use area chart, but adjust based on data available
+            proc_area = px.area(
+                    proc_trend_df, x='Year', y='Share', color='Procedure',
+                    title=f'Procedure Mix Trends Over Time ({time_period})',
+                    color_discrete_map=proc_colors,
+                    category_orders={'Procedure': ['Sleeve', 'Gastric Bypass', 'Other']}
                 )
-                fig.update_layout(
-                    height=380,
-                    showlegend=True,
-                    font=dict(size=12)
-                )
-                fig.update_traces(
-                    hovertemplate='<b>%{label}</b><br>Share: %{value:.1f}%<extra></extra>',
-                    textposition='outside',
-                    textinfo='label+percent'
-                )
-            else:
-                # For multi-year data, show area chart
-                proc_area = px.area(
-                        proc_trend_df, x='Year', y='Share', color='Procedure',
-                        title=f'Procedure Mix Trends Over Time ({time_period})',
-                        color_discrete_map=proc_colors,
-                        category_orders={'Procedure': ['Sleeve', 'Gastric Bypass', 'Other']}
-                    )
-                proc_area.update_layout(
-                    height=380, 
-                    xaxis_title='Year', 
-                    yaxis_title='% of procedures', 
-                    plot_bgcolor='rgba(0,0,0,0)', 
-                    paper_bgcolor='rgba(0,0,0,0)'
-                )
-                proc_area.update_traces(line=dict(width=0), opacity=0.9)
-                fig = proc_area
+            proc_area.update_layout(
+                height=380, 
+                xaxis_title='Year', 
+                yaxis_title='% of procedures', 
+                plot_bgcolor='rgba(0,0,0,0)', 
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+            proc_area.update_traces(line=dict(width=0), opacity=0.9)
+            fig = proc_area
             
             st.plotly_chart(fig, use_container_width=True)
             
@@ -745,12 +724,11 @@ with col1:
                 try:
                     if toggle_2024_only:
                         # For 2024 only data, show breakdown analysis
-                        total_procedures = proc_trend_df['Share'].sum()
                         dominant = proc_trend_df.sort_values('Share', ascending=False).iloc[0]
                         st.markdown(f"""
                         **What to look for:**
-                        - Relative size of each procedure type segment
-                        - Dominant procedure type in 2024
+                        - Relative size of each procedure type segment in 2024
+                        - Dominant procedure type
                         - Share distribution between major procedures
 
                         **Key findings:**
@@ -771,7 +749,7 @@ with col1:
                         """)
                 except Exception:
                     if toggle_2024_only:
-                        st.markdown("Review the pie chart segments for procedure distribution in 2024.")
+                        st.markdown("Review the stacked area for procedure distribution in 2024.")
                     else:
                         st.markdown("Review the stacked areas for dominant procedures each year.")
         else:
