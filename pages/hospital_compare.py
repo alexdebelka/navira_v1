@@ -183,12 +183,37 @@ for hospital_id in hospitals_with_data:
     hospital_info = establishments[establishments['id'] == hospital_id]
     if not hospital_info.empty:
         name = hospital_info.iloc[0]['name']
-        city = hospital_info.iloc[0].get('city', '')
-        # Only add city if it exists and is not empty/null
-        if city and str(city).strip() and str(city).strip().lower() != 'nan':
-            display_name = f"{name} ({city})"
+        
+        # Try multiple location fields to get the best location info
+        location_parts = []
+        
+        # Debug: Check available columns (can remove later)
+        available_cols = list(hospital_info.columns)
+        
+        # Check for city - try multiple possible column names
+        city = None
+        for city_col in ['city', 'ville']:
+            if city_col in available_cols:
+                city = hospital_info.iloc[0].get(city_col, '')
+                if city and str(city).strip() and str(city).strip().lower() not in ['nan', 'none', '', 'null']:
+                    location_parts.append(str(city).strip())
+                    break
+        
+        # Check for region if city is not available - try multiple possible column names
+        if not location_parts:
+            for region_col in ['lib_reg', 'region', 'code_reg']:
+                if region_col in available_cols:
+                    region = hospital_info.iloc[0].get(region_col, '')
+                    if region and str(region).strip() and str(region).strip().lower() not in ['nan', 'none', '', 'null']:
+                        location_parts.append(str(region).strip())
+                        break
+        
+        # Create display name
+        if location_parts:
+            display_name = f"{name} ({', '.join(location_parts)})"
         else:
             display_name = name
+            
         hospital_names.append(display_name)
         hospital_mapping[display_name] = hospital_id
 
@@ -245,13 +270,31 @@ hospital_b_info, hospital_b_data = get_hospital_data(hospital_b_id)
 col1, col2, col3 = st.columns([5, 1, 5])
 
 with col1:
-    city_a = hospital_a_info.get('city', '')
-    city_display_a = city_a if city_a and str(city_a).strip() and str(city_a).strip().lower() != 'nan' else 'Location not specified'
+    # Get better location info for hospital A
+    location_parts_a = []
+    
+    # Check for city - try multiple possible column names
+    for city_col in ['city', 'ville']:
+        city_a = hospital_a_info.get(city_col, '')
+        if city_a and str(city_a).strip() and str(city_a).strip().lower() not in ['nan', 'none', '', 'null']:
+            location_parts_a.append(str(city_a).strip())
+            break
+    
+    # Check for region if city is not available
+    if not location_parts_a:
+        for region_col in ['lib_reg', 'region', 'code_reg']:
+            region_a = hospital_a_info.get(region_col, '')
+            if region_a and str(region_a).strip() and str(region_a).strip().lower() not in ['nan', 'none', '', 'null']:
+                location_parts_a.append(str(region_a).strip())
+                break
+    
+    location_display_a = ', '.join(location_parts_a) if location_parts_a else 'Location not specified'
+    
     st.markdown(f"""
     <div class="hospital-card">
         <div class="hospital-name">{hospital_a_info['name']}</div>
         <div class="hospital-details">
-            📍 {city_display_a}<br>
+            📍 {location_display_a}<br>
             🏥 {hospital_a_info.get('statut', 'Unknown').title()}<br>
             🎓 {'Academic' if hospital_a_info.get('academic_affiliation', 0) == 1 else 'Non-Academic'}
         </div>
@@ -262,13 +305,31 @@ with col2:
     st.markdown('<div class="vs-divider">VS</div>', unsafe_allow_html=True)
 
 with col3:
-    city_b = hospital_b_info.get('city', '')
-    city_display_b = city_b if city_b and str(city_b).strip() and str(city_b).strip().lower() != 'nan' else 'Location not specified'
+    # Get better location info for hospital B
+    location_parts_b = []
+    
+    # Check for city - try multiple possible column names
+    for city_col in ['city', 'ville']:
+        city_b = hospital_b_info.get(city_col, '')
+        if city_b and str(city_b).strip() and str(city_b).strip().lower() not in ['nan', 'none', '', 'null']:
+            location_parts_b.append(str(city_b).strip())
+            break
+    
+    # Check for region if city is not available
+    if not location_parts_b:
+        for region_col in ['lib_reg', 'region', 'code_reg']:
+            region_b = hospital_b_info.get(region_col, '')
+            if region_b and str(region_b).strip() and str(region_b).strip().lower() not in ['nan', 'none', '', 'null']:
+                location_parts_b.append(str(region_b).strip())
+                break
+    
+    location_display_b = ', '.join(location_parts_b) if location_parts_b else 'Location not specified'
+    
     st.markdown(f"""
     <div class="hospital-card">
         <div class="hospital-name">{hospital_b_info['name']}</div>
         <div class="hospital-details">
-            📍 {city_display_b}<br>
+            📍 {location_display_b}<br>
             🏥 {hospital_b_info.get('statut', 'Unknown').title()}<br>
             🎓 {'Academic' if hospital_b_info.get('academic_affiliation', 0) == 1 else 'Non-Academic'}
         </div>
