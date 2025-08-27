@@ -170,17 +170,9 @@ st.title("⚖️ Hospital Comparison")
 st.markdown("Compare two hospitals side-by-side across key metrics and performance indicators.")
 
 # Version indicator to help track deployment
-st.caption("🔄 Version: 2024-12-19 v2.1 - Updated colors and styling")
+st.caption("🔄 Version: 2024-12-19 v2.2 - Transparent backgrounds, white titles")
 
-# Color test - to verify colors are loading correctly
-if st.checkbox("🎨 Show color test"):
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f'<div style="background-color: {PROC_COLORS["Sleeve"]}; padding: 10px; border-radius: 5px; text-align: center; color: white;">Sleeve: {PROC_COLORS["Sleeve"]}</div>', unsafe_allow_html=True)
-    with col2:
-        st.markdown(f'<div style="background-color: {PROC_COLORS["Gastric Bypass"]}; padding: 10px; border-radius: 5px; text-align: center; color: white;">Gastric Bypass: {PROC_COLORS["Gastric Bypass"]}</div>', unsafe_allow_html=True)
-    with col3:
-        st.markdown(f'<div style="background-color: {PROC_COLORS["Other"]}; padding: 10px; border-radius: 5px; text-align: center; color: white;">Other: {PROC_COLORS["Other"]}</div>', unsafe_allow_html=True)
+
 
 # --- Hospital Selection ---
 st.subheader("Select Hospitals to Compare")
@@ -245,11 +237,7 @@ def get_hospital_data(hospital_id):
     # Get annual data for this hospital
     hospital_annual = annual[annual['id'] == hospital_id].copy()
     
-    # Debug info (can be removed later)
-    if st.checkbox(f"Show debug info for {hospital_id}", key=f"debug_{hospital_id}"):
-        st.write(f"Hospital {hospital_id} annual data shape: {hospital_annual.shape}")
-        st.write(f"Years available: {sorted(hospital_annual['annee'].unique()) if 'annee' in hospital_annual.columns else 'No annee column'}")
-        st.write(f"Columns: {list(hospital_annual.columns)}")
+
     
     return est_info, hospital_annual
 
@@ -404,8 +392,9 @@ if not volume_df.empty and volume_df['Volume'].sum() > 0:
         xaxis_title='Year',
         yaxis_title='Total Procedures',
         hovermode='x unified',
-        plot_bgcolor='white',
-        paper_bgcolor='white'
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        title_font_color='white'
     )
     fig_volume.update_traces(
         hovertemplate='<b>%{fullData.name}</b><br>Year: %{x}<br>Volume: %{y:,}<extra></extra>'
@@ -475,7 +464,12 @@ with col1:
             color_discrete_map=PROC_COLORS
         )
         fig_a.update_traces(textposition='inside', textinfo='percent+label')
-        fig_a.update_layout(height=400, plot_bgcolor='white', paper_bgcolor='white')
+        fig_a.update_layout(
+            height=400, 
+            plot_bgcolor='rgba(0,0,0,0)', 
+            paper_bgcolor='rgba(0,0,0,0)',
+            title_font_color='white'
+        )
         st.plotly_chart(fig_a, use_container_width=True)
     else:
         st.info("No procedure data available for 2024")
@@ -495,7 +489,12 @@ with col2:
             color_discrete_map=PROC_COLORS
         )
         fig_b.update_traces(textposition='inside', textinfo='percent+label')
-        fig_b.update_layout(height=400, plot_bgcolor='white', paper_bgcolor='white')
+        fig_b.update_layout(
+            height=400, 
+            plot_bgcolor='rgba(0,0,0,0)', 
+            paper_bgcolor='rgba(0,0,0,0)',
+            title_font_color='white'
+        )
         st.plotly_chart(fig_b, use_container_width=True)
     else:
         st.info("No procedure data available for 2024")
@@ -555,7 +554,12 @@ with col1:
             color_discrete_map=APPROACH_COLORS
         )
         fig_a_app.update_traces(textposition='inside', textinfo='percent+label')
-        fig_a_app.update_layout(height=400, plot_bgcolor='white', paper_bgcolor='white')
+        fig_a_app.update_layout(
+            height=400, 
+            plot_bgcolor='rgba(0,0,0,0)', 
+            paper_bgcolor='rgba(0,0,0,0)',
+            title_font_color='white'
+        )
         st.plotly_chart(fig_a_app, use_container_width=True)
     else:
         st.info("No approach data available for 2024")
@@ -575,7 +579,12 @@ with col2:
             color_discrete_map=APPROACH_COLORS
         )
         fig_b_app.update_traces(textposition='inside', textinfo='percent+label')
-        fig_b_app.update_layout(height=400, plot_bgcolor='white', paper_bgcolor='white')
+        fig_b_app.update_layout(
+            height=400, 
+            plot_bgcolor='rgba(0,0,0,0)', 
+            paper_bgcolor='rgba(0,0,0,0)',
+            title_font_color='white'
+        )
         st.plotly_chart(fig_b_app, use_container_width=True)
     else:
         st.info("No approach data available for 2024")
