@@ -63,6 +63,10 @@ def add_sidebar_to_page():
         if st.button("📊 Hospital Analysis", use_container_width=True):
             _track("Hospital Analysis")
             navigate_to_hospital_dashboard()
+        if st.button("⚖️ Hospital Comparison", use_container_width=True):
+            _track("Hospital Comparison")
+            from navigation_utils import navigate_to_hospital_compare
+            navigate_to_hospital_compare()
         # Assistant feature flag
         _assistant_enabled = False
         try:

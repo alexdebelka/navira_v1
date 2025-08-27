@@ -37,6 +37,11 @@ def navigate_to_login():
     st.switch_page("pages/login.py")
 
 
+def navigate_to_hospital_compare():
+    """Navigate to the hospital comparison page."""
+    st.switch_page("pages/hospital_compare.py")
+
+
 def navigate_to_assistant():
     """Navigate to the assistant chat page."""
     # Feature flag to disable Assistant without removing code
@@ -69,6 +74,7 @@ def navigate_to_page(page_name: str):
         "national": navigate_to_national,
         "hospital": navigate_to_hospital_dashboard,
         "hospital_explorer": navigate_to_hospital_explorer,
+        "hospital_compare": navigate_to_hospital_compare,
         "admin": navigate_to_admin,
         "login": navigate_to_login,
         "assistant": navigate_to_assistant,
