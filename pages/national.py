@@ -650,7 +650,7 @@ with col1:
         # Update title and tooltip based on toggle state
         if toggle_2024_only:
             time_period = "2024"
-            tooltip_text = "Stacked area shows the procedure mix for 2024 only. The segments represent the percentage share of Sleeve, Gastric Bypass, and Other procedures, totaling 100%."
+            tooltip_text = "Stacked bar shows the procedure mix for 2024. The segments represent the percentage share of Sleeve, Gastric Bypass, and Other procedures, totaling 100%."
         else:
             time_period = "2020–2024"
             tooltip_text = "Stacked area shows annual shares of Sleeve, Gastric Bypass, and Other across eligible hospitals. Each year sums to 100%."
@@ -701,22 +701,46 @@ with col1:
         if not proc_trend_df.empty:
             proc_colors = {'Sleeve': '#4C84C8', 'Gastric Bypass': '#7aa7f7', 'Other': '#f59e0b'}
             
-            # Always use area chart, but adjust based on data available
-            proc_area = px.area(
+            # Choose appropriate chart type based on data available
+            if toggle_2024_only:
+                # For single year, use stacked bar chart
+                fig = px.bar(
+                    proc_trend_df, 
+                    x='Year', 
+                    y='Share', 
+                    color='Procedure',
+                    title=f'Procedure Mix ({time_period})',
+                    color_discrete_map=proc_colors,
+                    category_orders={'Procedure': ['Sleeve', 'Gastric Bypass', 'Other']}
+                )
+                fig.update_layout(
+                    height=380,
+                    xaxis_title='Year',
+                    yaxis_title='% of procedures',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(
+                        tickmode='array',
+                        tickvals=[2024],
+                        ticktext=['2024']
+                    )
+                )
+            else:
+                # For multi-year data, use area chart
+                fig = px.area(
                     proc_trend_df, x='Year', y='Share', color='Procedure',
                     title=f'Procedure Mix Trends Over Time ({time_period})',
                     color_discrete_map=proc_colors,
                     category_orders={'Procedure': ['Sleeve', 'Gastric Bypass', 'Other']}
                 )
-            proc_area.update_layout(
-                height=380, 
-                xaxis_title='Year', 
-                yaxis_title='% of procedures', 
-                plot_bgcolor='rgba(0,0,0,0)', 
-                paper_bgcolor='rgba(0,0,0,0)'
-            )
-            proc_area.update_traces(line=dict(width=0), opacity=0.9)
-            fig = proc_area
+                fig.update_layout(
+                    height=380, 
+                    xaxis_title='Year', 
+                    yaxis_title='% of procedures', 
+                    plot_bgcolor='rgba(0,0,0,0)', 
+                    paper_bgcolor='rgba(0,0,0,0)'
+                )
+                fig.update_traces(line=dict(width=0), opacity=0.9)
             
             st.plotly_chart(fig, use_container_width=True)
             
@@ -749,7 +773,7 @@ with col1:
                         """)
                 except Exception:
                     if toggle_2024_only:
-                        st.markdown("Review the stacked area for procedure distribution in 2024.")
+                        st.markdown("Review the stacked bar for procedure distribution in 2024.")
                     else:
                         st.markdown("Review the stacked areas for dominant procedures each year.")
         else:
