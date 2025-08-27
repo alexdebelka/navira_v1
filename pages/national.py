@@ -701,14 +701,19 @@ with col1:
         if not proc_trend_df.empty:
             proc_colors = {'Sleeve': '#4C84C8', 'Gastric Bypass': '#7aa7f7', 'Other': '#f59e0b'}
             
-            # Always use area chart. For single year (2024) duplicate with a tiny offset
+            # Always use area chart. For single year (2024) repeat the same shares
+            # across a full year range so the stacked areas span the full width.
             plot_df = proc_trend_df.copy()
             if toggle_2024_only and not plot_df.empty:
                 try:
-                    eps = 0.001
-                    dup = plot_df.copy()
-                    dup['Year'] = dup['Year'].astype(float) + eps
-                    plot_df = pd.concat([plot_df, dup], ignore_index=True)
+                    years_full = [2020, 2021, 2022, 2023, 2024]
+                    base_rows = plot_df.copy()
+                    frames = []
+                    for y in years_full:
+                        tmp = base_rows.copy()
+                        tmp['Year'] = y
+                        frames.append(tmp)
+                    plot_df = pd.concat(frames, ignore_index=True)
                 except Exception:
                     pass
 
@@ -725,9 +730,9 @@ with col1:
                 plot_bgcolor='rgba(0,0,0,0)', 
                 paper_bgcolor='rgba(0,0,0,0)'
             )
-            # For single-year view, only show 2024 as tick and focus the x-axis range
+            # For single-year view, keep standard 2020–2024 ticks but the data is flat
             if toggle_2024_only:
-                fig.update_layout(xaxis=dict(tickmode='array', tickvals=[2024], ticktext=['2024'], range=[2023.95, 2024.05]))
+                fig.update_layout(xaxis=dict(tickmode='array', tickvals=[2020, 2021, 2022, 2023, 2024], ticktext=['2020','2021','2022','2023','2024']))
             fig.update_traces(line=dict(width=0), opacity=0.9)
             
             st.plotly_chart(fig, use_container_width=True)
