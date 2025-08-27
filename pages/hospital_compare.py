@@ -19,7 +19,7 @@ st.set_page_config(
 )
 
 # --- Cache Control ---
-if st.button("♻️ Clear cache"):
+if st.button("♻️ Clear cache and reload"):
     try:
         st.cache_data.clear()
     except Exception:
@@ -28,13 +28,17 @@ if st.button("♻️ Clear cache"):
         st.cache_resource.clear()
     except Exception:
         pass
+    # Clear any session state that might cache data
+    if 'hospital_compare_data' in st.session_state:
+        del st.session_state['hospital_compare_data']
+    st.success("Cache cleared! Page will reload...")
     st.rerun()
 
-# Define color palettes for consistency
+# Define color palettes for consistency (matching dashboard.py)
 PROC_COLORS = {
-    'Sleeve': '#FF69B4',
-    'Gastric Bypass': '#4169E1', 
-    'Other': '#32CD32'
+    'Sleeve': '#ffae91',          # pink
+    'Gastric Bypass': '#60a5fa',  # blue
+    'Other': '#fbbf24'            # amber
 }
 
 APPROACH_COLORS = {
@@ -110,7 +114,7 @@ st.markdown("""
 }
 
 .nv-info-badge {
-    background: #3498db;
+    background: #6c757d;
     color: white;
     border-radius: 50%;
     width: 18px;
@@ -165,6 +169,19 @@ except Exception as e:
 st.title("⚖️ Hospital Comparison")
 st.markdown("Compare two hospitals side-by-side across key metrics and performance indicators.")
 
+# Version indicator to help track deployment
+st.caption("🔄 Version: 2024-12-19 v2.1 - Updated colors and styling")
+
+# Color test - to verify colors are loading correctly
+if st.checkbox("🎨 Show color test"):
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f'<div style="background-color: {PROC_COLORS["Sleeve"]}; padding: 10px; border-radius: 5px; text-align: center; color: white;">Sleeve: {PROC_COLORS["Sleeve"]}</div>', unsafe_allow_html=True)
+    with col2:
+        st.markdown(f'<div style="background-color: {PROC_COLORS["Gastric Bypass"]}; padding: 10px; border-radius: 5px; text-align: center; color: white;">Gastric Bypass: {PROC_COLORS["Gastric Bypass"]}</div>', unsafe_allow_html=True)
+    with col3:
+        st.markdown(f'<div style="background-color: {PROC_COLORS["Other"]}; padding: 10px; border-radius: 5px; text-align: center; color: white;">Other: {PROC_COLORS["Other"]}</div>', unsafe_allow_html=True)
+
 # --- Hospital Selection ---
 st.subheader("Select Hospitals to Compare")
 
@@ -177,8 +194,12 @@ for hospital_id in hospitals_with_data:
     hospital_info = establishments[establishments['id'] == hospital_id]
     if not hospital_info.empty:
         name = hospital_info.iloc[0]['name']
-        city = hospital_info.iloc[0].get('city', 'Unknown')
-        display_name = f"{name} ({city})"
+        city = hospital_info.iloc[0].get('city', '')
+        # Only add city if it exists and is not empty/null
+        if city and str(city).strip() and str(city).strip().lower() != 'nan':
+            display_name = f"{name} ({city})"
+        else:
+            display_name = name
         hospital_names.append(display_name)
         hospital_mapping[display_name] = hospital_id
 
@@ -224,6 +245,12 @@ def get_hospital_data(hospital_id):
     # Get annual data for this hospital
     hospital_annual = annual[annual['id'] == hospital_id].copy()
     
+    # Debug info (can be removed later)
+    if st.checkbox(f"Show debug info for {hospital_id}", key=f"debug_{hospital_id}"):
+        st.write(f"Hospital {hospital_id} annual data shape: {hospital_annual.shape}")
+        st.write(f"Years available: {sorted(hospital_annual['annee'].unique()) if 'annee' in hospital_annual.columns else 'No annee column'}")
+        st.write(f"Columns: {list(hospital_annual.columns)}")
+    
     return est_info, hospital_annual
 
 hospital_a_info, hospital_a_data = get_hospital_data(hospital_a_id)
@@ -233,11 +260,13 @@ hospital_b_info, hospital_b_data = get_hospital_data(hospital_b_id)
 col1, col2, col3 = st.columns([5, 1, 5])
 
 with col1:
+    city_a = hospital_a_info.get('city', '')
+    city_display_a = city_a if city_a and str(city_a).strip() and str(city_a).strip().lower() != 'nan' else 'Location not specified'
     st.markdown(f"""
     <div class="hospital-card">
         <div class="hospital-name">{hospital_a_info['name']}</div>
         <div class="hospital-details">
-            📍 {hospital_a_info.get('city', 'Unknown')}<br>
+            📍 {city_display_a}<br>
             🏥 {hospital_a_info.get('statut', 'Unknown').title()}<br>
             🎓 {'Academic' if hospital_a_info.get('academic_affiliation', 0) == 1 else 'Non-Academic'}
         </div>
@@ -248,11 +277,13 @@ with col2:
     st.markdown('<div class="vs-divider">VS</div>', unsafe_allow_html=True)
 
 with col3:
+    city_b = hospital_b_info.get('city', '')
+    city_display_b = city_b if city_b and str(city_b).strip() and str(city_b).strip().lower() != 'nan' else 'Location not specified'
     st.markdown(f"""
     <div class="hospital-card">
         <div class="hospital-name">{hospital_b_info['name']}</div>
         <div class="hospital-details">
-            📍 {hospital_b_info.get('city', 'Unknown')}<br>
+            📍 {city_display_b}<br>
             🏥 {hospital_b_info.get('statut', 'Unknown').title()}<br>
             🎓 {'Academic' if hospital_b_info.get('academic_affiliation', 0) == 1 else 'Non-Academic'}
         </div>
@@ -358,7 +389,7 @@ for year in range(2020, 2025):
 
 volume_df = pd.DataFrame(volume_data)
 
-if not volume_df.empty:
+if not volume_df.empty and volume_df['Volume'].sum() > 0:
     fig_volume = px.line(
         volume_df,
         x='Year',
@@ -366,20 +397,22 @@ if not volume_df.empty:
         color='Hospital',
         title='Annual Procedure Volume Comparison',
         markers=True,
-        color_discrete_sequence=['#3498db', '#e74c3c']
+        color_discrete_sequence=['#6c757d', '#495057']  # Gray colors as requested
     )
     fig_volume.update_layout(
         height=400,
         xaxis_title='Year',
         yaxis_title='Total Procedures',
         hovermode='x unified',
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)'
+        plot_bgcolor='white',
+        paper_bgcolor='white'
     )
     fig_volume.update_traces(
         hovertemplate='<b>%{fullData.name}</b><br>Year: %{x}<br>Volume: %{y:,}<extra></extra>'
     )
     st.plotly_chart(fig_volume, use_container_width=True)
+else:
+    st.info("No volume data available for comparison.")
 
 # --- Procedure Mix Comparison ---
 st.header("🔬 Procedure Mix Comparison (2024)")
@@ -442,7 +475,7 @@ with col1:
             color_discrete_map=PROC_COLORS
         )
         fig_a.update_traces(textposition='inside', textinfo='percent+label')
-        fig_a.update_layout(height=400)
+        fig_a.update_layout(height=400, plot_bgcolor='white', paper_bgcolor='white')
         st.plotly_chart(fig_a, use_container_width=True)
     else:
         st.info("No procedure data available for 2024")
@@ -462,7 +495,7 @@ with col2:
             color_discrete_map=PROC_COLORS
         )
         fig_b.update_traces(textposition='inside', textinfo='percent+label')
-        fig_b.update_layout(height=400)
+        fig_b.update_layout(height=400, plot_bgcolor='white', paper_bgcolor='white')
         st.plotly_chart(fig_b, use_container_width=True)
     else:
         st.info("No procedure data available for 2024")
@@ -522,7 +555,7 @@ with col1:
             color_discrete_map=APPROACH_COLORS
         )
         fig_a_app.update_traces(textposition='inside', textinfo='percent+label')
-        fig_a_app.update_layout(height=400)
+        fig_a_app.update_layout(height=400, plot_bgcolor='white', paper_bgcolor='white')
         st.plotly_chart(fig_a_app, use_container_width=True)
     else:
         st.info("No approach data available for 2024")
@@ -542,7 +575,7 @@ with col2:
             color_discrete_map=APPROACH_COLORS
         )
         fig_b_app.update_traces(textposition='inside', textinfo='percent+label')
-        fig_b_app.update_layout(height=400)
+        fig_b_app.update_layout(height=400, plot_bgcolor='white', paper_bgcolor='white')
         st.plotly_chart(fig_b_app, use_container_width=True)
     else:
         st.info("No approach data available for 2024")
