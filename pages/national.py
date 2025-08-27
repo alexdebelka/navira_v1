@@ -914,68 +914,130 @@ robotic_volume = compute_robotic_volume_analysis(df)
 robotic_temporal = compute_robotic_temporal_analysis(df)
 robotic_institutional = compute_robotic_institutional_analysis(df)
 
-#  1. Temporal Analysis
-with st.expander("📈 1. Temporal Analysis - Robotic Adoption Over Time"):
+# #  1. Temporal Analysis
+# with st.expander("📈 1. Temporal Analysis - Robotic Adoption Over Time"):
+#     st.markdown("""
+#     **Understanding this analysis:**
+    
+#     This chart shows how robotic surgery adoption has evolved from 2020 to 2024. It tracks both the absolute number of robotic procedures and the percentage of all surgeries that are performed robotically.
+    
+#     **How we calculated this:**
+#     - **Data source**: Annual procedures data (2020-2024) for all eligible hospitals
+#     - **Filtering**: Only hospitals with ≥25 procedures/year in each year
+#     - **Robotic count**: Sum of all robotic procedures (ROB column) per year
+#     - **Total procedures**: Sum of all bariatric procedures per year
+#     - **Percentage**: (Robotic procedures / Total procedures) × 100 for each year
+    
+#     **Key metrics:**
+#     - **Absolute growth**: Total number of robotic surgeries each year
+#     - **Relative growth**: Percentage of all surgeries that are robotic
+#     - **Adoption rate**: How quickly hospitals are adopting robotic technology
+    
+#     **What to look for:**
+#     - **Acceleration**: Is robotic adoption speeding up or slowing down?
+#     - **Market penetration**: How much room is there for further growth?
+#     - **Year-over-year changes**: Which years saw the biggest increases?
+#     """)
+    
+#     if robotic_temporal['years']:
+#         fig = go.Figure()
+        
+#         fig.add_trace(go.Bar(
+#             x=robotic_temporal['years'],
+#             y=robotic_temporal['robotic_counts'],
+#             name='Robotic Surgeries',
+#             marker_color='#F7931E',
+#             hovertemplate='<b>%{x}</b><br>Robotic: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>',
+#             customdata=robotic_temporal['percentages']
+#         ))
+        
+#         fig.update_layout(
+#             title="Robotic Surgery Adoption (2020-2024)",
+#             xaxis_title="Year",
+#             yaxis_title="Number of Robotic Surgeries",
+#             height=400,
+#             showlegend=True,
+#             plot_bgcolor='rgba(0,0,0,0)',
+#             paper_bgcolor='rgba(0,0,0,0)',
+#             font=dict(size=12),
+#             margin=dict(l=50, r=50, t=80, b=50)
+#         )
+        
+#         st.plotly_chart(fig, use_container_width=True)
+        
+#         # Show percentage trend
+#         col1, col2, col3 = st.columns(3)
+#         with col1:
+#             st.metric("2020", f"{robotic_temporal['percentages'][0]}%")
+#         with col2:
+#             st.metric("2022", f"{robotic_temporal['percentages'][2]}%")
+#         with col3:
+#             st.metric("2024", f"{robotic_temporal['percentages'][4]}%")
+
+# 2. Geographic Analysis
+with st.expander("🗺️ 1. Geographic Analysis - Regional Robotic Adoption"):
     st.markdown("""
     **Understanding this analysis:**
     
-    This chart shows how robotic surgery adoption has evolved from 2020 to 2024. It tracks both the absolute number of robotic procedures and the percentage of all surgeries that are performed robotically.
+    This chart shows robotic surgery adoption rates across different geographic regions of France. It reveals which regions are leading in robotic technology adoption and which may need more support.
     
     **How we calculated this:**
-    - **Data source**: Annual procedures data (2020-2024) for all eligible hospitals
-    - **Filtering**: Only hospitals with ≥25 procedures/year in each year
-    - **Robotic count**: Sum of all robotic procedures (ROB column) per year
-    - **Total procedures**: Sum of all bariatric procedures per year
-    - **Percentage**: (Robotic procedures / Total procedures) × 100 for each year
+    - **Data source**: 2024 data for all eligible hospitals (≥25 procedures/year)
+    - **Grouping**: Hospitals grouped by their geographic region (lib_reg column)
+    - **Robotic count**: Sum of robotic procedures (ROB column) per region
+    - **Total procedures**: Sum of all bariatric procedures per region
+    - **Percentage**: (Robotic procedures / Total procedures) × 100 per region
+    - **Filtering**: Only regions with >0 robotic procedures and valid percentages
     
-    **Key metrics:**
-    - **Absolute growth**: Total number of robotic surgeries each year
-    - **Relative growth**: Percentage of all surgeries that are robotic
-    - **Adoption rate**: How quickly hospitals are adopting robotic technology
+    **What the percentages mean:**
+    - **Percentage**: Shows what % of ALL bariatric surgeries in that region are performed robotically
+    - **Example**: If ILE-DE-FRANCE shows 5.4%, it means 5.4% of all bariatric surgeries in Île‑de‑France are robotic
+    - **Robotic count**: The actual number of robotic procedures performed in that region
     
-    **What to look for:**
-    - **Acceleration**: Is robotic adoption speeding up or slowing down?
-    - **Market penetration**: How much room is there for further growth?
-    - **Year-over-year changes**: Which years saw the biggest increases?
     """)
     
-    if robotic_temporal['years']:
-        fig = go.Figure()
-        
-        fig.add_trace(go.Bar(
-            x=robotic_temporal['years'],
-            y=robotic_temporal['robotic_counts'],
-            name='Robotic Surgeries',
-            marker_color='#F7931E',
-            hovertemplate='<b>%{x}</b><br>Robotic: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>',
-            customdata=robotic_temporal['percentages']
-        ))
+    if robotic_geographic['regions'] and len(robotic_geographic['regions']) > 0:
+        fig = px.bar(
+            x=robotic_geographic['regions'],
+            y=robotic_geographic['percentages'],
+            title="Robotic Surgery Adoption by Region (2024)",
+            color=robotic_geographic['percentages'],
+            color_continuous_scale='Oranges'
+        )
         
         fig.update_layout(
-            title="Robotic Surgery Adoption (2020-2024)",
-            xaxis_title="Year",
-            yaxis_title="Number of Robotic Surgeries",
+            xaxis_title="Region",
+            yaxis_title="Robotic Surgery Percentage (%)",
             height=400,
-            showlegend=True,
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             font=dict(size=12),
             margin=dict(l=50, r=50, t=80, b=50)
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        fig.update_traces(
+            hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<br>Robotic: %{customdata}<extra></extra>',
+            customdata=robotic_geographic['robotic_counts']
+        )
         
-        # Show percentage trend
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("2020", f"{robotic_temporal['percentages'][0]}%")
-        with col2:
-            st.metric("2022", f"{robotic_temporal['percentages'][2]}%")
-        with col3:
-            st.metric("2024", f"{robotic_temporal['percentages'][4]}%")
-
-## 2. Geographic Analysis (merged into Volume-based Analysis)
-st.info("Geographic regional analysis has been merged into the volume-based section to simplify comparisons.")
+        st.plotly_chart(fig, use_container_width=True)
+        try:
+            top_idx = int(pd.Series(robotic_geographic['percentages']).idxmax())
+            top_region = robotic_geographic['regions'][top_idx]
+            top_pct = robotic_geographic['percentages'][top_idx]
+            with st.expander("What to look for and key findings"):
+                st.markdown(f"""
+                **What to look for:**
+                - Regions with notably higher robotic percentages
+                - Regional disparities in access to robotic surgery
+                
+                **Key findings:**
+                - Highest regional adoption: **{top_region}** at **{top_pct:.1f}%**
+                """)
+        except Exception:
+            pass
+    else:
+        st.info("No geographic data available. Region information may not be included in the dataset.")
 
 # 3. Institutional Analysis
 with st.expander("🏥 2. Affiliation Analysis"):
@@ -1000,14 +1062,7 @@ with st.expander("🏥 2. Affiliation Analysis"):
     merged_x = []
     merged_y = []
     merged_color = []
-    try:
-        if robotic_institutional['sector']['types'] and robotic_institutional['sector']['percentages']:
-            for t, v in zip(robotic_institutional['sector']['types'], robotic_institutional['sector']['percentages']):
-                merged_x.append(f"Sector – {t}")
-                merged_y.append(v)
-                merged_color.append('Sector')
-    except Exception:
-        pass
+    # Sector bars removed per request (keep only affiliation bars)
     try:
         if robotic_affiliation['affiliations'] and robotic_affiliation['percentages']:
             for t, v in zip(robotic_affiliation['affiliations'], robotic_affiliation['percentages']):
