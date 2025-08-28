@@ -54,3 +54,4 @@ Run minimal tests:
 pytest -q
 ```
 # test
+# deploy test
