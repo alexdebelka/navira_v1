@@ -1,0 +1,32 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ main ]   # change if your default branch is different
+
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, navira]   # use your runner's label; or just: self-hosted
+    steps:
+      - name: Pull latest code & install deps
+        run: |
+          sudo -iu appuser bash -lc '
+            cd ~/app &&
+            git fetch --all &&
+            git reset --hard origin/main &&
+            . .venv/bin/activate &&
+            if [ -f requirements.txt ]; then pip install -U -r requirements.txt; fi
+          '
+      - name: Restart service
+        run: |
+          sudo systemctl restart navira
+          sudo systemctl is-active navira
+      - name: Health check
+        run: curl -fsS http://127.0.0.1:8501/ >/dev/null
+
+
+
