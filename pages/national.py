@@ -1473,16 +1473,21 @@ if not procedure_details.empty:
         procedure_names = {
             'SLE': 'Sleeve Gastrectomy',
             'BPG': 'Gastric Bypass', 
-            # 'ANN': 'Gastric Banding',
-            # 'REV': 'Revision Surgery',
-            # 'ABL': 'Band Removal',
-            # 'DBP': 'Bilio-pancreatic Diversion',
-            # 'GVC': 'Gastroplasty',
-            # 'NDD': 'Not Defined'
+            'ANN': 'Gastric Banding',
+            'REV': 'Revision Surgery',
+            'ABL': 'Band Removal',
+            'DBP': 'Bilio-pancreatic Diversion',
+            'GVC': 'Gastroplasty',
+            'NDD': 'Not Defined'
         }
         
         procedure_robotic_rates['procedure_name'] = procedure_robotic_rates['procedure_type'].map(procedure_names)
         procedure_robotic_rates = procedure_robotic_rates.sort_values('robotic_rate', ascending=False)
+        
+        # Filter to show only Sleeve Gastrectomy and Gastric Bypass
+        procedure_robotic_rates = procedure_robotic_rates[
+            procedure_robotic_rates['procedure_type'].isin(['SLE', 'BPG'])
+        ]
         
         # Create visualization
         fig = px.bar(
@@ -1581,10 +1586,8 @@ if not procedure_details.empty:
     if yearly_procedure_trends:
         trends_df = pd.DataFrame(yearly_procedure_trends)
         
-        # Filter to show only major procedures with sufficient volume
-        major_procedures = trends_df.groupby('procedure_type')['total_procedures'].sum()
-        major_procedures = major_procedures[major_procedures >= 100].index.tolist()  # At least 100 procedures over 5 years
-        trends_df = trends_df[trends_df['procedure_type'].isin(major_procedures)]
+        # Filter to show only Sleeve Gastrectomy and Gastric Bypass
+        trends_df = trends_df[trends_df['procedure_type'].isin(['SLE', 'BPG'])]
         
         if not trends_df.empty:
             fig = px.line(
