@@ -46,18 +46,16 @@ jobs:
         
 
       - name: Install deps in venv (as appuser)
-        env:
-          APP: /home/appuser/app
         run: |
           sudo -u appuser bash -lc '
             set -e
-            cd "$APP"
+            cd /home/appuser/app
             python3 -m venv .venv || true
             . .venv/bin/activate
             pip install --upgrade pip
             [ -f requirements.txt ] && pip install -r requirements.txt || true
           '
-
+        
       - name: Restart service
         run: sudo systemctl restart navira
 
