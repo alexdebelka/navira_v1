@@ -198,6 +198,9 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
         if hosp_recr.empty:
             st.info("No recruitment data found for this hospital.")
             return
+        
+        # Sort by patient count and take top 5 zones
+        hosp_recr = hosp_recr.sort_values('patient_count', ascending=False).head(5)
             
         if df_cities.empty:
             st.info("No city coordinate data available.")
@@ -208,11 +211,11 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
         missing_coords = df[df['latitude'].isna() | df['longitude'].isna()].copy()
         
         # Show diagnostic info
-        st.caption(f"Recruitment rows: {len(hosp_recr)} | With coords: {len(df.dropna(subset=['latitude','longitude']))} | Missing coords: {len(missing_coords)}")
+        st.caption(f"Top 5 recruitment zones: {len(hosp_recr)} | With coords: {len(df.dropna(subset=['latitude','longitude']))} | Missing coords: {len(missing_coords)}")
         
         # If we have missing coordinates, try to get them from other sources
         if not missing_coords.empty:
-            st.info("Recruitment rows found but missing city coordinates.")
+            st.info("Top recruitment zones found but missing city coordinates.")
             
             # Try to get city information from multiple sources
             try:
@@ -285,7 +288,7 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
                         geocoded_count += 1
                 
                 if geocoded_count > 0:
-                    st.success(f"Successfully found coordinates for {geocoded_count} cities from establishments data.")
+                    st.success(f"Successfully found coordinates for {geocoded_count} top recruitment zones.")
                     
             except Exception as e:
                 st.warning(f"Could not retrieve additional city data: {str(e)}")
@@ -303,7 +306,7 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
             return
             
         # Render recruitment zones
-        st.success(f"Rendering {len(df)} recruitment zones")
+        st.success(f"Rendering top {len(df)} recruitment zones")
         max_pat = df['patient_count'].max()
         min_pat = df['patient_count'].min()
         
@@ -458,15 +461,39 @@ with tab_complications:
             
             recent['national_pct'] = pd.to_numeric(recent['national_average'], errors='coerce') * 100
             
-            # Only plot if we have valid data
+            # Only plot if we have valid data with at least 2 data points
             valid_data = recent[recent['rate_pct'].notna()]
-            if not valid_data.empty:
+            if len(valid_data) >= 2:
                 fig = px.line(valid_data, x='quarter', y='rate_pct', markers=True, 
                              title=f'{rate_type} vs National', labels={'rate_pct':'Rate (%)'})
                 fig.add_scatter(x=valid_data['quarter'], y=valid_data['national_pct'], 
                                mode='lines+markers', name='National', line=dict(dash='dash'))
                 fig.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig, use_container_width=True)
+            elif len(valid_data) == 1:
+                # Show single data point as a bar chart instead of line
+                st.markdown("#### Single Quarter Data")
+                single_point = valid_data.iloc[0]
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.metric("Hospital Rate", f"{single_point['rate_pct']:.1f}%")
+                with col2:
+                    st.metric("National Average", f"{single_point['national_pct']:.1f}%")
+                
+                # Create a simple bar comparison
+                comparison_data = pd.DataFrame({
+                    'Metric': ['Hospital', 'National'],
+                    'Rate (%)': [single_point['rate_pct'], single_point['national_pct']]
+                })
+                
+                fig = px.bar(comparison_data, x='Metric', y='Rate (%)', 
+                            title=f'Single Quarter Comparison ({single_point["quarter"]})',
+                            color='Metric', color_discrete_map={'Hospital': '#1f77b4', 'National': '#ff7f0e'})
+                fig.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.info(f"Limited data available. Only showing data for {single_point['quarter']}.")
             else:
                 st.info("No valid rate data available to plot.")
         else:
