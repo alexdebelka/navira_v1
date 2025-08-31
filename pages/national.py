@@ -1473,12 +1473,12 @@ if not procedure_details.empty:
         procedure_names = {
             'SLE': 'Sleeve Gastrectomy',
             'BPG': 'Gastric Bypass', 
-            'ANN': 'Gastric Banding',
-            'REV': 'Revision Surgery',
-            'ABL': 'Band Removal',
-            'DBP': 'Bilio-pancreatic Diversion',
-            'GVC': 'Gastroplasty',
-            'NDD': 'Not Defined'
+            # 'ANN': 'Gastric Banding',
+            # 'REV': 'Revision Surgery',
+            # 'ABL': 'Band Removal',
+            # 'DBP': 'Bilio-pancreatic Diversion',
+            # 'GVC': 'Gastroplasty',
+            # 'NDD': 'Not Defined'
         }
         
         procedure_robotic_rates['procedure_name'] = procedure_robotic_rates['procedure_type'].map(procedure_names)
