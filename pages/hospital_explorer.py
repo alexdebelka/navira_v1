@@ -236,20 +236,155 @@ try:
                 fillOpacity=opacity
             ).add_to(folium_map)
     
+    # --- Function to show where neighbors go ---
+    def add_neighbor_flow_to_map(folium_map, origin_city_code, recruitment_df, cities_df, establishments_df):
+        """Show where patients from a specific neighborhood go to hospitals"""
+        if recruitment_df.empty or cities_df.empty:
+            return
+            
+        # Get all recruitment data for the origin city
+        origin_recruitment = recruitment_df[recruitment_df['city_code'] == str(origin_city_code)]
+        
+        if origin_recruitment.empty:
+            return
+            
+        # Get origin city coordinates
+        origin_city = cities_df[cities_df['city_code'] == str(origin_city_code)]
+        if origin_city.empty:
+            return
+            
+        origin_lat = origin_city['latitude'].iloc[0]
+        origin_lon = origin_city['longitude'].iloc[0]
+        origin_name = origin_city['city_name'].iloc[0]
+        
+        # Add origin marker with blue shading
+        folium.Circle(
+            location=[origin_lat, origin_lon],
+            radius=2000,  # 2km radius for origin area
+            popup=f"<b>Origin: {origin_name}</b><br>Patients from this area",
+            color='blue',
+            fillColor='blue',
+            opacity=0.3,
+            fillOpacity=0.2
+        ).add_to(folium_map)
+        
+        # Get destination hospitals and their coordinates
+        destination_hospitals = origin_recruitment.merge(
+            establishments_df[['id', 'name', 'latitude', 'longitude']], 
+            left_on='hospital_id', 
+            right_on='id', 
+            how='left'
+        )
+        
+        # Filter out rows without coordinates
+        destination_hospitals = destination_hospitals.dropna(subset=['latitude', 'longitude'])
+        
+        if destination_hospitals.empty:
+            return
+            
+        # Sort by patient count to show most popular destinations first
+        destination_hospitals = destination_hospitals.sort_values('patient_count', ascending=False)
+        
+        # Add flow lines to hospitals
+        max_patients = destination_hospitals['patient_count'].max()
+        min_patients = destination_hospitals['patient_count'].min()
+        
+        for _, dest in destination_hospitals.iterrows():
+            # Calculate line width based on patient count
+            if max_patients > min_patients:
+                normalized_width = (dest['patient_count'] - min_patients) / (max_patients - min_patients)
+            else:
+                normalized_width = 0.5
+            line_width = 2 + (normalized_width * 8)  # 2 to 10 pixels
+            
+            # Calculate opacity based on percentage
+            opacity = min(0.8, dest['percentage'] / 100 * 2)  # Cap at 0.8 opacity
+            
+            # Create flow line from origin to hospital
+            folium.PolyLine(
+                locations=[[origin_lat, origin_lon], [dest['latitude'], dest['longitude']]],
+                weight=line_width,
+                color='blue',
+                opacity=opacity,
+                popup=f"<b>{dest['name']}</b><br>Patients: {dest['patient_count']}<br>Percentage: {dest['percentage']:.1f}%"
+            ).add_to(folium_map)
+            
+            # Add small circle at destination to show patient concentration
+            folium.Circle(
+                location=[dest['latitude'], dest['longitude']],
+                radius=300 + (normalized_width * 700),  # 300m to 1000m radius
+                popup=f"<b>{dest['name']}</b><br>Patients from {origin_name}: {dest['patient_count']}<br>Percentage: {dest['percentage']:.1f}%",
+                color='blue',
+                fillColor='blue',
+                opacity=0.6,
+                fillOpacity=opacity * 0.5
+            ).add_to(folium_map)
+    
     # --- Display Results: Map and List ---
     if st.session_state.get('search_triggered', False) and not st.session_state.filtered_df.empty:
         unique_hospitals_df = st.session_state.filtered_df.drop_duplicates(subset=['id']).copy()
         st.header(f"Found {len(unique_hospitals_df)} Hospitals")
         
-        # Add toggle for recruitment zones
-        show_recruitment = st.toggle("Show Patient Recruitment Zones", value=False)
-        if show_recruitment:
-            selected_hospital_for_recruitment = st.selectbox(
-                "Select hospital to show recruitment zones:",
-                options=unique_hospitals_df['id'].tolist(),
-                format_func=lambda x: unique_hospitals_df[unique_hospitals_df['id']==x]['name'].iloc[0] if not unique_hospitals_df[unique_hospitals_df['id']==x].empty else x,
-                key="recruitment_hospital_selector"
-            )
+        # Add visualization options
+        st.markdown("#### 🗺️ Map Visualization Options")
+        
+        # Create tabs for different visualization modes
+        viz_tab1, viz_tab2 = st.tabs(["🏥 Hospital Recruitment Zones", "👥 Where My Neighbors Go"])
+        
+        with viz_tab1:
+            show_recruitment = st.toggle("Show Patient Recruitment Zones", value=False)
+            if show_recruitment:
+                selected_hospital_for_recruitment = st.selectbox(
+                    "Select hospital to show recruitment zones:",
+                    options=unique_hospitals_df['id'].tolist(),
+                    format_func=lambda x: unique_hospitals_df[unique_hospitals_df['id']==x]['name'].iloc[0] if not unique_hospitals_df[unique_hospitals_df['id']==x].empty else x,
+                    key="recruitment_hospital_selector"
+                )
+        
+        with viz_tab2:
+            show_neighbor_flow = st.toggle("Show Where My Neighbors Go", value=False)
+            if show_neighbor_flow:
+                st.markdown("**Select your neighborhood to see where patients from your area go for treatment:**")
+                
+                # Get available cities from recruitment data
+                available_cities = recruitment_zones['city_code'].unique()
+                cities_with_names = cities[cities['city_code'].isin(available_cities)]
+                
+                if not cities_with_names.empty:
+                    # Create a searchable dropdown for cities
+                    city_options = cities_with_names.apply(
+                        lambda x: f"{x['city_name']} ({x['postal_code']}) - {x['city_code']}", 
+                        axis=1
+                    ).tolist()
+                    
+                    selected_city_display = st.selectbox(
+                        "Choose your neighborhood:",
+                        options=city_options,
+                        key="neighbor_flow_city_selector"
+                    )
+                    
+                    if selected_city_display:
+                        # Extract city code from selection
+                        selected_city_code = selected_city_display.split(" - ")[-1]
+                        
+                        # Show summary of what will be displayed
+                        origin_city_data = cities_with_names[cities_with_names['city_code'] == selected_city_code]
+                        if not origin_city_data.empty:
+                            origin_name = origin_city_data['city_name'].iloc[0]
+                            
+                            # Get flow data for this city
+                            city_flow = recruitment_zones[recruitment_zones['city_code'] == selected_city_code]
+                            if not city_flow.empty:
+                                total_patients = city_flow['patient_count'].sum()
+                                top_hospitals = city_flow.nlargest(3, 'patient_count')
+                                
+                                st.info(f"""
+                                **📍 {origin_name}**
+                                - **Total patients**: {total_patients:,}
+                                - **Top destinations**: {', '.join([f"{row['patient_count']} to {establishments[establishments['id']==row['hospital_id']]['name'].iloc[0] if not establishments[establishments['id']==row['hospital_id']].empty else 'Unknown Hospital'}" for _, row in top_hospitals.iterrows()])}
+                                """)
+                else:
+                    st.warning("No city data available for neighbor flow visualization.")
         
         m = folium.Map(location=user_coords, zoom_start=9, tiles="CartoDB positron")
         folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to(m)
@@ -268,6 +403,10 @@ try:
         # Add recruitment zones if toggled on
         if show_recruitment and 'selected_hospital_for_recruitment' in locals():
             add_recruitment_zones_to_map(m, selected_hospital_for_recruitment, recruitment_zones, cities)
+        
+        # Add neighbor flow if toggled on
+        if show_neighbor_flow and 'selected_city_code' in locals():
+            add_neighbor_flow_to_map(m, selected_city_code, recruitment_zones, cities, establishments)
             
         map_data = st_folium(m, width="100%", height=500, key="folium_map")
         if map_data and map_data.get("last_object_clicked"):
@@ -276,6 +415,124 @@ try:
             if distances.min() < 0.1:
                 st.session_state.selected_hospital_id = unique_hospitals_df.loc[distances.idxmin()]['id']
                 st.switch_page("pages/dashboard.py")
+        
+        # Show detailed neighbor flow analysis if enabled
+        if show_neighbor_flow and 'selected_city_code' in locals():
+            st.markdown("---")
+            st.markdown("#### 📊 Detailed Neighbor Flow Analysis")
+            
+            # Get flow data for selected city
+            city_flow = recruitment_zones[recruitment_zones['city_code'] == selected_city_code]
+            if not city_flow.empty:
+                # Merge with hospital and city data for display
+                flow_with_details = city_flow.merge(
+                    establishments[['id', 'name', 'ville', 'statut']], 
+                    left_on='hospital_id', 
+                    right_on='id', 
+                    how='left'
+                ).merge(
+                    cities[['city_code', 'city_name']], 
+                    left_on='city_code', 
+                    right_on='city_code', 
+                    how='left'
+                )
+                
+                # Sort by patient count
+                flow_with_details = flow_with_details.sort_values('patient_count', ascending=False)
+                
+                # Show summary metrics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    total_patients = flow_with_details['patient_count'].sum()
+                    st.metric("Total Patients", f"{total_patients:,}")
+                
+                with col2:
+                    unique_hospitals = len(flow_with_details)
+                    st.metric("Destination Hospitals", f"{unique_hospitals}")
+                
+                with col3:
+                    avg_patients = total_patients / unique_hospitals if unique_hospitals > 0 else 0
+                    st.metric("Avg Patients per Hospital", f"{avg_patients:.1f}")
+                
+                # Show top destinations
+                st.markdown("##### 🏆 Top Hospital Destinations")
+                
+                for idx, row in flow_with_details.head(10).iterrows():
+                    col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                    
+                    with col1:
+                        hospital_name = row.get('name', 'Unknown Hospital')
+                        hospital_city = row.get('ville', 'Unknown City')
+                        st.markdown(f"**{hospital_name}**")
+                        st.caption(f"📍 {hospital_city}")
+                    
+                    with col2:
+                        hospital_status = row.get('statut', 'Unknown')
+                        status_color = {
+                            'public': '🔵',
+                            'private for profit': '🟢',
+                            'private not-for-profit': '🔷'
+                        }.get(hospital_status.lower() if isinstance(hospital_status, str) else '', '⚪')
+                        st.markdown(f"{status_color} {hospital_status}")
+                    
+                    with col3:
+                        patient_count = int(row.get('patient_count', 0))
+                        st.metric("Patients", f"{patient_count:,}")
+                    
+                    with col4:
+                        percentage = row.get('percentage', 0)
+                        st.metric("Share", f"{percentage:.1f}%")
+                    
+                    st.markdown("---")
+                
+                # Show geographic distribution
+                st.markdown("##### 📍 Geographic Distribution")
+                
+                # Calculate distance from origin to each hospital
+                origin_city_data = cities[cities['city_code'] == selected_city_code]
+                if not origin_city_data.empty:
+                    origin_lat = origin_city_data['latitude'].iloc[0]
+                    origin_lon = origin_city_data['longitude'].iloc[0]
+                    
+                    # Add distance calculation
+                    flow_with_details['distance_km'] = flow_with_details.apply(
+                        lambda row: geodesic((origin_lat, origin_lon), (row['latitude'], row['longitude'])).km 
+                        if pd.notna(row['latitude']) and pd.notna(row['longitude']) else None, 
+                        axis=1
+                    )
+                    
+                    # Show distance vs patient count
+                    distance_data = flow_with_details[flow_with_details['distance_km'].notna()].copy()
+                    if not distance_data.empty:
+                        fig = px.scatter(
+                            distance_data,
+                            x='distance_km',
+                            y='patient_count',
+                            size='patient_count',
+                            color='statut',
+                            hover_data=['name', 'ville'],
+                            title="Patient Flow vs Distance from Origin"
+                        )
+                        fig.update_layout(
+                            xaxis_title="Distance (km)",
+                            yaxis_title="Number of Patients",
+                            height=400
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Distance statistics
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            avg_distance = distance_data['distance_km'].mean()
+                            st.metric("Average Distance", f"{avg_distance:.1f} km")
+                        
+                        with col2:
+                            max_distance = distance_data['distance_km'].max()
+                            st.metric("Farthest Hospital", f"{max_distance:.1f} km")
+                        
+                        with col3:
+                            min_distance = distance_data['distance_km'].min()
+                            st.metric("Closest Hospital", f"{min_distance:.1f} km")
         
         st.subheader("Hospital List")
         for idx, row in unique_hospitals_df.iterrows():

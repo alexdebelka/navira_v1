@@ -12,7 +12,7 @@ This document summarizes all the new features and enhancements added to the Navi
 
 ### 1. Hospital Explorer Page Enhancements
 
-#### Patient Recruitment Zones Visualization
+#### A. Patient Recruitment Zones Visualization
 - **Location**: Hospital Explorer page (`pages/hospital_explorer.py`)
 - **Feature**: Toggle to show patient recruitment zones on the map
 - **Functionality**:
@@ -22,6 +22,19 @@ This document summarizes all the new features and enhancements added to the Navi
   - Hospital selector to choose which hospital's recruitment zones to display
   - Popup shows city name, patient count, and percentage
 - **Data Source**: `11_recruitement_zone.csv` + `COMMUNES_FRANCE_INSEE.csv`
+
+#### B. "Where My Neighbors Go" Patient Flow Visualization
+- **Location**: Hospital Explorer page (`pages/hospital_explorer.py`)
+- **Feature**: Interactive map showing where patients from a specific neighborhood go for treatment
+- **Functionality**:
+  - **Origin Selection**: Dropdown to choose your neighborhood from 1,045+ French cities
+  - **Flow Visualization**: Blue lines showing patient flow from origin to destination hospitals
+  - **Line Thickness**: Based on patient volume (thicker lines = more patients)
+  - **Origin Shading**: Blue shaded area around the selected neighborhood
+  - **Destination Markers**: Blue circles at hospitals showing patient concentration
+  - **Interactive Popups**: Show hospital name, patient count, and percentage
+  - **Detailed Analysis**: Comprehensive breakdown of top destinations and geographic distribution
+- **Data Source**: `11_recruitement_zone.csv` + `COMMUNES_FRANCE_INSEE.csv` + `01_hospitals.csv`
 
 ### 2. Hospital Dashboard Enhancements
 
@@ -108,6 +121,7 @@ Each dataset is automatically normalized with consistent column names:
    - Geographic distribution of patients
    - Recruitment percentage by city
    - Territory overlap with competitors
+   - **Neighbor Flow Analysis**: Where patients from specific neighborhoods go for treatment
 
 2. **Competitive Analysis**:
    - Top 5 competitors identification
@@ -142,6 +156,7 @@ Each dataset is automatically normalized with consistent column names:
 - **Quality Benchmarking**: Compare safety outcomes against national standards
 - **Technology Strategy**: Data-driven robotic surgery adoption decisions
 - **Market Analysis**: Patient recruitment patterns and territorial insights
+- **Patient Flow Analysis**: Understand where patients from specific areas choose to go for treatment
 
 ### For Healthcare Policy
 - **National Oversight**: Monitor safety trends and performance distribution
@@ -153,6 +168,7 @@ Each dataset is automatically normalized with consistent column names:
 
 ### Interactive Visualizations
 - **Recruitment Zones**: Interactive map with toggle controls
+- **Patient Flow Maps**: Blue flow lines showing where neighbors go for treatment
 - **Trend Charts**: Plotly-based interactive charts with hover details
 - **Performance Indicators**: Color-coded metrics and status indicators
 - **Comparative Analysis**: Side-by-side comparisons with national benchmarks
@@ -197,7 +213,7 @@ Each dataset is automatically normalized with consistent column names:
 
 ---
 
-**Total Implementation**: ~1,100 lines of new code across 4 files
-**New Visualizations**: 8 interactive charts and maps
-**New Metrics**: 15+ new analytical capabilities
+**Total Implementation**: ~1,300 lines of new code across 4 files
+**New Visualizations**: 10 interactive charts and maps (including patient flow visualization)
+**New Metrics**: 18+ new analytical capabilities
 **Enhanced User Experience**: Comprehensive tooltips, explanations, and interactive controls
