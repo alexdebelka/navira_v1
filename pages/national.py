@@ -821,30 +821,6 @@ with col1:
                 
                 st.plotly_chart(fig, use_container_width=True)
             
-            with col2:
-                st.markdown("#### Hospital Comparison: Procedure Mix")
-                # Create a sample hospital comparison (you can modify this to show specific hospital data)
-                # For now, showing the same national data as a placeholder
-                fig2 = px.area(
-                    plot_df, x='Year', y='Share', color='Procedure',
-                    title=f'Hospital vs National ({time_period})',
-                    color_discrete_map=proc_colors,
-                    category_orders={'Procedure': ['Sleeve', 'Gastric Bypass', 'Other']}
-                )
-                fig2.update_layout(
-                    height=380, 
-                    xaxis_title='Year', 
-                    yaxis_title='% of procedures', 
-                    plot_bgcolor='rgba(0,0,0,0)', 
-                    paper_bgcolor='rgba(0,0,0,0)'
-                )
-                if toggle_2024_only:
-                    fig2.update_layout(xaxis=dict(tickmode='array', tickvals=[2024], ticktext=['2024'], range=[2023.25, 2024.75]))
-                    fig2.update_traces(hovertemplate='<b>%{fullData.name}</b><br>Year: 2024<br>Share: %{y:.1f}%<extra></extra>')
-                fig2.update_traces(line=dict(width=0), opacity=0.9)
-                
-                st.plotly_chart(fig2, use_container_width=True)
-            
             # National Averages Summary
             st.markdown("#### National Averages Summary (2024)")
             
