@@ -145,6 +145,9 @@ try:
                 st.session_state.address = address_input
                 st.session_state.search_triggered = True
                 st.session_state.selected_hospital_id = None
+                # Clear neighbor-flow origin; will be recomputed from this address
+                st.session_state.neighbor_flow_city_code = None
+                st.session_state.neighbor_flow_city_name = None
             elif submitted:
                 st.warning("Please enter an address first.")
                 st.session_state.search_triggered = False
@@ -153,6 +156,9 @@ try:
                 st.session_state.selected_hospital_id = None
                 st.session_state.address = ""
                 st.session_state.filtered_df = pd.DataFrame()
+                # Also clear neighbor-flow origin when resetting
+                st.session_state.neighbor_flow_city_code = None
+                st.session_state.neighbor_flow_city_name = None
     st.markdown("---")
 
     # --- Geocoding and Filtering Logic ---
@@ -258,6 +264,10 @@ try:
                     nearest_city, nf_distance = chosen
                     st.session_state.neighbor_flow_city_code = nearest_city['city_code']
                     st.session_state.neighbor_flow_city_name = nearest_city['city_name']
+                else:
+                    # No suitable origin found; ensure we don't reuse stale origin
+                    st.session_state.neighbor_flow_city_code = None
+                    st.session_state.neighbor_flow_city_name = None
             except Exception:
                 pass
         else:
@@ -580,6 +590,8 @@ try:
                                     st.success(f"Using your main address ({st.session_state.address}). Nearest city with data: {selected_city_name} ({distance:.1f} km)")
                                 else:
                                     st.warning("No nearby cities with patient flow data found. Switch to Manual City Search.")
+                                    st.session_state.neighbor_flow_city_code = None
+                                    st.session_state.neighbor_flow_city_name = None
                     
                     elif search_method == "🔍 Manual City Search":
                         # Manual city selection
