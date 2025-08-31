@@ -166,6 +166,21 @@ try:
         except Exception as e:
             st.error(f"Geocoding failed: {e}")
             return None
+    
+    # Helper to find nearest city with data from given coordinates (reusable)
+    def _find_nearest_city_with_data(coords, cities_with_data, max_distance_km=50):
+        if not coords or cities_with_data.empty:
+            return None
+        distances = cities_with_data.apply(
+            lambda row: geodesic(coords, (row['latitude'], row['longitude'])).km, 
+            axis=1
+        )
+        min_distance_idx = distances.idxmin()
+        min_distance = distances[min_distance_idx]
+        for threshold in (max_distance_km, 100, 150, 200):
+            if min_distance <= threshold:
+                return cities_with_data.loc[min_distance_idx], min_distance
+        return None
             
     if st.session_state.get('search_triggered', False):
         user_coords = geocode_address(st.session_state.address)
@@ -186,6 +201,18 @@ try:
             if is_health_ministry: temp_df = temp_df[temp_df['cso'] == 1]
             filtered_df = temp_df.sort_values('Distance (km)')
             st.session_state.filtered_df = filtered_df
+            # Auto-select neighbor flow city from main search
+            try:
+                available_cities = recruitment_zones['city_code'].unique()
+                cities_with_names = cities[cities['city_code'].isin(available_cities)]
+                cities_with_names = cities_with_names[cities_with_names['city_name'].notna()]
+                nearest_city_data = _find_nearest_city_with_data(user_coords, cities_with_names, max_distance_km=radius_km)
+                if nearest_city_data:
+                    nearest_city, nf_distance = nearest_city_data
+                    st.session_state.neighbor_flow_city_code = nearest_city['city_code']
+                    st.session_state.neighbor_flow_city_name = nearest_city['city_name']
+            except Exception:
+                pass
         else:
             if st.session_state.address: st.error("Address not found. Please try a different address.")
             st.session_state.search_triggered = False
@@ -241,7 +268,7 @@ try:
             ).add_to(folium_map)
     
     # --- Function to show where neighbors go ---
-    def add_neighbor_flow_to_map(folium_map, origin_city_code, recruitment_df, cities_df, establishments_df, user_address_coords=None):
+    def add_neighbor_flow_to_map(folium_map, origin_city_code, recruitment_df, cities_df, establishments_df, user_address_coords=None, distance_limit_km=None):
         """Show where patients from a specific neighborhood go to hospitals"""
         if recruitment_df.empty or cities_df.empty:
             st.warning("No recruitment or cities data available")
@@ -340,8 +367,18 @@ try:
             st.warning("No destination hospitals found with valid coordinates")
             return
             
-        # Sort by patient count to show most popular destinations first
-        destination_hospitals = destination_hospitals.sort_values('patient_count', ascending=False)
+        # If we know the user's location, compute distances and prefer closest destinations
+        if user_address_coords:
+            destination_hospitals['distance_km'] = destination_hospitals.apply(
+                lambda r: geodesic(user_address_coords, (r['latitude'], r['longitude'])).km, axis=1
+            )
+            if distance_limit_km is not None:
+                destination_hospitals = destination_hospitals[destination_hospitals['distance_km'] <= float(distance_limit_km)]
+            if not destination_hospitals.empty:
+                destination_hospitals = destination_hospitals.sort_values('distance_km', ascending=True)
+        else:
+            # Fall back to patient popularity when no user location
+            destination_hospitals = destination_hospitals.sort_values('patient_count', ascending=False)
         
         # Debug: Show what we're about to visualize
         st.success(f"Creating {len(destination_hospitals)} patient flow arrows from {origin_name}")
@@ -458,7 +495,7 @@ try:
                     # Unified search system
                     search_method = st.radio(
                         "Choose search method:",
-                        ["📍 Address/Postal Code", "🔍 Manual City Search"],
+                        ["Use Main Search Address", "🔍 Manual City Search"],
                         horizontal=True,
                         key="search_method"
                     )
@@ -466,106 +503,36 @@ try:
                     selected_city_code = None
                     selected_city_name = None
                     
-                    if search_method == "📍 Address/Postal Code":
-                        # Address geocoding functionality
-                        address_input = st.text_input(
-                            "📍 Enter your address or postal code:",
-                            placeholder="e.g., Paris, 75001, Bobigny, or your full address...",
-                            key="neighbor_flow_address"
-                        )
+                    if search_method == "Use Main Search Address":
+                        # Reuse address from main search; no extra input field
+                        address_input = st.session_state.address
+                    elif search_method == "🔍 Manual City Search":
+                        address_input = None
                     
-                    # Geocoding function for neighbor flow
-                    @st.cache_data(show_spinner="Finding your location...")
-                    def geocode_for_neighbor_flow(address):
-                        if not address: return None
-                        try:
-                            geolocator = Nominatim(user_agent="navira_streamlit_app_v26")
-                            location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
-                            return (location.latitude, location.longitude) if location else None
-                        except Exception as e:
-                            st.error(f"Geocoding failed: {e}")
-                            return None
-                    
-                    # Find nearest city with recruitment data
-                    def find_nearest_city_with_data(coords, cities_with_data, max_distance_km=50):
-                        if not coords or cities_with_data.empty:
-                            return None
-                        
-                        # Calculate distances to all cities with recruitment data
-                        distances = cities_with_data.apply(
-                            lambda row: geodesic(coords, (row['latitude'], row['longitude'])).km, 
-                            axis=1
-                        )
-                        
-                        # Find the closest city within max_distance_km; relax threshold if needed
-                        min_distance_idx = distances.idxmin()
-                        min_distance = distances[min_distance_idx]
-                        if min_distance <= max_distance_km:
-                            return cities_with_data.loc[min_distance_idx], min_distance
-                        for threshold in (100, 150, 200):
-                            if min_distance <= threshold:
-                                return cities_with_data.loc[min_distance_idx], min_distance
-                        return None
+                    # Use helpers defined above: geocode_address and _find_nearest_city_with_data
                     
                     # Process address input
-                    if address_input:
-                        user_coords = geocode_for_neighbor_flow(address_input)
-                        
-                        if user_coords:
-                            # Persist user coordinates for flow map
-                            st.session_state.user_address_coords = user_coords
-                            # Find nearest city with recruitment data
-                            nearest_city_data = find_nearest_city_with_data(user_coords, cities_with_names)
-                            
-                            if nearest_city_data:
-                                nearest_city, distance = nearest_city_data
-                                selected_city_code = nearest_city['city_code']
-                                selected_city_name = nearest_city['city_name']
-                                
-                                # Store in session state for map rendering
-                                st.session_state.neighbor_flow_city_code = selected_city_code
-                                st.session_state.neighbor_flow_city_name = selected_city_name
-                                
-                                st.success(f"""
-                                **📍 Found your location!**
-                                - **Your address**: {address_input}
-                                - **Nearest city with data**: {selected_city_name} ({distance:.1f} km away)
-                                - **City code**: {selected_city_code}
-                                """)
-                                
-                                # Show flow data for this city
-                                city_flow = recruitment_zones[recruitment_zones['city_code'] == selected_city_code]
-                                if not city_flow.empty:
-                                    total_patients = city_flow['patient_count'].sum()
-                                    top_hospitals = city_flow.nlargest(3, 'patient_count')
-                                    
-                                    # Get hospital names
-                                    hospital_names = []
-                                    for _, row in top_hospitals.iterrows():
-                                        hospital_data = establishments_full[establishments_full['id'] == row['hospital_id']]
-                                        if not hospital_data.empty:
-                                            hospital_name = hospital_data['name'].iloc[0]
-                                        else:
-                                            hospital_name = 'Unknown Hospital'
-                                        hospital_names.append(f"{row['patient_count']} to {hospital_name}")
-                                    
-                                    st.info(f"""
-                                    **📊 Patient Flow Data for {selected_city_name}:**
-                                    - **Total patients**: {total_patients:,}
-                                    - **Top destinations**: {', '.join(hospital_names)}
-                                    """)
-                                else:
-                                    st.warning(f"No patient flow data available for {selected_city_name}.")
-                            else:
-                                st.warning(f"""
-                                **No nearby cities with patient flow data found.**
-                                - Your location: {address_input}
-                                - Searched within 50 km radius
-                                - Try switching to manual city search below
-                                """)
+                    if search_method == "Use Main Search Address":
+                        if not st.session_state.address:
+                            st.warning("Use the main search bar first to enter your address.")
                         else:
-                            st.error(f"Could not find the address: {address_input}")
-                            st.info("Try a different address, postal code, or city name.")
+                            # Reuse cached coords or geocode once
+                            user_coords = st.session_state.get('user_address_coords')
+                            if not user_coords:
+                                user_coords = geocode_address(st.session_state.address)
+                                if user_coords:
+                                    st.session_state.user_address_coords = user_coords
+                            if user_coords:
+                                nearest_city_data = _find_nearest_city_with_data(user_coords, cities_with_names, max_distance_km=radius_km)
+                                if nearest_city_data:
+                                    nearest_city, distance = nearest_city_data
+                                    selected_city_code = nearest_city['city_code']
+                                    selected_city_name = nearest_city['city_name']
+                                    st.session_state.neighbor_flow_city_code = selected_city_code
+                                    st.session_state.neighbor_flow_city_name = selected_city_name
+                                    st.success(f"Using your main address ({st.session_state.address}). Nearest city with data: {selected_city_name} ({distance:.1f} km)")
+                                else:
+                                    st.warning("No nearby cities with patient flow data found. Switch to Manual City Search.")
                     
                     elif search_method == "🔍 Manual City Search":
                         # Manual city selection
@@ -760,7 +727,7 @@ try:
                 # Get user coordinates if available
                 user_coords = st.session_state.get('user_address_coords')
                 
-                add_neighbor_flow_to_map(m, city_code_to_use, recruitment_zones, cities, establishments_full, user_coords)
+                add_neighbor_flow_to_map(m, city_code_to_use, recruitment_zones, cities, establishments_full, user_coords, distance_limit_km=radius_km)
                 
                 # Add legend for the neighbor flow visualization
                 legend_html = '''
