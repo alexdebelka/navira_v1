@@ -35,7 +35,9 @@ This document summarizes all the new features and enhancements added to the Navi
   - **Origin Shading**: Prominent blue shaded area (3km radius) with darker center point
   - **Destination Markers**: Blue circles at hospitals showing patient concentration
   - **Interactive Popups**: Show hospital name, patient count, and percentage
-  - **Visual Legend**: On-map legend explaining the patient flow visualization
+  - **Visual Legend**: On-map legend with dark text on light background for visibility
+  - **Enhanced Arrows**: Blue flow lines with triangular arrow markers showing direction
+  - **Debug Information**: Clear feedback about what's being visualized and any issues
   - **Detailed Analysis**: Comprehensive breakdown of top destinations and geographic distribution
   - **Real-time Feedback**: Shows distance to nearest city with data and patient flow summary
 - **Data Source**: `11_recruitement_zone.csv` + `COMMUNES_FRANCE_INSEE.csv` + `01_hospitals.csv` + Geocoding API

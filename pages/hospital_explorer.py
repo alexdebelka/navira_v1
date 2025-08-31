@@ -240,17 +240,20 @@ try:
     def add_neighbor_flow_to_map(folium_map, origin_city_code, recruitment_df, cities_df, establishments_df):
         """Show where patients from a specific neighborhood go to hospitals"""
         if recruitment_df.empty or cities_df.empty:
+            st.warning("No recruitment or cities data available")
             return
             
         # Get all recruitment data for the origin city
         origin_recruitment = recruitment_df[recruitment_df['city_code'] == str(origin_city_code)]
         
         if origin_recruitment.empty:
+            st.warning(f"No patient flow data found for city code: {origin_city_code}")
             return
             
         # Get origin city coordinates
         origin_city = cities_df[cities_df['city_code'] == str(origin_city_code)]
         if origin_city.empty:
+            st.warning(f"City coordinates not found for city code: {origin_city_code}")
             return
             
         origin_lat = origin_city['latitude'].iloc[0]
@@ -297,10 +300,14 @@ try:
         ]
         
         if destination_hospitals.empty:
+            st.warning("No destination hospitals found with valid coordinates")
             return
             
         # Sort by patient count to show most popular destinations first
         destination_hospitals = destination_hospitals.sort_values('patient_count', ascending=False)
+        
+        # Debug: Show what we're about to visualize
+        st.success(f"Creating {len(destination_hospitals)} patient flow arrows from {origin_name}")
         
         # Add flow lines to hospitals
         max_patients = destination_hospitals['patient_count'].max()
@@ -318,16 +325,39 @@ try:
             opacity = min(0.8, dest['percentage'] / 100 * 2)  # Cap at 0.8 opacity
             
             # Create flow line from origin to hospital with arrowheads
+            # Note: Folium doesn't support arrow_style, arrow_size, arrow_color parameters
+            # We'll use a regular PolyLine with thicker weight to make it more visible
             folium.PolyLine(
                 locations=[[origin_lat, origin_lon], [dest['latitude'], dest['longitude']]],
                 weight=line_width,
                 color='blue',
                 opacity=opacity,
-                popup=f"<b>{dest['name']}</b><br>Patients: {dest['patient_count']}<br>Percentage: {dest['percentage']:.1f}%",
-                # Add arrowheads to show direction
-                arrow_style='->',
-                arrow_size=12,
-                arrow_color='blue'
+                popup=f"<b>{dest['name']}</b><br>Patients: {dest['patient_count']}<br>Percentage: {dest['percentage']:.1f}%"
+            ).add_to(folium_map)
+            
+            # Add a small arrow marker at the end to show direction
+            # Calculate a point near the destination to place the arrow
+            import math
+            lat1, lon1 = origin_lat, origin_lon
+            lat2, lon2 = dest['latitude'], dest['longitude']
+            
+            # Calculate midpoint for arrow placement (80% towards destination)
+            arrow_lat = lat1 + 0.8 * (lat2 - lat1)
+            arrow_lon = lon1 + 0.8 * (lon2 - lon1)
+            
+            # Calculate angle for arrow direction
+            angle = math.atan2(lat2 - lat1, lon2 - lon1) * 180 / math.pi
+            
+            # Add arrow marker
+            folium.RegularPolygonMarker(
+                location=[arrow_lat, arrow_lon],
+                number_of_sides=3,
+                radius=8,
+                rotation=angle,
+                color='blue',
+                fill_color='blue',
+                fill_opacity=opacity,
+                popup=f"→ {dest['name']}"
             ).add_to(folium_map)
             
             # Add destination marker to show patient concentration
@@ -632,18 +662,24 @@ try:
         if show_neighbor_flow and st.session_state.get('neighbor_flow_city_code'):
             try:
                 city_code_to_use = st.session_state.neighbor_flow_city_code
+                
+                # Debug: Show what city we're trying to visualize
+                city_info = cities[cities['city_code'] == city_code_to_use]
+                if not city_info.empty:
+                    st.info(f"Visualizing patient flow from: {city_info['city_name'].iloc[0]} ({city_code_to_use})")
+                
                 add_neighbor_flow_to_map(m, city_code_to_use, recruitment_zones, cities, establishments)
                 
                 # Add legend for the neighbor flow visualization
                 legend_html = '''
                 <div style="position: fixed; 
-                            bottom: 50px; left: 50px; width: 200px; height: 120px; 
-                            background-color: white; border:2px solid grey; z-index:9999; 
-                            font-size:14px; padding: 10px">
-                <p><b>Patient Flow Legend</b></p>
-                <p><i class="fa fa-circle" style="color:blue"></i> Origin area</p>
-                <p><i class="fa fa-arrow-right" style="color:blue"></i> Patient flow (thicker = more patients)</p>
-                <p><i class="fa fa-circle" style="color:blue"></i> Destination hospitals</p>
+                            bottom: 50px; left: 50px; width: 220px; height: 140px; 
+                            background-color: rgba(255, 255, 255, 0.9); border:2px solid #333; z-index:9999; 
+                            font-size:14px; padding: 10px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.3)">
+                <p style="margin: 0 0 8px 0; font-weight: bold; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Patient Flow Legend</p>
+                <p style="margin: 5px 0; color: #333;"><span style="color: blue; font-size: 16px;">●</span> Origin area</p>
+                <p style="margin: 5px 0; color: #333;"><span style="color: blue; font-size: 16px;">→</span> Patient flow (thicker = more patients)</p>
+                <p style="margin: 5px 0; color: #333;"><span style="color: blue; font-size: 16px;">●</span> Destination hospitals</p>
                 </div>
                 '''
                 m.get_root().html.add_child(folium.Element(legend_html))
