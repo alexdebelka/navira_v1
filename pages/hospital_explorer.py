@@ -237,7 +237,7 @@ try:
             ).add_to(folium_map)
     
     # --- Function to show where neighbors go ---
-    def add_neighbor_flow_to_map(folium_map, origin_city_code, recruitment_df, cities_df, establishments_df):
+    def add_neighbor_flow_to_map(folium_map, origin_city_code, recruitment_df, cities_df, establishments_df, user_address_coords=None):
         """Show where patients from a specific neighborhood go to hospitals"""
         if recruitment_df.empty or cities_df.empty:
             st.warning("No recruitment or cities data available")
@@ -259,6 +259,39 @@ try:
         origin_lat = origin_city['latitude'].iloc[0]
         origin_lon = origin_city['longitude'].iloc[0]
         origin_name = origin_city['city_name'].iloc[0]
+        
+        # If user provided their address coordinates, show the connection
+        if user_address_coords:
+            user_lat, user_lon = user_address_coords
+            
+            # Add user's address marker (red point)
+            folium.Marker(
+                location=[user_lat, user_lon],
+                popup=f"<b>Your Address</b><br>Nearest city with data: {origin_name}",
+                icon=folium.Icon(icon="user", prefix="fa", color="red")
+            ).add_to(folium_map)
+            
+            # Add connection line from user's address to the nearest city with data
+            folium.PolyLine(
+                locations=[[user_lat, user_lon], [origin_lat, origin_lon]],
+                weight=3,
+                color='red',
+                opacity=0.7,
+                popup=f"<b>Connection</b><br>Your address → {origin_name}<br>Distance: {geodesic((user_lat, user_lon), (origin_lat, origin_lon)).km:.1f} km"
+            ).add_to(folium_map)
+            
+            # Add a small info circle at the midpoint
+            mid_lat = (user_lat + origin_lat) / 2
+            mid_lon = (user_lon + origin_lon) / 2
+            folium.Circle(
+                location=[mid_lat, mid_lon],
+                radius=2000,
+                popup=f"<b>Nearest City with Data</b><br>{origin_name}<br>Patient flow data available here",
+                color='orange',
+                fillColor='orange',
+                opacity=0.3,
+                fillOpacity=0.2
+            ).add_to(folium_map)
         
         # Add origin marker with blue shading (more prominent like in the image)
         folium.Circle(
@@ -722,16 +755,21 @@ try:
                 if not city_info.empty:
                     st.info(f"Visualizing patient flow from: {city_info['city_name'].iloc[0]} ({city_code_to_use})")
                 
-                add_neighbor_flow_to_map(m, city_code_to_use, recruitment_zones, cities, establishments)
+                # Get user coordinates if available
+                user_coords = st.session_state.get('user_address_coords')
+                
+                add_neighbor_flow_to_map(m, city_code_to_use, recruitment_zones, cities, establishments, user_coords)
                 
                 # Add legend for the neighbor flow visualization
                 legend_html = '''
                 <div style="position: fixed; 
-                            bottom: 50px; left: 50px; width: 220px; height: 140px; 
+                            bottom: 50px; left: 50px; width: 220px; height: 160px; 
                             background-color: rgba(255, 255, 255, 0.9); border:2px solid #333; z-index:9999; 
                             font-size:14px; padding: 10px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.3)">
                 <p style="margin: 0 0 8px 0; font-weight: bold; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Patient Flow Legend</p>
-                <p style="margin: 5px 0; color: #333;"><span style="color: blue; font-size: 16px;">●</span> Origin area</p>
+                <p style="margin: 5px 0; color: #333;"><span style="color: red; font-size: 16px;">📍</span> Your address</p>
+                <p style="margin: 5px 0; color: #333;"><span style="color: red; font-size: 16px;">—</span> Connection to nearest city</p>
+                <p style="margin: 5px 0; color: #333;"><span style="color: blue; font-size: 16px;">●</span> Origin area (with data)</p>
                 <p style="margin: 5px 0; color: #333;"><span style="color: blue; font-size: 16px;">→</span> Patient flow (thicker = more patients)</p>
                 <p style="margin: 5px 0; color: #333;"><span style="color: blue; font-size: 16px;">●</span> Destination hospitals</p>
                 </div>

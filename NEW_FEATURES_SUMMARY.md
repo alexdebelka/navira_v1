@@ -32,6 +32,7 @@ This document summarizes all the new features and enhancements added to the Navi
   - **Automatic City Matching**: Finds the nearest city with patient flow data within 50km radius
   - **Manual City Search**: Search and select from 1,045+ French cities with data
   - **Connected Search Methods**: Both search methods update the same region information
+  - **Address Connection**: Red marker shows your exact address with connection line to nearest city with data
   - **Flow Visualization**: Blue arrows with arrowheads showing patient flow from origin to destination hospitals
   - **Arrow Thickness**: Based on patient volume (thicker arrows = more patients)
   - **Origin Shading**: Prominent blue shaded area (3km radius) with darker center point
@@ -39,6 +40,7 @@ This document summarizes all the new features and enhancements added to the Navi
   - **Interactive Popups**: Show hospital name, patient count, and percentage
   - **Visual Legend**: On-map legend with dark text on light background for visibility
   - **Enhanced Arrows**: Blue flow lines with triangular arrow markers showing direction
+  - **Address Connection**: Red connection line from your address to the nearest city with patient flow data
   - **Debug Information**: Clear feedback about what's being visualized and any issues
   - **Adaptive Region Section**: Shows selected city information regardless of search method
   - **Detailed Analysis**: Comprehensive breakdown of top destinations and geographic distribution
