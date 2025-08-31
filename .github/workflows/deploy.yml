@@ -21,20 +21,20 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y rsync curl python3 python3-venv python3-pip
 
-      - name: Prepare app dir & perms
+      - name: Prepare app dir
         env: { APP: /home/appuser/app }
         run: |
           sudo mkdir -p "$APP"
-          sudo chmod 751 /home/appuser              # allow traversal
           sudo chown -R appuser:appuser /home/appuser
-
-      - name: Sync repo to server path (preserve venv & secrets)
+    
+      - name: Sync repo to server path (as appuser)
         env: { APP: /home/appuser/app }
         run: |
-          sudo rsync -a --delete \
-            --exclude '.git' --exclude '.venv' --exclude '.streamlit' \
-            "$GITHUB_WORKSPACE"/ "$APP"/
-          sudo chown -R appuser:appuser "$APP"
+          sudo -u appuser bash -lc '
+            rsync -a --delete --exclude ".git" --exclude ".venv" --exclude ".streamlit" \
+              "$GITHUB_WORKSPACE"/ "$APP"/
+          '
+    
 
       - name: Install deps in venv (as appuser)
         env: { APP: /home/appuser/app }

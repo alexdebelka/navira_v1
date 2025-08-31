@@ -1215,7 +1215,7 @@ with st.expander("🏥 2. Affiliation Analysis"):
     else:
         st.info("No sector/affiliation data available for the merged comparison.")
 
-with st.expander("📊 3. -based Analysis - Hospital Volume vs Robotic Adoption"):
+with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Adoption"):
     st.markdown("""
     **Understanding this analysis:**
     
