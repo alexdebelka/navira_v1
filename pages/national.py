@@ -41,6 +41,12 @@ st.markdown("""
 # --- Load Data (Parquet via loader) ---
 df = load_and_prepare_data()
 
+# Load additional datasets
+from navira.data_loader import get_all_dataframes
+all_data = get_all_dataframes()
+complications = all_data.get('complications', pd.DataFrame())
+procedure_details = all_data.get('procedure_details', pd.DataFrame())
+
 # --- Page Title and Notice ---
 st.title("🇫🇷 National Overview")
 
@@ -1208,6 +1214,380 @@ with st.expander("🏥 2. Affiliation Analysis"):
                 st.markdown("Insights unavailable due to missing values.")
     else:
         st.info("No sector/affiliation data available for the merged comparison.")
+
+# --- COMPLICATIONS ANALYSIS ---
+st.header("Complications Analysis")
+
+if not complications.empty:
+    st.markdown(
+        """
+        <div class=\"nv-info-wrap\">
+          <div class=\"nv-h3\">National Complications Overview</div>
+          <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+            <div class=\"nv-tooltiptext\">
+              <b>Understanding this analysis:</b><br/>
+              This section analyzes complication rates across all hospitals from 2020-2024. It shows trends in patient safety outcomes and compares hospital performance against national benchmarks.<br/><br/>
+              <b>Key Metrics:</b><br/>
+              • Rolling Rate: 12-month moving average of complication rates<br/>
+              • National Average: Benchmark rate across all eligible hospitals<br/>
+              • Confidence Intervals: Statistical range of expected performance
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    # Calculate overall statistics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        total_procedures = complications['procedures_count'].sum()
+        st.metric("Total Procedures Analyzed", f"{int(total_procedures):,}")
+    
+    with col2:
+        total_complications = complications['complications_count'].sum()
+        st.metric("Total Complications", f"{int(total_complications):,}")
+    
+    with col3:
+        if total_procedures > 0:
+            overall_rate = (total_complications / total_procedures) * 100
+            st.metric("Overall Complication Rate", f"{overall_rate:.2f}%")
+    
+    with col4:
+        # Get most recent quarter data
+        latest_quarter = complications['quarter_date'].max()
+        latest_data = complications[complications['quarter_date'] == latest_quarter]
+        if not latest_data.empty:
+            latest_national_avg = latest_data['national_average'].mean() * 100
+            st.metric("Latest National Average", f"{latest_national_avg:.2f}%")
+    
+    # Temporal trend of national complication rates
+    st.markdown("#### National Complication Rate Trends")
+    
+    # Calculate quarterly national averages
+    quarterly_stats = complications.groupby('quarter_date').agg({
+        'procedures_count': 'sum',
+        'complications_count': 'sum',
+        'national_average': 'mean'
+    }).reset_index()
+    
+    quarterly_stats['actual_rate'] = (quarterly_stats['complications_count'] / quarterly_stats['procedures_count'] * 100)
+    quarterly_stats['national_avg_pct'] = quarterly_stats['national_average'] * 100
+    
+    if not quarterly_stats.empty:
+        fig = go.Figure()
+        
+        # Add actual complication rate
+        fig.add_trace(go.Scatter(
+            x=quarterly_stats['quarter_date'],
+            y=quarterly_stats['actual_rate'],
+            mode='lines+markers',
+            name='Actual National Rate',
+            line=dict(color='#1f77b4', width=3),
+            marker=dict(size=6)
+        ))
+        
+        # Add benchmark average
+        fig.add_trace(go.Scatter(
+            x=quarterly_stats['quarter_date'],
+            y=quarterly_stats['national_avg_pct'],
+            mode='lines+markers',
+            name='National Benchmark',
+            line=dict(color='#ff7f0e', width=2, dash='dash'),
+            marker=dict(size=4)
+        ))
+        
+        fig.update_layout(
+            title="National Complication Rate Over Time",
+            xaxis_title="Quarter",
+            yaxis_title="Complication Rate (%)",
+            height=400,
+            hovermode='x unified',
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Hospital performance distribution
+    st.markdown("#### Hospital Performance Distribution")
+    
+    # Get latest 12-month rolling rates for all hospitals
+    latest_hospital_data = complications.groupby('hospital_id').apply(
+        lambda x: x.loc[x['quarter_date'].idxmax()]
+    ).reset_index(drop=True)
+    
+    if not latest_hospital_data.empty:
+        latest_hospital_data['rolling_rate_pct'] = latest_hospital_data['rolling_rate'] * 100
+        
+        # Create histogram of hospital performance
+        fig = px.histogram(
+            latest_hospital_data,
+            x='rolling_rate_pct',
+            nbins=30,
+            title="Distribution of Hospital 12-Month Rolling Complication Rates",
+            labels={'rolling_rate_pct': 'Complication Rate (%)', 'count': 'Number of Hospitals'}
+        )
+        
+        # Add vertical line for national average
+        national_avg_line = latest_hospital_data['national_average'].mean() * 100
+        fig.add_vline(
+            x=national_avg_line,
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"National Avg: {national_avg_line:.2f}%"
+        )
+        
+        fig.update_layout(
+            height=400,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Performance summary
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            below_avg = (latest_hospital_data['rolling_rate_pct'] < national_avg_line).sum()
+            st.metric("Hospitals Below Average", f"{below_avg:,}")
+        
+        with col2:
+            above_avg = (latest_hospital_data['rolling_rate_pct'] > national_avg_line).sum()
+            st.metric("Hospitals Above Average", f"{above_avg:,}")
+        
+        with col3:
+            best_performance = latest_hospital_data['rolling_rate_pct'].min()
+            st.metric("Best Performance", f"{best_performance:.2f}%")
+
+else:
+    st.info("Complications data not available for national analysis.")
+
+# --- ADVANCED PROCEDURE METRICS ---
+st.header("Advanced Procedure Metrics")
+
+if not procedure_details.empty:
+    st.markdown(
+        """
+        <div class=\"nv-info-wrap\">
+          <div class=\"nv-h3\">Detailed Procedure Analysis</div>
+          <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+            <div class=\"nv-tooltiptext\">
+              <b>Understanding this analysis:</b><br/>
+              This section provides detailed insights into surgical procedures, including procedure-specific robotic rates, primary vs revisional surgery patterns, and robotic approach by procedure type. Data covers 2020-2024 across all eligible hospitals.<br/><br/>
+              <b>Key Metrics:</b><br/>
+              • Procedure-specific robotic rates<br/>
+              • Primary vs revisional surgery breakdown<br/>
+              • Robotic approach adoption by procedure type
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    # Procedure-specific robotic rates
+    st.markdown("#### Procedure-Specific Robotic Rates (2024)")
+    
+    # Calculate robotic rates by procedure type for 2024
+    procedure_2024 = procedure_details[procedure_details['year'] == 2024]
+    
+    if not procedure_2024.empty:
+        robotic_by_procedure = procedure_2024[
+            procedure_2024['surgical_approach'] == 'ROB'
+        ].groupby('procedure_type')['procedure_count'].sum().reset_index()
+        robotic_by_procedure = robotic_by_procedure.rename(columns={'procedure_count': 'robotic_count'})
+        
+        total_by_procedure = procedure_2024.groupby('procedure_type')['procedure_count'].sum().reset_index()
+        total_by_procedure = total_by_procedure.rename(columns={'procedure_count': 'total_count'})
+        
+        # Merge to calculate percentages
+        procedure_robotic_rates = total_by_procedure.merge(
+            robotic_by_procedure, 
+            on='procedure_type', 
+            how='left'
+        ).fillna(0)
+        procedure_robotic_rates['robotic_rate'] = (
+            procedure_robotic_rates['robotic_count'] / procedure_robotic_rates['total_count'] * 100
+        )
+        
+        # Map procedure codes to names
+        procedure_names = {
+            'SLE': 'Sleeve Gastrectomy',
+            'BPG': 'Gastric Bypass', 
+            'ANN': 'Gastric Banding',
+            'REV': 'Revision Surgery',
+            'ABL': 'Band Removal',
+            'DBP': 'Bilio-pancreatic Diversion',
+            'GVC': 'Gastroplasty',
+            'NDD': 'Not Defined'
+        }
+        
+        procedure_robotic_rates['procedure_name'] = procedure_robotic_rates['procedure_type'].map(procedure_names)
+        procedure_robotic_rates = procedure_robotic_rates.sort_values('robotic_rate', ascending=False)
+        
+        # Create visualization
+        fig = px.bar(
+            procedure_robotic_rates,
+            x='robotic_rate',
+            y='procedure_name',
+            orientation='h',
+            title="Robotic Adoption by Procedure Type (2024)",
+            labels={'robotic_rate': 'Robotic Rate (%)', 'procedure_name': 'Procedure Type'},
+            text='robotic_rate'
+        )
+        
+        fig.update_traces(
+            texttemplate='%{text:.1f}%',
+            textposition='outside',
+            cliponaxis=False
+        )
+        
+        fig.update_layout(
+            height=400,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            yaxis={'categoryorder': 'total ascending'}
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Show summary table
+        display_table = procedure_robotic_rates[['procedure_name', 'total_count', 'robotic_count', 'robotic_rate']].copy()
+        display_table['robotic_rate'] = display_table['robotic_rate'].round(1)
+        display_table = display_table.rename(columns={
+            'procedure_name': 'Procedure',
+            'total_count': 'Total Procedures',
+            'robotic_count': 'Robotic Procedures',
+            'robotic_rate': 'Robotic Rate (%)'
+        })
+        
+        st.dataframe(display_table, use_container_width=True, hide_index=True)
+    
+    # Primary vs Revisional Surgery Analysis
+    st.markdown("#### Primary vs Revisional Surgery (2024)")
+    
+    if not procedure_2024.empty:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("##### Primary Procedures")
+            primary_2024 = procedure_2024[procedure_2024['is_revision'] == 0]
+            if not primary_2024.empty:
+                total_primary = primary_2024['procedure_count'].sum()
+                robotic_primary = primary_2024[primary_2024['surgical_approach'] == 'ROB']['procedure_count'].sum()
+                robotic_rate_primary = (robotic_primary / total_primary * 100) if total_primary > 0 else 0
+                
+                st.metric("Total Primary Procedures", f"{int(total_primary):,}")
+                st.metric("Robotic Primary Procedures", f"{int(robotic_primary):,}")
+                st.metric("Robotic Rate (Primary)", f"{robotic_rate_primary:.1f}%")
+        
+        with col2:
+            st.markdown("##### Revision Procedures")
+            revision_2024 = procedure_2024[procedure_2024['is_revision'] == 1]
+            if not revision_2024.empty:
+                total_revision = revision_2024['procedure_count'].sum()
+                robotic_revision = revision_2024[revision_2024['surgical_approach'] == 'ROB']['procedure_count'].sum()
+                robotic_rate_revision = (robotic_revision / total_revision * 100) if total_revision > 0 else 0
+                
+                st.metric("Total Revision Procedures", f"{int(total_revision):,}")
+                st.metric("Robotic Revision Procedures", f"{int(robotic_revision):,}")
+                st.metric("Robotic Rate (Revision)", f"{robotic_rate_revision:.1f}%")
+    
+    # Robotic Approach by Procedure Type Over Time
+    st.markdown("#### Robotic Adoption Trends by Procedure (2020-2024)")
+    
+    # Calculate yearly robotic rates by procedure
+    yearly_procedure_trends = []
+    
+    for year in range(2020, 2025):
+        year_data = procedure_details[procedure_details['year'] == year]
+        if year_data.empty:
+            continue
+            
+        for proc_type in year_data['procedure_type'].unique():
+            proc_data = year_data[year_data['procedure_type'] == proc_type]
+            total_procedures = proc_data['procedure_count'].sum()
+            robotic_procedures = proc_data[proc_data['surgical_approach'] == 'ROB']['procedure_count'].sum()
+            
+            if total_procedures > 0:
+                robotic_rate = (robotic_procedures / total_procedures) * 100
+                yearly_procedure_trends.append({
+                    'year': year,
+                    'procedure_type': proc_type,
+                    'procedure_name': procedure_names.get(proc_type, proc_type),
+                    'robotic_rate': robotic_rate,
+                    'total_procedures': total_procedures
+                })
+    
+    if yearly_procedure_trends:
+        trends_df = pd.DataFrame(yearly_procedure_trends)
+        
+        # Filter to show only major procedures with sufficient volume
+        major_procedures = trends_df.groupby('procedure_type')['total_procedures'].sum()
+        major_procedures = major_procedures[major_procedures >= 100].index.tolist()  # At least 100 procedures over 5 years
+        trends_df = trends_df[trends_df['procedure_type'].isin(major_procedures)]
+        
+        if not trends_df.empty:
+            fig = px.line(
+                trends_df,
+                x='year',
+                y='robotic_rate',
+                color='procedure_name',
+                title="Robotic Adoption Trends by Major Procedure Types",
+                labels={'robotic_rate': 'Robotic Rate (%)', 'year': 'Year', 'procedure_name': 'Procedure'}
+            )
+            
+            fig.update_layout(
+                height=400,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+    
+    # Summary insights
+    with st.expander("Key Insights and Analysis"):
+        st.markdown("""
+        **Key Findings from Advanced Procedure Analysis:**
+        
+        **Procedure-Specific Robotic Adoption:**
+        - Shows which procedures are most/least likely to be performed robotically
+        - Identifies opportunities for robotic surgery expansion
+        - Reveals procedure complexity and technology suitability patterns
+        
+        **Primary vs Revisional Surgery:**
+        - Compares robotic adoption between initial and revision procedures
+        - May indicate surgeon comfort and patient selection criteria
+        - Shows technology adoption in complex vs routine cases
+        
+        **Temporal Trends:**
+        - Tracks how robotic adoption varies by procedure type over time
+        - Identifies which procedures are driving overall robotic growth
+        - Shows procedure-specific learning curves and adoption patterns
+        
+        **Clinical Implications:**
+        - Higher robotic rates in certain procedures may indicate clinical benefits
+        - Variation between hospitals suggests opportunities for best practice sharing
+        - Trends can inform training and equipment investment decisions
+        """)
+
+else:
+    st.info("Advanced procedure data not available for national analysis.")
+    
+    st.markdown("""
+    **Available from current data:**
+    - Overall robotic surgery trends (shown in Approach Trends section above)
+    - Basic procedure type distributions
+    - General surgical approach patterns
+    
+    **Requires detailed procedure data:**
+    - Procedure-specific robotic rates (e.g., % of gastric sleeves done robotically)
+    - Primary vs revisional robotic procedures
+    - Robotic approach by procedure type analysis
+    """)
 
 # 4. Volume-based Analysis
 with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Adoption"):

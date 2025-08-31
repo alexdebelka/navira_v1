@@ -5,7 +5,7 @@ from folium.plugins import MarkerCluster
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 from streamlit_folium import st_folium
-from navira.data_loader import get_dataframes
+from navira.data_loader import get_dataframes, get_all_dataframes
 from auth_wrapper import add_auth_to_page
 from navigation_utils import handle_navigation_request
 handle_navigation_request()
@@ -35,6 +35,10 @@ st.markdown("""
 # --- Load Data ---
 try:
     establishments, annual = get_dataframes()
+    # Load additional datasets
+    all_data = get_all_dataframes()
+    recruitment_zones = all_data.get('recruitment', pd.DataFrame())
+    cities = all_data.get('cities', pd.DataFrame())
     
     # Filter establishments to only include hospitals with actual data
     # First, get hospitals that have data in the annual dataset
@@ -182,13 +186,75 @@ try:
             if st.session_state.address: st.error("Address not found. Please try a different address.")
             st.session_state.search_triggered = False
 
+    # --- Function to add recruitment zones to map ---
+    def add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, cities_df):
+        """Add patient recruitment zones as heatmap/circles to the map"""
+        if recruitment_df.empty or cities_df.empty:
+            return
+            
+        # Get recruitment data for this hospital
+        hospital_recruitment = recruitment_df[recruitment_df['hospital_id'] == str(hospital_id)]
+        
+        if hospital_recruitment.empty:
+            return
+            
+        # Merge with cities to get coordinates
+        recruitment_with_coords = hospital_recruitment.merge(
+            cities_df[['city_code', 'latitude', 'longitude', 'city_name']], 
+            on='city_code', 
+            how='left'
+        )
+        
+        # Filter out rows without coordinates
+        recruitment_with_coords = recruitment_with_coords.dropna(subset=['latitude', 'longitude'])
+        
+        if recruitment_with_coords.empty:
+            return
+            
+        # Add circles for recruitment zones - size based on patient count
+        max_patients = recruitment_with_coords['patient_count'].max()
+        min_patients = recruitment_with_coords['patient_count'].min()
+        
+        for _, zone in recruitment_with_coords.iterrows():
+            # Scale radius based on patient count (between 500m and 5000m)
+            if max_patients > min_patients:
+                normalized_size = (zone['patient_count'] - min_patients) / (max_patients - min_patients)
+            else:
+                normalized_size = 0.5
+            radius = 500 + (normalized_size * 4500)  # 500m to 5000m
+            
+            # Color intensity based on percentage
+            opacity = min(0.8, zone['percentage'] / 100 * 3)  # Cap at 0.8 opacity
+            
+            folium.Circle(
+                location=[zone['latitude'], zone['longitude']],
+                radius=radius,
+                popup=f"<b>{zone.get('city_name', 'Unknown City')}</b><br>Patients: {zone['patient_count']}<br>Percentage: {zone['percentage']:.1f}%",
+                color='orange',
+                fillColor='orange',
+                opacity=0.6,
+                fillOpacity=opacity
+            ).add_to(folium_map)
+    
     # --- Display Results: Map and List ---
     if st.session_state.get('search_triggered', False) and not st.session_state.filtered_df.empty:
         unique_hospitals_df = st.session_state.filtered_df.drop_duplicates(subset=['id']).copy()
         st.header(f"Found {len(unique_hospitals_df)} Hospitals")
+        
+        # Add toggle for recruitment zones
+        show_recruitment = st.toggle("Show Patient Recruitment Zones", value=False)
+        if show_recruitment:
+            selected_hospital_for_recruitment = st.selectbox(
+                "Select hospital to show recruitment zones:",
+                options=unique_hospitals_df['id'].tolist(),
+                format_func=lambda x: unique_hospitals_df[unique_hospitals_df['id']==x]['name'].iloc[0] if not unique_hospitals_df[unique_hospitals_df['id']==x].empty else x,
+                key="recruitment_hospital_selector"
+            )
+        
         m = folium.Map(location=user_coords, zoom_start=9, tiles="CartoDB positron")
         folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to(m)
         marker_cluster = MarkerCluster().add_to(m)
+        
         for idx, row in unique_hospitals_df.iterrows():
             statut_norm = str(row.get('statut', '')).strip().lower()
             if statut_norm == 'public':
@@ -198,6 +264,11 @@ try:
             else:
                 color = "green"
             folium.Marker(location=[row['latitude'], row['longitude']], popup=f"<b>{row['name']}</b>", icon=folium.Icon(icon="hospital-o", prefix="fa", color=color)).add_to(marker_cluster)
+        
+        # Add recruitment zones if toggled on
+        if show_recruitment and 'selected_hospital_for_recruitment' in locals():
+            add_recruitment_zones_to_map(m, selected_hospital_for_recruitment, recruitment_zones, cities)
+            
         map_data = st_folium(m, width="100%", height=500, key="folium_map")
         if map_data and map_data.get("last_object_clicked"):
             clicked_coords = (map_data["last_object_clicked"]["lat"], map_data["last_object_clicked"]["lng"])

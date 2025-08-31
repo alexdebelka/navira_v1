@@ -4,7 +4,7 @@ import pandas as pd
 import altair as alt
 import plotly.express as px
 import plotly.graph_objects as go
-from navira.data_loader import get_dataframes
+from navira.data_loader import get_dataframes, get_all_dataframes
 from auth_wrapper import add_auth_to_page
 from navigation_utils import handle_navigation_request
 handle_navigation_request()
@@ -63,6 +63,11 @@ SURGICAL_APPROACH_NAMES = {
 # --- Load Data (Parquet) ---
 try:
     establishments, annual = get_dataframes()
+    # Load additional datasets
+    all_data = get_all_dataframes()
+    competitors = all_data.get('competitors', pd.DataFrame())
+    complications = all_data.get('complications', pd.DataFrame())
+    procedure_details = all_data.get('procedure_details', pd.DataFrame())
 except Exception:
     st.error("Parquet data not found. Please run: make parquet")
     st.stop()
@@ -169,6 +174,253 @@ with metric_col2:
             spark2.update_yaxes(showgrid=False)
             st.markdown("##### Robotic Share Trend (%)")
             st.plotly_chart(spark2, use_container_width=True)
+
+# --- Hospital Competitors Section ---
+st.markdown("---")
+st.header("🏥 Hospital Competitors")
+
+# Get competitors for this hospital
+hospital_competitors = competitors[competitors['hospital_id'] == str(selected_hospital_id)]
+
+if not hospital_competitors.empty:
+    st.markdown("#### Top 5 Competitors (Same Territory)")
+    st.caption("These hospitals recruit patients from the same geographic areas")
+    
+    # Create columns for competitor display
+    competitors_with_names = hospital_competitors.merge(
+        establishments[['id', 'name', 'ville', 'statut']], 
+        left_on='competitor_id', 
+        right_on='id', 
+        how='left'
+    )
+    
+    # Sort by competitor patient count (descending)
+    competitors_with_names = competitors_with_names.sort_values('competitor_patients', ascending=False)
+    
+    # Display top 5 competitors
+    for idx, competitor in competitors_with_names.head(5).iterrows():
+        col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+        
+        with col1:
+            competitor_name = competitor.get('name', 'Unknown Hospital')
+            competitor_city = competitor.get('ville', 'Unknown City')
+            st.markdown(f"**{competitor_name}**")
+            st.caption(f"📍 {competitor_city}")
+        
+        with col2:
+            competitor_status = competitor.get('statut', 'Unknown')
+            status_color = {
+                'public': '🔵',
+                'private for profit': '🟢',
+                'private not-for-profit': '🔷'
+            }.get(competitor_status.lower() if isinstance(competitor_status, str) else '', '⚪')
+            st.markdown(f"{status_color} {competitor_status}")
+        
+        with col3:
+            competitor_patients = int(competitor.get('competitor_patients', 0))
+            st.metric("Patients", f"{competitor_patients:,}")
+        
+        with col4:
+            # Calculate market share in shared territory
+            total_shared = competitor.get('hospital_patients', 0) + competitor_patients
+            if total_shared > 0:
+                market_share = (competitor_patients / total_shared) * 100
+                st.metric("Share", f"{market_share:.1f}%")
+        
+        st.markdown("---")
+    
+    # Show summary metrics
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        total_competitor_patients = competitors_with_names['competitor_patients'].sum()
+        st.metric("Total Competitor Patients", f"{total_competitor_patients:,}")
+    
+    with col2:
+        hospital_patients_in_shared_territory = competitors_with_names['hospital_patients'].iloc[0] if not competitors_with_names.empty else 0
+        st.metric("Hospital Patients (Shared Territory)", f"{int(hospital_patients_in_shared_territory):,}")
+    
+    with col3:
+        if hospital_patients_in_shared_territory > 0:
+            competitive_intensity = (total_competitor_patients / hospital_patients_in_shared_territory) * 100
+            st.metric("Competitive Intensity", f"{competitive_intensity:.1f}%")
+    
+    # Add visualization of competitive landscape
+    if len(competitors_with_names) > 1:
+        st.markdown("#### Competitive Landscape")
+        
+        # Prepare data for visualization
+        chart_data = []
+        
+        # Add hospital itself
+        chart_data.append({
+            'Hospital': selected_hospital_details['name'],
+            'Patients': int(hospital_patients_in_shared_territory),
+            'Type': 'Selected Hospital'
+        })
+        
+        # Add competitors
+        for _, comp in competitors_with_names.head(5).iterrows():
+            chart_data.append({
+                'Hospital': comp.get('name', 'Unknown')[:20] + ('...' if len(comp.get('name', '')) > 20 else ''),
+                'Patients': int(comp.get('competitor_patients', 0)),
+                'Type': 'Competitor'
+            })
+        
+        chart_df = pd.DataFrame(chart_data)
+        
+        if not chart_df.empty:
+            fig = px.bar(
+                chart_df,
+                x='Patients',
+                y='Hospital',
+                color='Type',
+                orientation='h',
+                title="Patient Volume in Shared Territory",
+                color_discrete_map={
+                    'Selected Hospital': '#1f77b4',
+                    'Competitor': '#ff7f0e'
+                }
+            )
+            
+            fig.update_layout(
+                height=300,
+                yaxis={'categoryorder': 'total ascending'},
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+
+else:
+    st.info("No competitor data available for this hospital.")
+
+# --- Complications Statistics Section ---
+st.markdown("---")
+st.header("📊 Complications Statistics")
+
+# Get complications data for this hospital
+hospital_complications = complications[complications['hospital_id'] == str(selected_hospital_id)]
+
+if not hospital_complications.empty:
+    # Sort by quarter date
+    hospital_complications = hospital_complications.sort_values('quarter_date')
+    
+    # Calculate overall statistics
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        total_procedures = hospital_complications['procedures_count'].sum()
+        st.metric("Total Procedures", f"{int(total_procedures):,}")
+    
+    with col2:
+        total_complications = hospital_complications['complications_count'].sum()
+        st.metric("Total Complications", f"{int(total_complications):,}")
+    
+    with col3:
+        if total_procedures > 0:
+            overall_rate = (total_complications / total_procedures) * 100
+            st.metric("Overall Complication Rate", f"{overall_rate:.1f}%")
+    
+    # Show recent trend (last 4 quarters)
+    recent_data = hospital_complications.tail(4)
+    if not recent_data.empty:
+        st.markdown("#### Recent Trend (Last 4 Quarters)")
+        
+        # Create trend visualization
+        fig = go.Figure()
+        
+        # Add hospital rolling rate
+        fig.add_trace(go.Scatter(
+            x=recent_data['quarter'],
+            y=recent_data['rolling_rate'] * 100,  # Convert to percentage
+            mode='lines+markers',
+            name='Hospital (12-month rolling)',
+            line=dict(color='#1f77b4', width=3),
+            marker=dict(size=8)
+        ))
+        
+        # Add national average
+        fig.add_trace(go.Scatter(
+            x=recent_data['quarter'],
+            y=recent_data['national_average'] * 100,  # Convert to percentage
+            mode='lines+markers',
+            name='National Average',
+            line=dict(color='#ff7f0e', width=2, dash='dash'),
+            marker=dict(size=6)
+        ))
+        
+        # Add confidence intervals if available
+        if 'confidence_low' in recent_data.columns and 'confidence_high' in recent_data.columns:
+            fig.add_trace(go.Scatter(
+                x=recent_data['quarter'].tolist() + recent_data['quarter'].tolist()[::-1],
+                y=(recent_data['confidence_high'] * 100).tolist() + (recent_data['confidence_low'] * 100).tolist()[::-1],
+                fill='toself',
+                fillcolor='rgba(31, 119, 180, 0.2)',
+                line=dict(color='rgba(255,255,255,0)'),
+                name='Confidence Interval',
+                showlegend=True
+            ))
+        
+        fig.update_layout(
+            title="Complication Rate Trend",
+            xaxis_title="Quarter",
+            yaxis_title="Complication Rate (%)",
+            height=400,
+            hovermode='x unified',
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Show quarterly details
+    st.markdown("#### Quarterly Details")
+    
+    # Prepare data for table
+    display_data = hospital_complications[['quarter', 'procedures_count', 'complications_count', 'complication_rate', 'rolling_rate', 'national_average']].copy()
+    display_data['complication_rate'] = (display_data['complication_rate'] * 100).round(1)
+    display_data['rolling_rate'] = (display_data['rolling_rate'] * 100).round(1)
+    display_data['national_average'] = (display_data['national_average'] * 100).round(1)
+    
+    # Rename columns for display
+    display_data = display_data.rename(columns={
+        'quarter': 'Quarter',
+        'procedures_count': 'Procedures',
+        'complications_count': 'Complications',
+        'complication_rate': 'Rate (%)',
+        'rolling_rate': '12-Month Rolling (%)',
+        'national_average': 'National Avg (%)'
+    })
+    
+    # Show last 8 quarters
+    st.dataframe(display_data.tail(8), use_container_width=True, hide_index=True)
+    
+    # Performance analysis
+    if not recent_data.empty:
+        latest_quarter = recent_data.iloc[-1]
+        latest_rolling = latest_quarter['rolling_rate'] * 100
+        latest_national = latest_quarter['national_average'] * 100
+        
+        st.markdown("#### Performance Analysis")
+        
+        if latest_rolling < latest_national:
+            st.success(f"🟢 **Better than National Average**: Hospital's 12-month rolling rate ({latest_rolling:.1f}%) is below the national average ({latest_national:.1f}%)")
+        elif latest_rolling > latest_national:
+            st.warning(f"🟡 **Above National Average**: Hospital's 12-month rolling rate ({latest_rolling:.1f}%) is above the national average ({latest_national:.1f}%)")
+        else:
+            st.info(f"🟦 **At National Average**: Hospital's 12-month rolling rate ({latest_rolling:.1f}%) matches the national average")
+        
+        # Trend analysis
+        if len(recent_data) >= 2:
+            trend_change = recent_data['rolling_rate'].iloc[-1] - recent_data['rolling_rate'].iloc[-2]
+            if abs(trend_change) > 0.001:  # More than 0.1% change
+                trend_direction = "improving" if trend_change < 0 else "worsening"
+                st.info(f"📈 **Recent Trend**: Complication rate is {trend_direction} (change of {trend_change*100:.1f} percentage points from previous quarter)")
+
+else:
+    st.info("No complications data available for this hospital.")
+
 st.markdown("---")
 st.header("Annual Statistics")
 hospital_annual_data = selected_hospital_all_data.set_index('annee')
@@ -678,3 +930,179 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
                 pass
 else:
     st.info("No surgical approach data available.")
+
+# --- Detailed Procedure Analysis Section ---
+st.markdown("---")
+st.header("🔬 Detailed Procedure Analysis")
+
+# Get procedure details for this hospital
+hospital_procedure_details = procedure_details[procedure_details['hospital_id'] == str(selected_hospital_id)]
+
+if not hospital_procedure_details.empty:
+    st.markdown("#### Procedure-Specific Robotic Rates")
+    
+    # Calculate robotic rates by procedure type
+    robotic_by_procedure = hospital_procedure_details[
+        hospital_procedure_details['surgical_approach'] == 'ROB'
+    ].groupby(['procedure_type', 'year'])['procedure_count'].sum().reset_index()
+    
+    total_by_procedure = hospital_procedure_details.groupby(['procedure_type', 'year'])['procedure_count'].sum().reset_index()
+    total_by_procedure = total_by_procedure.rename(columns={'procedure_count': 'total_count'})
+    
+    # Merge to calculate percentages
+    robotic_rates = robotic_by_procedure.merge(
+        total_by_procedure, 
+        on=['procedure_type', 'year'], 
+        how='right'
+    ).fillna(0)
+    robotic_rates['robotic_rate'] = (robotic_rates['procedure_count'] / robotic_rates['total_count'] * 100)
+    
+    # Show current year (2024) robotic rates
+    current_year_rates = robotic_rates[robotic_rates['year'] == 2024]
+    if not current_year_rates.empty:
+        st.markdown("##### 2024 Robotic Adoption by Procedure Type")
+        
+        # Map procedure codes to names
+        procedure_names = {
+            'SLE': 'Sleeve Gastrectomy',
+            'BPG': 'Gastric Bypass', 
+            'ANN': 'Gastric Banding',
+            'REV': 'Revision Surgery',
+            'ABL': 'Band Removal',
+            'DBP': 'Bilio-pancreatic Diversion',
+            'GVC': 'Gastroplasty',
+            'NDD': 'Not Defined'
+        }
+        
+        for _, row in current_year_rates.iterrows():
+            procedure_name = procedure_names.get(row['procedure_type'], row['procedure_type'])
+            col1, col2, col3 = st.columns([2, 1, 1])
+            
+            with col1:
+                st.markdown(f"**{procedure_name}**")
+            with col2:
+                st.metric("Total Procedures", f"{int(row['total_count']):,}")
+            with col3:
+                if row['total_count'] > 0:
+                    st.metric("Robotic Rate", f"{row['robotic_rate']:.1f}%")
+                else:
+                    st.metric("Robotic Rate", "N/A")
+    
+    # Primary vs Revisional Surgery Analysis
+    st.markdown("#### Primary vs Revisional Surgery")
+    
+    primary_revision = hospital_procedure_details.groupby(['is_revision', 'surgical_approach', 'year'])['procedure_count'].sum().reset_index()
+    
+    # Show 2024 data
+    current_pr = primary_revision[primary_revision['year'] == 2024]
+    if not current_pr.empty:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("##### Primary Procedures (2024)")
+            primary_2024 = current_pr[current_pr['is_revision'] == 0]
+            if not primary_2024.empty:
+                total_primary = primary_2024['procedure_count'].sum()
+                robotic_primary = primary_2024[primary_2024['surgical_approach'] == 'ROB']['procedure_count'].sum()
+                robotic_rate_primary = (robotic_primary / total_primary * 100) if total_primary > 0 else 0
+                
+                st.metric("Total Primary", f"{int(total_primary):,}")
+                st.metric("Robotic Primary", f"{int(robotic_primary):,}")
+                st.metric("Robotic Rate", f"{robotic_rate_primary:.1f}%")
+        
+        with col2:
+            st.markdown("##### Revision Procedures (2024)")
+            revision_2024 = current_pr[current_pr['is_revision'] == 1]
+            if not revision_2024.empty:
+                total_revision = revision_2024['procedure_count'].sum()
+                robotic_revision = revision_2024[revision_2024['surgical_approach'] == 'ROB']['procedure_count'].sum()
+                robotic_rate_revision = (robotic_revision / total_revision * 100) if total_revision > 0 else 0
+                
+                st.metric("Total Revision", f"{int(total_revision):,}")
+                st.metric("Robotic Revision", f"{int(robotic_revision):,}")
+                st.metric("Robotic Rate", f"{robotic_rate_revision:.1f}%")
+    
+    # Temporal trend of robotic adoption
+    st.markdown("#### Robotic Adoption Trends by Year")
+    
+    yearly_robotic = hospital_procedure_details[
+        hospital_procedure_details['surgical_approach'] == 'ROB'
+    ].groupby('year')['procedure_count'].sum().reset_index()
+    
+    yearly_total = hospital_procedure_details.groupby('year')['procedure_count'].sum().reset_index()
+    yearly_total = yearly_total.rename(columns={'procedure_count': 'total_count'})
+    
+    yearly_trends = yearly_robotic.merge(yearly_total, on='year', how='right').fillna(0)
+    yearly_trends['robotic_percentage'] = (yearly_trends['procedure_count'] / yearly_trends['total_count'] * 100)
+    
+    if not yearly_trends.empty:
+        fig = go.Figure()
+        
+        fig.add_trace(go.Scatter(
+            x=yearly_trends['year'],
+            y=yearly_trends['robotic_percentage'],
+            mode='lines+markers',
+            name='Robotic Adoption Rate',
+            line=dict(color='#FF7518', width=3),
+            marker=dict(size=8)
+        ))
+        
+        fig.update_layout(
+            title="Robotic Surgery Adoption Over Time",
+            xaxis_title="Year",
+            yaxis_title="Robotic Procedures (%)",
+            height=300,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Detailed breakdown table
+    st.markdown("#### Complete Procedure Breakdown")
+    
+    # Create summary table
+    summary_table = hospital_procedure_details.groupby(['year', 'procedure_type', 'surgical_approach']).agg({
+        'procedure_count': 'sum',
+        'is_revision': 'first'  # Just to keep track of primary vs revision
+    }).reset_index()
+    
+    # Pivot table for better display
+    pivot_table = summary_table.pivot_table(
+        index=['year', 'procedure_type'],
+        columns='surgical_approach',
+        values='procedure_count',
+        fill_value=0
+    ).reset_index()
+    
+    # Add total column
+    approach_cols = [col for col in pivot_table.columns if col in ['COE', 'LAP', 'ROB']]
+    if approach_cols:
+        pivot_table['Total'] = pivot_table[approach_cols].sum(axis=1)
+        
+        # Add robotic percentage
+        if 'ROB' in approach_cols:
+            pivot_table['Robotic %'] = (pivot_table['ROB'] / pivot_table['Total'] * 100).round(1)
+    
+    # Show only recent years (2022-2024)
+    recent_table = pivot_table[pivot_table['year'] >= 2022]
+    if not recent_table.empty:
+        st.dataframe(recent_table, use_container_width=True, hide_index=True)
+
+else:
+    st.info("No detailed procedure data available for this hospital.")
+    
+    # Show what metrics we can calculate from other data
+    st.markdown("#### Available Metrics from Annual Data")
+    
+    st.markdown("""
+    **What we CAN analyze from existing data:**
+    - Overall robotic surgery trends (available above)
+    - Total procedure volumes by type (SLE, BPG, etc.)
+    - Surgical approach distribution (Coelioscopy, Open, Robotic)
+    
+    **What we CANNOT analyze without detailed data:**
+    - Procedure-specific robotic rates (e.g., % of gastric sleeves done robotically)
+    - Primary vs revisional robotic procedures breakdown
+    - Detailed temporal trends by procedure type and approach
+    """)

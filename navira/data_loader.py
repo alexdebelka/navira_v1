@@ -34,7 +34,10 @@ def _read_csv_with_fallback(path: str, sep: str = ';', decimal: str | None = Non
     last_err = None
     for enc in encodings:
         try:
-            return pd.read_csv(path, sep=sep, encoding=enc, decimal=decimal)
+            kwargs = {'sep': sep, 'encoding': enc}
+            if decimal is not None:
+                kwargs['decimal'] = decimal
+            return pd.read_csv(path, **kwargs)
         except Exception as e:
             last_err = e
             continue
@@ -155,6 +158,221 @@ def get_dataframes():
     est = load_establishments(est_path, est_ver)
     ann = load_annual(ann_path, ann_ver)
     return est, ann
+
+
+@st.cache_data(show_spinner=False)
+def load_recruitment_zones():
+    """Load patient recruitment zones data"""
+    try:
+        recruitment_path = os.path.join(RAW_FALLBACK_DIR, "11_recruitement_zone.csv")
+        df = _read_csv_with_fallback(recruitment_path, sep=';')
+        
+        # Normalize column names
+        if 'finessGeoDP' in df.columns:
+            df = df.rename(columns={'finessGeoDP': 'hospital_id'})
+        if 'codeGeo' in df.columns:
+            df = df.rename(columns={'codeGeo': 'city_code'})
+        if 'nb' in df.columns:
+            df = df.rename(columns={'nb': 'patient_count'})
+        if 'TOT' in df.columns:
+            df = df.rename(columns={'TOT': 'hospital_total'})
+        if 'PCT' in df.columns:
+            df = df.rename(columns={'PCT': 'percentage'})
+        if 'PCT_CUM' in df.columns:
+            df = df.rename(columns={'PCT_CUM': 'cumulative_percentage'})
+            
+        # Ensure proper data types
+        if 'hospital_id' in df.columns:
+            df['hospital_id'] = df['hospital_id'].astype(str)
+        if 'patient_count' in df.columns:
+            df['patient_count'] = pd.to_numeric(df['patient_count'], errors='coerce')
+        if 'percentage' in df.columns:
+            df['percentage'] = pd.to_numeric(df['percentage'], errors='coerce')
+            
+        return df
+    except Exception as e:
+        print(f"Error loading recruitment zones: {e}")
+        return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False)
+def load_competitors():
+    """Load hospital competitors data"""
+    try:
+        competitors_path = os.path.join(RAW_FALLBACK_DIR, "13_main_competitors.csv")
+        df = _read_csv_with_fallback(competitors_path, sep=';')
+        
+        # Normalize column names
+        if 'finessGeoDP' in df.columns:
+            df = df.rename(columns={'finessGeoDP': 'hospital_id'})
+        if 'finessGeoDP_conc' in df.columns:
+            df = df.rename(columns={'finessGeoDP_conc': 'competitor_id'})
+        if 'TOT_etb' in df.columns:
+            df = df.rename(columns={'TOT_etb': 'hospital_patients'})
+        if 'TOT_conc' in df.columns:
+            df = df.rename(columns={'TOT_conc': 'competitor_patients'})
+            
+        # Ensure proper data types
+        if 'hospital_id' in df.columns:
+            df['hospital_id'] = df['hospital_id'].astype(str)
+        if 'competitor_id' in df.columns:
+            df['competitor_id'] = df['competitor_id'].astype(str)
+        if 'hospital_patients' in df.columns:
+            df['hospital_patients'] = pd.to_numeric(df['hospital_patients'], errors='coerce')
+        if 'competitor_patients' in df.columns:
+            df['competitor_patients'] = pd.to_numeric(df['competitor_patients'], errors='coerce')
+            
+        return df
+    except Exception as e:
+        print(f"Error loading competitors: {e}")
+        return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False)
+def load_complications():
+    """Load complications statistics data"""
+    try:
+        complications_path = os.path.join(RAW_FALLBACK_DIR, "22_complication_trimestre.csv")
+        df = _read_csv_with_fallback(complications_path, sep=';')
+        
+        # Normalize column names
+        if 'finessGeoDP' in df.columns:
+            df = df.rename(columns={'finessGeoDP': 'hospital_id'})
+        if 'trimestre' in df.columns:
+            df = df.rename(columns={'trimestre': 'quarter'})
+        if 'n' in df.columns:
+            df = df.rename(columns={'n': 'procedures_count'})
+        if 'comp' in df.columns:
+            df = df.rename(columns={'comp': 'complications_count'})
+        if 'taux' in df.columns:
+            df = df.rename(columns={'taux': 'complication_rate'})
+        if 'taux_glissant' in df.columns:
+            df = df.rename(columns={'taux_glissant': 'rolling_rate'})
+        if 'moyenne_nationale' in df.columns:
+            df = df.rename(columns={'moyenne_nationale': 'national_average'})
+        if 'trimestre_date' in df.columns:
+            df = df.rename(columns={'trimestre_date': 'quarter_date'})
+        if 'se' in df.columns:
+            df = df.rename(columns={'se': 'standard_error'})
+        if 'ic_low' in df.columns:
+            df = df.rename(columns={'ic_low': 'confidence_low'})
+        if 'ic_high' in df.columns:
+            df = df.rename(columns={'ic_high': 'confidence_high'})
+            
+        # Ensure proper data types
+        if 'hospital_id' in df.columns:
+            df['hospital_id'] = df['hospital_id'].astype(str)
+        if 'quarter_date' in df.columns:
+            df['quarter_date'] = pd.to_datetime(df['quarter_date'], errors='coerce')
+        
+        # Convert numeric columns
+        numeric_cols = ['procedures_count', 'complications_count', 'complication_rate', 
+                       'rolling_rate', 'national_average', 'standard_error', 
+                       'confidence_low', 'confidence_high']
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                
+        return df
+    except Exception as e:
+        print(f"Error loading complications: {e}")
+        return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False)
+def load_procedure_details():
+    """Load detailed procedure data with surgical approach and technique"""
+    try:
+        procedure_path = os.path.join(RAW_FALLBACK_DIR, "07_tab_vda_tcn_redo.csv")
+        df = _read_csv_with_fallback(procedure_path, sep=';')
+        
+        # Normalize column names
+        if 'finessGeoDP' in df.columns:
+            df = df.rename(columns={'finessGeoDP': 'hospital_id'})
+        if 'annee' in df.columns:
+            df = df.rename(columns={'annee': 'year'})
+        if 'vda' in df.columns:
+            df = df.rename(columns={'vda': 'surgical_approach'})
+        if 'baria_t' in df.columns:
+            df = df.rename(columns={'baria_t': 'procedure_type'})
+        if 'redo' in df.columns:
+            df = df.rename(columns={'redo': 'is_revision'})
+        if 'n' in df.columns:
+            df = df.rename(columns={'n': 'procedure_count'})
+        if 'TOT' in df.columns:
+            df = df.rename(columns={'TOT': 'total_procedures'})
+        if 'PCT' in df.columns:
+            df = df.rename(columns={'PCT': 'percentage'})
+            
+        # Ensure proper data types
+        if 'hospital_id' in df.columns:
+            df['hospital_id'] = df['hospital_id'].astype(str)
+        if 'year' in df.columns:
+            df['year'] = pd.to_numeric(df['year'], errors='coerce')
+        if 'is_revision' in df.columns:
+            df['is_revision'] = pd.to_numeric(df['is_revision'], errors='coerce')
+        
+        # Convert numeric columns
+        numeric_cols = ['procedure_count', 'total_procedures', 'percentage']
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                
+        return df
+    except Exception as e:
+        print(f"Error loading procedure details: {e}")
+        return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False)
+def load_french_cities():
+    """Load French cities data for geocoding"""
+    try:
+        cities_path = os.path.join(RAW_FALLBACK_DIR, "COMMUNES_FRANCE_INSEE.csv")
+        df = _read_csv_with_fallback(cities_path, sep=';')
+        
+        # Normalize column names
+        if 'codeInsee' in df.columns:
+            df = df.rename(columns={'codeInsee': 'city_code'})
+        if 'codePostal' in df.columns:
+            df = df.rename(columns={'codePostal': 'postal_code'})
+        if 'nomCommune' in df.columns:
+            df = df.rename(columns={'nomCommune': 'city_name'})
+            
+        # Ensure proper data types
+        if 'city_code' in df.columns:
+            df['city_code'] = df['city_code'].astype(str)
+        if 'postal_code' in df.columns:
+            df['postal_code'] = df['postal_code'].astype(str)
+        if 'latitude' in df.columns:
+            df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+        if 'longitude' in df.columns:
+            df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+            
+        return df
+    except Exception as e:
+        print(f"Error loading French cities: {e}")
+        return pd.DataFrame()
+
+
+def get_all_dataframes():
+    """Get all dataframes including the new ones"""
+    establishments, annual = get_dataframes()
+    recruitment = load_recruitment_zones()
+    competitors = load_competitors()
+    complications = load_complications()
+    procedure_details = load_procedure_details()
+    cities = load_french_cities()
+    
+    return {
+        'establishments': establishments,
+        'annual': annual,
+        'recruitment': recruitment,
+        'competitors': competitors,
+        'complications': complications,
+        'procedure_details': procedure_details,
+        'cities': cities
+    }
 
 
 @st.cache_data
