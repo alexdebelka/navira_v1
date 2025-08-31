@@ -1332,11 +1332,15 @@ if not complications.empty:
     quarterly_stats = complications.groupby('quarter_date').agg({
         'procedures_count': 'sum',
         'complications_count': 'sum',
-        'national_average': 'mean'
+        'national_average': 'mean',
+        'confidence_low': 'mean',
+        'confidence_high': 'mean'
     }).reset_index()
     
     quarterly_stats['actual_rate'] = (quarterly_stats['complications_count'] / quarterly_stats['procedures_count'] * 100)
     quarterly_stats['national_avg_pct'] = quarterly_stats['national_average'] * 100
+    quarterly_stats['confidence_low_pct'] = quarterly_stats['confidence_low'] * 100
+    quarterly_stats['confidence_high_pct'] = quarterly_stats['confidence_high'] * 100
     
     if not quarterly_stats.empty:
         fig = go.Figure()
