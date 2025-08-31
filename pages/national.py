@@ -1396,7 +1396,8 @@ if not complications.empty:
                     y=hosp_data['rolling_pct'],
                     mode='lines',
                     name=f'Hospital {hosp_id}',
-                    line=dict(width=1, opacity=0.25),
+                    line=dict(width=1),
+                    opacity=0.25,
                     showlegend=False,
                     hoverinfo='skip'
                 ))
