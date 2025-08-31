@@ -197,7 +197,31 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
         if hosp_recr.empty or df_cities.empty:
             st.info("No recruitment rows or city coordinates for this hospital.")
             return
-        df = hosp_recr.merge(df_cities[['city_code','latitude','longitude','city_name']], on='city_code', how='left')
+        df = hosp_recr.merge(df_cities[['city_code','latitude','longitude','city_name','postal_code']], on='city_code', how='left')
+        missing_coords = df[df['latitude'].isna() | df['longitude'].isna()].copy()
+        if not missing_coords.empty:
+            # Best-effort geocode a handful of top towns
+            try:
+                from geopy.geocoders import Nominatim
+                geolocator = Nominatim(user_agent="navira_hospital_dashboard_geography")
+                # Prioritize by patient_count, limit to 15 requests
+                for _, row in missing_coords.sort_values('patient_count', ascending=False).head(15).iterrows():
+                    q = None
+                    if pd.notna(row.get('postal_code')) and pd.notna(row.get('city_name')):
+                        q = f"{row['city_name']} {row['postal_code']}, France"
+                    elif pd.notna(row.get('city_name')):
+                        q = f"{row['city_name']}, France"
+                    if q:
+                        try:
+                            loc = geolocator.geocode(q, timeout=8)
+                            if loc:
+                                idx = (df['city_code'] == row['city_code'])
+                                df.loc[idx, 'latitude'] = df.loc[idx, 'latitude'].fillna(loc.latitude)
+                                df.loc[idx, 'longitude'] = df.loc[idx, 'longitude'].fillna(loc.longitude)
+                        except Exception:
+                            continue
+            except Exception:
+                pass
         df = df.dropna(subset=['latitude','longitude'])
         if df.empty:
             st.info("Recruitment rows found but missing city coordinates.")
