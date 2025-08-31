@@ -1385,26 +1385,41 @@ if not complications.empty:
         keep_ids = set(totals.head(100).index.astype(str))
         sub = hosp_trends[hosp_trends['hospital_id'].astype(str).isin(keep_ids)].copy()
         if not sub.empty:
-            spaghetti = px.line(
-                sub,
-                x='quarter_date', y='rolling_pct', color='hospital_id',
-                title='Hospital 12‑month Rolling Complication Rates (top 100 by volume)',
-                line_group='hospital_id',
-                opacity=0.25
-            )
+            # Create spaghetti plot using go.Figure for opacity control
+            spaghetti = go.Figure()
+            
+            # Add individual hospital lines with low opacity
+            for hosp_id in sub['hospital_id'].unique():
+                hosp_data = sub[sub['hospital_id'] == hosp_id]
+                spaghetti.add_trace(go.Scatter(
+                    x=hosp_data['quarter_date'],
+                    y=hosp_data['rolling_pct'],
+                    mode='lines',
+                    name=f'Hospital {hosp_id}',
+                    line=dict(width=1, opacity=0.25),
+                    showlegend=False,
+                    hoverinfo='skip'
+                ))
+            
             # Overlay bold national rate
             if not quarterly_stats.empty:
                 spaghetti.add_trace(go.Scatter(
                     x=quarterly_stats['quarter_date'],
                     y=quarterly_stats['actual_rate'],
-                    mode='lines', name='National',
-                    line=dict(color='#ff7f0e', width=3)
+                    mode='lines',
+                    name='National Average',
+                    line=dict(color='#ff7f0e', width=3),
+                    showlegend=True
                 ))
+            
             spaghetti.update_layout(
+                title='Hospital 12‑month Rolling Complication Rates (top 100 by volume)',
+                xaxis_title='Quarter',
+                yaxis_title='Complication Rate (%)',
                 height=420,
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
-                showlegend=False
+                showlegend=True
             )
             st.plotly_chart(spaghetti, use_container_width=True)
 
