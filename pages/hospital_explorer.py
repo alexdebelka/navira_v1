@@ -192,6 +192,42 @@ try:
             return m.group(0) if m else None
         except Exception:
             return None
+
+    @st.cache_data(show_spinner=False)
+    def _reverse_postal_from_coords(coords):
+        try:
+            if not coords:
+                return None
+            geolocator = Nominatim(user_agent="navira_streamlit_app_v26")
+            location = geolocator.reverse(coords, timeout=10, language='en')
+            if location and isinstance(location.raw, dict):
+                addr = location.raw.get('address', {})
+                pc = addr.get('postcode')
+                return str(pc) if pc else None
+        except Exception:
+            return None
+        return None
+
+    def _choose_city_for_address(coords, address_text, cities_with_data, max_distance_km):
+        """Prefer exact postal code match (from address or reverse geocode). Otherwise pick nearest within tightening thresholds."""
+        if cities_with_data.empty:
+            return None
+        postal = _extract_postal_code(address_text)
+        if not postal:
+            postal = _reverse_postal_from_coords(coords)
+        # Try exact postal code
+        if postal and 'postal_code' in cities_with_data.columns:
+            same_pc = cities_with_data[cities_with_data['postal_code'] == str(postal)]
+            if not same_pc.empty:
+                chosen = _find_nearest_city_with_data(coords, same_pc, max_distance_km=max_distance_km)
+                if chosen:
+                    return chosen
+        # Try progressively closer distances to ensure actual closeness
+        for threshold in (10, 20, 30, 50, 100, 150, 200):
+            chosen = _find_nearest_city_with_data(coords, cities_with_data, max_distance_km=threshold)
+            if chosen:
+                return chosen
+        return None
             
     if st.session_state.get('search_triggered', False):
         user_coords = geocode_address(st.session_state.address)
@@ -217,15 +253,7 @@ try:
                 available_cities = recruitment_zones['city_code'].unique()
                 cities_with_names = cities[cities['city_code'].isin(available_cities)]
                 cities_with_names = cities_with_names[cities_with_names['city_name'].notna()]
-                # Prefer same postal code if provided in address
-                postal = _extract_postal_code(st.session_state.address)
-                chosen = None
-                if postal and 'postal_code' in cities_with_names.columns:
-                    same_pc = cities_with_names[cities_with_names['postal_code'] == str(postal)]
-                    if not same_pc.empty:
-                        chosen = _find_nearest_city_with_data(user_coords, same_pc, max_distance_km=radius_km)
-                if not chosen:
-                    chosen = _find_nearest_city_with_data(user_coords, cities_with_names, max_distance_km=radius_km)
+                chosen = _choose_city_for_address(user_coords, st.session_state.address, cities_with_names, max_distance_km=radius_km)
                 if chosen:
                     nearest_city, nf_distance = chosen
                     st.session_state.neighbor_flow_city_code = nearest_city['city_code']
@@ -542,16 +570,7 @@ try:
                                 if user_coords:
                                     st.session_state.user_address_coords = user_coords
                             if user_coords:
-                                # Prefer same postal code if provided
-                                postal = _extract_postal_code(st.session_state.address)
-                                chosen = None
-                                if postal and 'postal_code' in cities_with_names.columns:
-                                    same_pc = cities_with_names[cities_with_names['postal_code'] == str(postal)]
-                                    if not same_pc.empty:
-                                        chosen = _find_nearest_city_with_data(user_coords, same_pc, max_distance_km=radius_km)
-                                if not chosen:
-                                    chosen = _find_nearest_city_with_data(user_coords, cities_with_names, max_distance_km=radius_km)
-                                nearest_city_data = chosen
+                                nearest_city_data = _choose_city_for_address(user_coords, st.session_state.address, cities_with_names, max_distance_km=radius_km)
                                 if nearest_city_data:
                                     nearest_city, distance = nearest_city_data
                                     selected_city_code = nearest_city['city_code']
