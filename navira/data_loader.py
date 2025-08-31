@@ -329,7 +329,7 @@ def load_french_cities():
     """Load French cities data for geocoding"""
     try:
         cities_path = os.path.join(RAW_FALLBACK_DIR, "COMMUNES_FRANCE_INSEE.csv")
-        df = _read_csv_with_fallback(cities_path, sep=';')
+        df = _read_csv_with_fallback(cities_path, sep=';', decimal=',')
         
         # Normalize column names
         if 'codeInsee' in df.columns:

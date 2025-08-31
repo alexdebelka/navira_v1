@@ -14,6 +14,7 @@ import os
 add_auth_to_page()
 
 # Handle navigation requests
+handle_navigation_request()
 navigate_to = st.session_state.get('navigate_to')
 if navigate_to:
     from navigation_utils import navigate_to_page

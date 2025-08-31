@@ -276,8 +276,14 @@ try:
             how='left'
         )
         
-        # Filter out rows without coordinates
+        # Filter out rows without coordinates and invalid coordinates
         destination_hospitals = destination_hospitals.dropna(subset=['latitude', 'longitude'])
+        destination_hospitals = destination_hospitals[
+            (destination_hospitals['latitude'] != 0) & 
+            (destination_hospitals['longitude'] != 0) &
+            (destination_hospitals['latitude'].between(-90, 90)) & 
+            (destination_hospitals['longitude'].between(-180, 180))
+        ]
         
         if destination_hospitals.empty:
             return
@@ -346,51 +352,137 @@ try:
             if show_neighbor_flow:
                 st.markdown("**Select your neighborhood to see where patients from your area go for treatment:**")
                 
-                # Get available cities from recruitment data
+                # Get available cities from recruitment data that have city information
                 available_cities = recruitment_zones['city_code'].unique()
                 cities_with_names = cities[cities['city_code'].isin(available_cities)]
                 
+                # Filter out cities without names (shouldn't happen but just in case)
+                cities_with_names = cities_with_names[cities_with_names['city_name'].notna()]
+                
                 if not cities_with_names.empty:
-                    # Create a searchable dropdown for cities
-                    city_options = cities_with_names.apply(
-                        lambda x: f"{x['city_name']} ({x['postal_code']}) - {x['city_code']}", 
-                        axis=1
-                    ).tolist()
-                    
-                    selected_city_display = st.selectbox(
-                        "Choose your neighborhood:",
-                        options=city_options,
-                        key="neighbor_flow_city_selector"
+                    # Add search functionality
+                    search_term = st.text_input(
+                        "🔍 Search for your city:",
+                        placeholder="Type part of your city name...",
+                        key="city_search"
                     )
                     
-                    if selected_city_display:
-                        # Extract city code from selection
-                        selected_city_code = selected_city_display.split(" - ")[-1]
+                    # Filter cities based on search
+                    if search_term:
+                        filtered_cities = cities_with_names[
+                            cities_with_names['city_name'].str.contains(search_term, case=False, na=False)
+                        ]
+                    else:
+                        filtered_cities = cities_with_names
+                    
+                    if not filtered_cities.empty:
+                        # Create a searchable dropdown for cities
+                        city_options = filtered_cities.apply(
+                            lambda x: f"{x['city_name']} ({x['postal_code']}) - {x['city_code']}", 
+                            axis=1
+                        ).tolist()
                         
-                        # Show summary of what will be displayed
-                        origin_city_data = cities_with_names[cities_with_names['city_code'] == selected_city_code]
-                        if not origin_city_data.empty:
-                            origin_name = origin_city_data['city_name'].iloc[0]
+                        # Sort by city name for easier browsing
+                        city_options.sort()
+                        
+                        selected_city_display = st.selectbox(
+                            f"Choose your neighborhood ({len(city_options)} cities available):",
+                            options=city_options,
+                            key="neighbor_flow_city_selector"
+                        )
+                        
+                        if selected_city_display:
+                            # Extract city code from selection
+                            selected_city_code = selected_city_display.split(" - ")[-1]
                             
-                            # Get flow data for this city
-                            city_flow = recruitment_zones[recruitment_zones['city_code'] == selected_city_code]
-                            if not city_flow.empty:
-                                total_patients = city_flow['patient_count'].sum()
-                                top_hospitals = city_flow.nlargest(3, 'patient_count')
+                            # Show summary of what will be displayed
+                            origin_city_data = cities_with_names[cities_with_names['city_code'] == selected_city_code]
+                            if not origin_city_data.empty:
+                                origin_name = origin_city_data['city_name'].iloc[0]
                                 
-                                st.info(f"""
-                                **📍 {origin_name}**
-                                - **Total patients**: {total_patients:,}
-                                - **Top destinations**: {', '.join([f"{row['patient_count']} to {establishments[establishments['id']==row['hospital_id']]['name'].iloc[0] if not establishments[establishments['id']==row['hospital_id']].empty else 'Unknown Hospital'}" for _, row in top_hospitals.iterrows()])}
-                                """)
+                                # Get flow data for this city
+                                city_flow = recruitment_zones[recruitment_zones['city_code'] == selected_city_code]
+                                if not city_flow.empty:
+                                    total_patients = city_flow['patient_count'].sum()
+                                    top_hospitals = city_flow.nlargest(3, 'patient_count')
+                                    
+                                    # Get hospital names
+                                    hospital_names = []
+                                    for _, row in top_hospitals.iterrows():
+                                        hospital_data = establishments[establishments['id'] == row['hospital_id']]
+                                        if not hospital_data.empty:
+                                            hospital_name = hospital_data['name'].iloc[0]
+                                        else:
+                                            hospital_name = 'Unknown Hospital'
+                                        hospital_names.append(f"{row['patient_count']} to {hospital_name}")
+                                    
+                                    st.success(f"""
+                                    **📍 {origin_name}**
+                                    - **Total patients**: {total_patients:,}
+                                    - **Top destinations**: {', '.join(hospital_names)}
+                                    """)
+                                else:
+                                    st.warning(f"No patient flow data available for {origin_name}. This city may not have any recorded patient movements.")
+                    else:
+                        if search_term:
+                            st.warning(f"No cities found matching '{search_term}'. Try a different search term.")
+                        else:
+                            st.warning("No cities available for selection.")
+                    
+                    # Show help information
+                    with st.expander("ℹ️ How to use this feature"):
+                        st.markdown(f"""
+                        **This feature shows where patients from your neighborhood go for bariatric surgery treatment.**
+                        
+                        **Available data:**
+                        - 📊 **{len(cities_with_names)} cities** with patient flow data available
+                        - 🏥 **{len(recruitment_zones['hospital_id'].unique())} hospitals** receiving patients
+                        - 👥 **{recruitment_zones['patient_count'].sum():,} total patient movements** recorded
+                        
+                        **How it works:**
+                        1. **Search for your city** using the search box above
+                        2. **Select your neighborhood** from the dropdown
+                        3. **View the map** showing patient flow lines to hospitals
+                        4. **Explore the analysis** below the map for detailed insights
+                        
+                        **What you'll see:**
+                        - 🔵 **Blue shaded area**: Your neighborhood (origin)
+                        - 🔵 **Blue lines**: Patient flow paths to hospitals
+                        - 🔵 **Blue circles**: Patient concentration at destination hospitals
+                        
+                        **Note**: Only cities with recorded patient flow data are available. If your city isn't listed, it may not have sufficient patient data in the system.
+                        """)
                 else:
-                    st.warning("No city data available for neighbor flow visualization.")
+                    st.error("No city data available for neighbor flow visualization. Please check your data files.")
         
-        m = folium.Map(location=user_coords, zoom_start=9, tiles="CartoDB positron")
-        folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to(m)
+        # Filter out hospitals without valid coordinates
+        hospitals_with_coords = unique_hospitals_df.dropna(subset=['latitude', 'longitude'])
+        hospitals_with_coords = hospitals_with_coords[
+            (hospitals_with_coords['latitude'] != 0) & 
+            (hospitals_with_coords['longitude'] != 0) &
+            (hospitals_with_coords['latitude'].between(-90, 90)) & 
+            (hospitals_with_coords['longitude'].between(-180, 180))
+        ]
+        
+        if hospitals_with_coords.empty:
+            st.error("No hospitals with valid coordinates found. Please check your data.")
+            return
+        
+        # Use the first hospital with valid coordinates as map center if user coords are invalid
+        if user_coords and all(pd.notna(coord) for coord in user_coords):
+            map_center = user_coords
+        else:
+            map_center = [hospitals_with_coords['latitude'].iloc[0], hospitals_with_coords['longitude'].iloc[0]]
+        
+        m = folium.Map(location=map_center, zoom_start=9, tiles="CartoDB positron")
+        
+        # Add user location marker if coordinates are valid
+        if user_coords and all(pd.notna(coord) for coord in user_coords):
+            folium.Marker(location=user_coords, popup="Your Location", icon=folium.Icon(icon="user", prefix="fa", color="red")).add_to(m)
+        
         marker_cluster = MarkerCluster().add_to(m)
         
-        for idx, row in unique_hospitals_df.iterrows():
+        for idx, row in hospitals_with_coords.iterrows():
             statut_norm = str(row.get('statut', '')).strip().lower()
             if statut_norm == 'public':
                 color = "blue"
@@ -406,7 +498,11 @@ try:
         
         # Add neighbor flow if toggled on
         if show_neighbor_flow and 'selected_city_code' in locals():
-            add_neighbor_flow_to_map(m, selected_city_code, recruitment_zones, cities, establishments)
+            try:
+                add_neighbor_flow_to_map(m, selected_city_code, recruitment_zones, cities, establishments)
+            except Exception as e:
+                st.error(f"Error displaying neighbor flow: {e}")
+                st.info("Please try selecting a different city or check if the data is available.")
             
         map_data = st_folium(m, width="100%", height=500, key="folium_map")
         if map_data and map_data.get("last_object_clicked"):
