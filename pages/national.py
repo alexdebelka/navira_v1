@@ -1324,13 +1324,6 @@ if not complications.empty:
             overall_rate = (total_complications / total_procedures) * 100
             st.metric("Overall Complication Rate", f"{overall_rate:.2f}%")
     
-    with col4:
-        # Get most recent quarter data
-        latest_quarter = complications['quarter_date'].max()
-        latest_data = complications[complications['quarter_date'] == latest_quarter]
-        if not latest_data.empty:
-            latest_national_avg = latest_data['national_average'].mean() * 100
-            st.metric("Latest National Average", f"{latest_national_avg:.2f}%")
     
     # Temporal trend of national complication rates
     st.markdown("#### National Complication Rate Trends")
@@ -1353,20 +1346,20 @@ if not complications.empty:
             x=quarterly_stats['quarter_date'],
             y=quarterly_stats['actual_rate'],
             mode='lines+markers',
-            name='Actual National Rate',
+            name='National Rate',
             line=dict(color='#1f77b4', width=3),
             marker=dict(size=6)
         ))
         
-        # Add benchmark average
-        fig.add_trace(go.Scatter(
-            x=quarterly_stats['quarter_date'],
-            y=quarterly_stats['national_avg_pct'],
-            mode='lines+markers',
-            name='National Benchmark',
-            line=dict(color='#ff7f0e', width=2, dash='dash'),
-            marker=dict(size=4)
-        ))
+        # # Add benchmark average
+        # fig.add_trace(go.Scatter(
+        #     x=quarterly_stats['quarter_date'],
+        #     y=quarterly_stats['national_avg_pct'],
+        #     mode='lines+markers',
+        #     name='National Benchmark',
+        #     line=dict(color='#ff7f0e', width=2, dash='dash'),
+        #     marker=dict(size=4)
+        # ))
         
         fig.update_layout(
             title="National Complication Rate Over Time",
@@ -1380,57 +1373,40 @@ if not complications.empty:
         
         st.plotly_chart(fig, use_container_width=True)
     
-    # Hospital performance distribution
-    st.markdown("#### Hospital Performance Distribution")
+    # Hospital performance trends (“spaghetti” plot)
+    st.markdown("#### Hospital Performance Over Time")
     
-    # Get latest 12-month rolling rates for all hospitals
-    latest_hospital_data = complications.groupby('hospital_id').apply(
-        lambda x: x.loc[x['quarter_date'].idxmax()]
-    ).reset_index(drop=True)
-    
-    if not latest_hospital_data.empty:
-        latest_hospital_data['rolling_rate_pct'] = latest_hospital_data['rolling_rate'] * 100
-        
-        # Create histogram of hospital performance
-        fig = px.histogram(
-            latest_hospital_data,
-            x='rolling_rate_pct',
-            nbins=30,
-            title="Distribution of Hospital 12-Month Rolling Complication Rates",
-            labels={'rolling_rate_pct': 'Complication Rate (%)', 'count': 'Number of Hospitals'}
-        )
-        
-        # Add vertical line for national average
-        national_avg_line = latest_hospital_data['national_average'].mean() * 100
-        fig.add_vline(
-            x=national_avg_line,
-            line_dash="dash",
-            line_color="red",
-            annotation_text=f"National Avg: {national_avg_line:.2f}%"
-        )
-        
-        fig.update_layout(
-            height=400,
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)'
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Performance summary
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            below_avg = (latest_hospital_data['rolling_rate_pct'] < national_avg_line).sum()
-            st.metric("Hospitals Below Average", f"{below_avg:,}")
-        
-        with col2:
-            above_avg = (latest_hospital_data['rolling_rate_pct'] > national_avg_line).sum()
-            st.metric("Hospitals Above Average", f"{above_avg:,}")
-        
-        with col3:
-            best_performance = latest_hospital_data['rolling_rate_pct'].min()
-            st.metric("Best Performance", f"{best_performance:.2f}%")
+    hosp_trends = complications.copy()
+    if not hosp_trends.empty:
+        # Build per-hospital series of rolling rates
+        hosp_trends['rolling_pct'] = pd.to_numeric(hosp_trends['rolling_rate'], errors='coerce') * 100
+        # Keep reasonable number of lines for performance: top 100 hospitals by total procedures
+        totals = hosp_trends.groupby('hospital_id')['procedures_count'].sum().sort_values(ascending=False)
+        keep_ids = set(totals.head(100).index.astype(str))
+        sub = hosp_trends[hosp_trends['hospital_id'].astype(str).isin(keep_ids)].copy()
+        if not sub.empty:
+            spaghetti = px.line(
+                sub,
+                x='quarter_date', y='rolling_pct', color='hospital_id',
+                title='Hospital 12‑month Rolling Complication Rates (top 100 by volume)',
+                line_group='hospital_id',
+                opacity=0.25
+            )
+            # Overlay bold national rate
+            if not quarterly_stats.empty:
+                spaghetti.add_trace(go.Scatter(
+                    x=quarterly_stats['quarter_date'],
+                    y=quarterly_stats['actual_rate'],
+                    mode='lines', name='National',
+                    line=dict(color='#ff7f0e', width=3)
+                ))
+            spaghetti.update_layout(
+                height=420,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                showlegend=False
+            )
+            st.plotly_chart(spaghetti, use_container_width=True)
 
 else:
     st.info("Complications data not available for national analysis.")
