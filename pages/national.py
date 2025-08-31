@@ -1215,6 +1215,76 @@ with st.expander("🏥 2. Affiliation Analysis"):
     else:
         st.info("No sector/affiliation data available for the merged comparison.")
 
+with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Adoption"):
+    st.markdown("""
+    **Understanding this analysis:**
+    
+    This chart shows how robotic surgery adoption varies with hospital volume. It examines whether high‑volume centers are more likely to use robotic technology.
+    
+    **How we calculated this (default chart):**
+    - **Data source**: 2024 data for all eligible hospitals (≥25 procedures/year)
+    - **Volume categorization**: Hospitals grouped by annual procedure volume:
+      * less than 50 procedures/year
+      * 50–100 procedures/year  
+      * 100–200 procedures/year
+      * more than 200 procedures/year
+    - **Weighted percentage**: For each volume group, we compute (sum of robotic surgeries ÷ sum of all surgeries) × 100. This weights each hospital by its number of surgeries so large centers are represented proportionally.
+    - Hover shows: **weighted % robotic** and the **robotic count** in that group.
+    
+    **Alternative view (optional expander below the chart):**
+    - **Unweighted mean**: Average of per‑hospital robotic shares within each group (each hospital contributes equally, regardless of size).
+    
+    **Why both matter:**
+    - Weighted view answers: “What share of all surgeries in this group are robotic?” (system‑wide perspective).
+    - Unweighted view answers: “What is the typical hospital’s robotic share in this group?” (center‑level perspective).
+    
+    **Questions this helps answer:**
+    - Do higher‑volume centers have higher robotic adoption?
+    - Is the difference driven by a few very large programs or broadly across centers?
+    """)
+    
+    if robotic_volume['volume_categories'] and len(robotic_volume['volume_categories']) > 0:
+        # Keep only the continuous scatter with trendline (as per screenshot)
+        try:
+            from lib.national_utils import compute_robotic_volume_distribution
+            dist_df = compute_robotic_volume_distribution(df)
+        except Exception:
+            dist_df = pd.DataFrame()
+        if not dist_df.empty:
+            st.subheader("Continuous relationship: volume vs robotic %")
+            cont = px.scatter(
+                dist_df,
+                x='total_surgeries',
+                y='hospital_pct',
+                color='volume_category',
+                opacity=0.65,
+                title='Hospital volume (continuous) vs robotic %'
+            )
+            # Linear trendline removed per request
+            cont.update_layout(
+                xaxis_title='Total surgeries (2024)',
+                yaxis_title='Robotic % (per hospital)',
+                height=420,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+            st.plotly_chart(cont, use_container_width=True)
+
+        # Annotations: hospitals and average surgeries per bin
+        try:
+            num_hosp = robotic_volume.get('hospitals')
+            total_counts = robotic_volume.get('total_counts')
+            ann_text = []
+            if num_hosp and total_counts:
+                avg_surg = [round(tc / h, 1) if h else 0 for tc, h in zip(total_counts, num_hosp)]
+                for xc, h, a in zip(robotic_volume['volume_categories'], num_hosp, avg_surg):
+                    ann_text.append(f"{h} hospitals\n~{a} surgeries/hosp")
+                fig_ann = px.bar(x=robotic_volume['volume_categories'], y=[0]*len(num_hosp))
+                fig_ann.update_layout(height=1)  # placeholder
+            st.caption("Hospitals and avg surgeries per bin: " + ", ".join(ann_text))
+        except Exception:
+            pass
+
 # --- COMPLICATIONS ANALYSIS ---
 st.header("Complications Analysis")
 
@@ -1364,6 +1434,8 @@ if not complications.empty:
 
 else:
     st.info("Complications data not available for national analysis.")
+
+
 
 # --- ADVANCED PROCEDURE METRICS ---
 st.header("Advanced Procedure Metrics")
@@ -1590,75 +1662,7 @@ else:
     """)
 
 # 4. Volume-based Analysis
-with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Adoption"):
-    st.markdown("""
-    **Understanding this analysis:**
-    
-    This chart shows how robotic surgery adoption varies with hospital volume. It examines whether high‑volume centers are more likely to use robotic technology.
-    
-    **How we calculated this (default chart):**
-    - **Data source**: 2024 data for all eligible hospitals (≥25 procedures/year)
-    - **Volume categorization**: Hospitals grouped by annual procedure volume:
-      * less than 50 procedures/year
-      * 50–100 procedures/year  
-      * 100–200 procedures/year
-      * more than 200 procedures/year
-    - **Weighted percentage**: For each volume group, we compute (sum of robotic surgeries ÷ sum of all surgeries) × 100. This weights each hospital by its number of surgeries so large centers are represented proportionally.
-    - Hover shows: **weighted % robotic** and the **robotic count** in that group.
-    
-    **Alternative view (optional expander below the chart):**
-    - **Unweighted mean**: Average of per‑hospital robotic shares within each group (each hospital contributes equally, regardless of size).
-    
-    **Why both matter:**
-    - Weighted view answers: “What share of all surgeries in this group are robotic?” (system‑wide perspective).
-    - Unweighted view answers: “What is the typical hospital’s robotic share in this group?” (center‑level perspective).
-    
-    **Questions this helps answer:**
-    - Do higher‑volume centers have higher robotic adoption?
-    - Is the difference driven by a few very large programs or broadly across centers?
-    """)
-    
-    if robotic_volume['volume_categories'] and len(robotic_volume['volume_categories']) > 0:
-        # Keep only the continuous scatter with trendline (as per screenshot)
-        try:
-            from lib.national_utils import compute_robotic_volume_distribution
-            dist_df = compute_robotic_volume_distribution(df)
-        except Exception:
-            dist_df = pd.DataFrame()
-        if not dist_df.empty:
-            st.subheader("Continuous relationship: volume vs robotic %")
-            cont = px.scatter(
-                dist_df,
-                x='total_surgeries',
-                y='hospital_pct',
-                color='volume_category',
-                opacity=0.65,
-                title='Hospital volume (continuous) vs robotic %'
-            )
-            # Linear trendline removed per request
-            cont.update_layout(
-                xaxis_title='Total surgeries (2024)',
-                yaxis_title='Robotic % (per hospital)',
-                height=420,
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)'
-            )
-            st.plotly_chart(cont, use_container_width=True)
 
-        # Annotations: hospitals and average surgeries per bin
-        try:
-            num_hosp = robotic_volume.get('hospitals')
-            total_counts = robotic_volume.get('total_counts')
-            ann_text = []
-            if num_hosp and total_counts:
-                avg_surg = [round(tc / h, 1) if h else 0 for tc, h in zip(total_counts, num_hosp)]
-                for xc, h, a in zip(robotic_volume['volume_categories'], num_hosp, avg_surg):
-                    ann_text.append(f"{h} hospitals\n~{a} surgeries/hosp")
-                fig_ann = px.bar(x=robotic_volume['volume_categories'], y=[0]*len(num_hosp))
-                fig_ann.update_layout(height=1)  # placeholder
-            st.caption("Hospitals and avg surgeries per bin: " + ", ".join(ann_text))
-        except Exception:
-            pass
 
         # # ECDF by volume bin
         # try:
