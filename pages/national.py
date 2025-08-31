@@ -1332,30 +1332,16 @@ if not complications.empty:
     quarterly_stats = complications.groupby('quarter_date').agg({
         'procedures_count': 'sum',
         'complications_count': 'sum',
-        'national_average': 'mean',
-        'confidence_low': 'mean',
-        'confidence_high': 'mean'
+        'national_average': 'mean'
     }).reset_index()
     
     quarterly_stats['actual_rate'] = (quarterly_stats['complications_count'] / quarterly_stats['procedures_count'] * 100)
     quarterly_stats['national_avg_pct'] = quarterly_stats['national_average'] * 100
-    quarterly_stats['confidence_low_pct'] = quarterly_stats['confidence_low'] * 100
-    quarterly_stats['confidence_high_pct'] = quarterly_stats['confidence_high'] * 100
     
     if not quarterly_stats.empty:
         fig = go.Figure()
         
-        # Add confidence intervals if available
-        if 'confidence_low_pct' in quarterly_stats.columns and 'confidence_high_pct' in quarterly_stats.columns:
-            fig.add_trace(go.Scatter(
-                x=quarterly_stats['quarter_date'].tolist() + quarterly_stats['quarter_date'].tolist()[::-1],
-                y=quarterly_stats['confidence_high_pct'].tolist() + quarterly_stats['confidence_low_pct'].tolist()[::-1],
-                fill='toself',
-                fillcolor='rgba(31, 119, 180, 0.2)',
-                line=dict(color='rgba(255,255,255,0)'),
-                name='Confidence Interval',
-                showlegend=True
-            ))
+
         
         # Add actual complication rate
         fig.add_trace(go.Scatter(
@@ -1397,24 +1383,6 @@ if not complications.empty:
             # Add individual hospital lines with low opacity
             for hosp_id in sub['hospital_id'].unique():
                 hosp_data = sub[sub['hospital_id'] == hosp_id]
-                
-                # Add confidence intervals for this hospital if available
-                if 'confidence_low' in hosp_data.columns and 'confidence_high' in hosp_data.columns:
-                    hosp_data['conf_low_pct'] = hosp_data['confidence_low'] * 100
-                    hosp_data['conf_high_pct'] = hosp_data['confidence_high'] * 100
-                    
-                    spaghetti.add_trace(go.Scatter(
-                        x=hosp_data['quarter_date'].tolist() + hosp_data['quarter_date'].tolist()[::-1],
-                        y=hosp_data['conf_high_pct'].tolist() + hosp_data['conf_low_pct'].tolist()[::-1],
-                        fill='toself',
-                        fillcolor='rgba(128, 128, 128, 0.05)',
-                        line=dict(color='rgba(255,255,255,0)'),
-                        name=f'Hospital {hosp_id} CI',
-                        showlegend=False,
-                        hoverinfo='skip'
-                    ))
-                
-                # Add main hospital line
                 spaghetti.add_trace(go.Scatter(
                     x=hosp_data['quarter_date'],
                     y=hosp_data['rolling_pct'],
