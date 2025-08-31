@@ -47,6 +47,40 @@ all_data = get_all_dataframes()
 complications = all_data.get('complications', pd.DataFrame())
 procedure_details = all_data.get('procedure_details', pd.DataFrame())
 
+# Calculate national averages for comparisons
+def calculate_national_averages(df: pd.DataFrame):
+    """Calculate national averages for hospital comparisons"""
+    try:
+        # Filter for eligible hospitals (≥25 procedures per year)
+        eligible = df[df['total_procedures_year'] >= 25].copy()
+        if eligible.empty:
+            return {}
+        
+        # Calculate procedure type averages
+        procedure_averages = {}
+        for proc_code in BARIATRIC_PROCEDURE_NAMES.keys():
+            if proc_code in eligible.columns:
+                avg = eligible[proc_code].mean()
+                procedure_averages[proc_code] = float(avg) if not pd.isna(avg) else 0.0
+        
+        # Calculate surgical approach averages
+        approach_averages = {}
+        for approach_code in SURGICAL_APPROACH_NAMES.keys():
+            if approach_code in eligible.columns:
+                avg = eligible[approach_code].mean()
+                approach_averages[approach_code] = float(avg) if not pd.isna(avg) else 0.0
+        
+        return {
+            'procedure_averages': procedure_averages,
+            'approach_averages': approach_averages,
+            'total_procedures_avg': float(eligible['total_procedures_year'].mean())
+        }
+    except Exception as e:
+        print(f"Error calculating national averages: {e}")
+        return {}
+
+national_averages = calculate_national_averages(df)
+
 # --- Page Title and Notice ---
 st.title("🇫🇷 National Overview")
 
@@ -558,9 +592,19 @@ with col1:
         # Prepare data for bar chart (2020-2024 totals)
         tot_data = []
         total_procedures = sum(procedure_totals_2020_2024.get(proc_code, 0) for proc_code in BARIATRIC_PROCEDURE_NAMES.keys())
+        
+        # Group less common procedures under "Other"
+        other_procedures = ['NDD', 'GVC', 'DBP']  # Not Defined, Calibrated Vertical Gastroplasty, Bilio-pancreatic Diversion
+        other_total = sum(procedure_totals_2020_2024.get(proc_code, 0) for proc_code in other_procedures)
+        
         for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
             if proc_code in procedure_totals_2020_2024:
                 value = procedure_totals_2020_2024[proc_code]
+                
+                # Skip individual entries for procedures that will be grouped under "Other"
+                if proc_code in other_procedures:
+                    continue
+                    
                 raw_percentage = (value / total_procedures) * 100 if total_procedures > 0 else 0
                 # Show decimals for percentages less than 1%, otherwise round to whole number
                 percentage = round(raw_percentage, 1) if raw_percentage < 1 else round(raw_percentage)
@@ -569,6 +613,16 @@ with col1:
                     'Value': value,
                     'Percentage': percentage
                 })
+        
+        # Add "Other" category for grouped procedures
+        if other_total > 0:
+            other_percentage = (other_total / total_procedures) * 100 if total_procedures > 0 else 0
+            percentage = round(other_percentage, 1) if other_percentage < 1 else round(other_percentage)
+            tot_data.append({
+                'Procedure': 'Other',
+                'Value': other_total,
+                'Percentage': percentage
+            })
         chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=False)
         y_title = "Total count (2020-2024)"
         chart_title = "Total Procedures by Type (2020-2024)"
@@ -604,9 +658,19 @@ with col1:
         # Prepare data for bar chart (2024 totals only)
         tot_data = []
         total_procedures = sum(procedure_totals_2024.get(proc_code, 0) for proc_code in BARIATRIC_PROCEDURE_NAMES.keys())
+        
+        # Group less common procedures under "Other"
+        other_procedures = ['NDD', 'GVC', 'DBP']  # Not Defined, Calibrated Vertical Gastroplasty, Bilio-pancreatic Diversion
+        other_total = sum(procedure_totals_2024.get(proc_code, 0) for proc_code in other_procedures)
+        
         for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
             if proc_code in procedure_totals_2024:
                 value = procedure_totals_2024[proc_code]
+                
+                # Skip individual entries for procedures that will be grouped under "Other"
+                if proc_code in other_procedures:
+                    continue
+                    
                 raw_percentage = (value / total_procedures) * 100 if total_procedures > 0 else 0
                 # Show decimals for percentages less than 1%, otherwise round to whole number
                 percentage = round(raw_percentage, 1) if raw_percentage < 1 else round(raw_percentage)
@@ -615,6 +679,16 @@ with col1:
                     'Value': value,
                     'Percentage': percentage
                 })
+        
+        # Add "Other" category for grouped procedures
+        if other_total > 0:
+            other_percentage = (other_total / total_procedures) * 100 if total_procedures > 0 else 0
+            percentage = round(other_percentage, 1) if other_percentage < 1 else round(other_percentage)
+            tot_data.append({
+                'Procedure': 'Other',
+                'Value': other_total,
+                'Percentage': percentage
+            })
         chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=False)
         y_title = "Total count (2024)"
         chart_title = "Total Procedures by Type (2024)"
@@ -741,6 +815,28 @@ with col1:
             fig.update_traces(line=dict(width=0), opacity=0.9)
             
             st.plotly_chart(fig, use_container_width=True)
+            
+            # National Averages Summary
+            st.markdown("#### National Averages Summary (2024)")
+            
+            if national_averages:
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    avg_total = national_averages.get('total_procedures_avg', 0)
+                    st.metric("Avg Procedures per Hospital", f"{int(avg_total):,}")
+                
+                with col2:
+                    proc_avgs = national_averages.get('procedure_averages', {})
+                    sleeve_avg = proc_avgs.get('SLE', 0)
+                    sleeve_pct = (sleeve_avg / avg_total * 100) if avg_total > 0 else 0
+                    st.metric("Avg Sleeve Gastrectomy", f"{sleeve_pct:.1f}%")
+                
+                with col3:
+                    approach_avgs = national_averages.get('approach_averages', {})
+                    robotic_avg = approach_avgs.get('ROB', 0)
+                    robotic_pct = (robotic_avg / avg_total * 100) if avg_total > 0 else 0
+                    st.metric("Avg Robotic Approach", f"{robotic_pct:.1f}%")
             
             with st.expander("What to look for and key findings"):
                 try:

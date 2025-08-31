@@ -193,57 +193,95 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
         df_cities = cities_df.copy()
         if 'city_code' in df_cities.columns:
             df_cities['city_code'] = df_cities['city_code'].astype(str)
+        
         hosp_recr = df_rec[df_rec['hospital_id'] == str(hospital_id)]
-        if hosp_recr.empty or df_cities.empty:
-            st.info("No recruitment rows or city coordinates for this hospital.")
+        if hosp_recr.empty:
+            st.info("No recruitment data found for this hospital.")
             return
+            
+        if df_cities.empty:
+            st.info("No city coordinate data available.")
+            return
+            
+        # Try to match recruitment data with city coordinates
         df = hosp_recr.merge(df_cities[['city_code','latitude','longitude','city_name','postal_code']], on='city_code', how='left')
         missing_coords = df[df['latitude'].isna() | df['longitude'].isna()].copy()
-        if not hosp_recr.empty:
-            st.caption(f"Recruitment rows: {len(hosp_recr)} | With coords: {len(df.dropna(subset=['latitude','longitude']))} | Missing coords: {len(missing_coords)}")
+        
+        # Show diagnostic info
+        st.caption(f"Recruitment rows: {len(hosp_recr)} | With coords: {len(df.dropna(subset=['latitude','longitude']))} | Missing coords: {len(missing_coords)}")
+        
+        # If we have missing coordinates, try to geocode them
         if not missing_coords.empty:
-            # Best-effort geocode a handful of top towns
+            st.info("Recruitment rows found but missing city coordinates.")
+            
+            # Best-effort geocode top towns by patient volume
             try:
                 from geopy.geocoders import Nominatim
                 geolocator = Nominatim(user_agent="navira_hospital_dashboard_geography")
-                # Prioritize by patient_count, limit to 15 requests
-                for _, row in missing_coords.sort_values('patient_count', ascending=False).head(15).iterrows():
+                
+                # Prioritize by patient_count, limit to 10 requests to avoid rate limiting
+                geocoded_count = 0
+                for _, row in missing_coords.sort_values('patient_count', ascending=False).head(10).iterrows():
+                    if geocoded_count >= 5:  # Limit to 5 successful geocodes
+                        break
+                        
                     q = None
                     if pd.notna(row.get('postal_code')) and pd.notna(row.get('city_name')):
                         q = f"{row['city_name']} {row['postal_code']}, France"
                     elif pd.notna(row.get('city_name')):
                         q = f"{row['city_name']}, France"
+                    
                     if q:
                         try:
-                            loc = geolocator.geocode(q, timeout=8)
+                            loc = geolocator.geocode(q, timeout=5)
                             if loc:
                                 idx = (df['city_code'] == row['city_code'])
                                 df.loc[idx, 'latitude'] = df.loc[idx, 'latitude'].fillna(loc.latitude)
                                 df.loc[idx, 'longitude'] = df.loc[idx, 'longitude'].fillna(loc.longitude)
+                                geocoded_count += 1
                         except Exception:
                             continue
-                # Show a few unresolved codes for troubleshooting
-                unresolved = df[df['latitude'].isna() | df['longitude'].isna()][['city_code','city_name','postal_code']].drop_duplicates()
-                if not unresolved.empty:
-                    with st.expander("Unmatched towns (no coordinates)"):
-                        st.dataframe(unresolved.head(15), use_container_width=True, hide_index=True)
-            except Exception:
-                pass
+                            
+                if geocoded_count > 0:
+                    st.success(f"Successfully geocoded {geocoded_count} additional cities.")
+                    
+            except Exception as e:
+                st.warning(f"Geocoding service unavailable: {str(e)}")
+            
+            # Show unresolved cities for debugging
+            unresolved = df[df['latitude'].isna() | df['longitude'].isna()][['city_code','city_name','postal_code']].drop_duplicates()
+            if not unresolved.empty:
+                with st.expander("Unmatched towns (no coordinates)"):
+                    st.dataframe(unresolved.head(10), use_container_width=True, hide_index=True)
+        
+        # Filter to only cities with coordinates
         df = df.dropna(subset=['latitude','longitude'])
         if df.empty:
-            st.info("Recruitment rows found but missing city coordinates.")
+            st.warning("No cities with coordinates found. Recruitment zones cannot be displayed.")
             return
-        st.caption(f"Rendering {len(df)} recruitment zones")
-        max_pat = df['patient_count'].max(); min_pat = df['patient_count'].min()
+            
+        # Render recruitment zones
+        st.success(f"Rendering {len(df)} recruitment zones")
+        max_pat = df['patient_count'].max()
+        min_pat = df['patient_count'].min()
+        
         for _, z in df.iterrows():
-            norm = (z['patient_count'] - min_pat) / (max_pat - min_pat) if max_pat>min_pat else 0.5
-            radius = 500 + norm*4500
+            norm = (z['patient_count'] - min_pat) / (max_pat - min_pat) if max_pat > min_pat else 0.5
+            radius = 500 + norm * 4500
             opacity = min(0.8, (z.get('percentage', 0) or 0) / 100 * 3)
-            folium.Circle(location=[z['latitude'], z['longitude']], radius=radius,
-                          popup=f"<b>{z.get('city_name','Unknown')}</b><br>Patients: {int(z['patient_count'])}<br>Share: {z.get('percentage',0):.1f}%",
-                          color='orange', fillColor='orange', opacity=0.6, fillOpacity=opacity).add_to(folium_map)
-    except Exception:
-        pass
+            
+            folium.Circle(
+                location=[z['latitude'], z['longitude']], 
+                radius=radius,
+                popup=f"<b>{z.get('city_name','Unknown')}</b><br>Patients: {int(z['patient_count'])}<br>Share: {z.get('percentage',0):.1f}%",
+                color='orange', 
+                fillColor='orange', 
+                opacity=0.6, 
+                fillOpacity=opacity
+            ).add_to(folium_map)
+            
+    except Exception as e:
+        st.error(f"Error rendering recruitment zones: {str(e)}")
 
 with tab_activity:
     st.subheader("Activity Overview")
@@ -282,6 +320,37 @@ with tab_activity:
         if not al.empty:
             st.markdown("#### Surgical Approaches (share %)")
             st.plotly_chart(px.bar(al, x='annee', y='Share', color='Approach', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+    
+    # Hospital vs National Comparisons
+    st.markdown("#### Hospital vs National Averages (2024)")
+    
+    # Get 2024 data for the hospital
+    hosp_2024 = selected_hospital_all_data[selected_hospital_all_data['annee'] == 2024].iloc[0] if not selected_hospital_all_data.empty else None
+    
+    if hosp_2024 is not None and national_averages:
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            # Total procedures comparison
+            hosp_total = hosp_2024.get('total_procedures_year', 0)
+            nat_total = national_averages.get('total_procedures_avg', 0)
+            st.metric("Total Procedures", f"{int(hosp_total):,}", f"{int(hosp_total - nat_total):+,}")
+        
+        with col2:
+            # Sleeve Gastrectomy comparison
+            hosp_sleeve = hosp_2024.get('SLE', 0)
+            nat_sleeve = national_averages.get('procedure_averages', {}).get('SLE', 0)
+            sleeve_pct = (hosp_sleeve / hosp_total * 100) if hosp_total > 0 else 0
+            nat_sleeve_pct = (nat_sleeve / nat_total * 100) if nat_total > 0 else 0
+            st.metric("Sleeve Gastrectomy", f"{sleeve_pct:.1f}%", f"{sleeve_pct - nat_sleeve_pct:+.1f}%")
+        
+        with col3:
+            # Robotic approach comparison
+            hosp_robotic = hosp_2024.get('ROB', 0)
+            nat_robotic = national_averages.get('approach_averages', {}).get('ROB', 0)
+            robotic_pct = (hosp_robotic / hosp_total * 100) if hosp_total > 0 else 0
+            nat_robotic_pct = (nat_robotic / nat_total * 100) if nat_total > 0 else 0
+            st.metric("Robotic Approach", f"{robotic_pct:.1f}%", f"{robotic_pct - nat_robotic_pct:+.1f}%")
 
 with tab_complications:
     st.subheader("Complications")
@@ -294,18 +363,32 @@ with tab_complications:
         c1.metric("Total Procedures", f"{tot_proc:,}")
         c2.metric("Total Complications", f"{tot_comp:,}")
         c3.metric("Overall Rate", f"{rate:.1f}%")
-        # Prefer last 8 rows where rolling_rate is present
-        recent = hosp_comp[hosp_comp['rolling_rate'].notna()].tail(8).copy()
+        # Show trend with available data (rolling rate preferred, fallback to quarterly rate)
+        recent = hosp_comp.tail(8).copy()
         if not recent.empty:
-            # Build explicit percentage columns to avoid plotly silent failures
-            recent['rolling_pct'] = pd.to_numeric(recent['rolling_rate'], errors='coerce') * 100
+            # Try rolling rate first, fallback to quarterly rate
+            if recent['rolling_rate'].notna().any():
+                recent['rate_pct'] = pd.to_numeric(recent['rolling_rate'], errors='coerce') * 100
+                rate_type = '12‑month Rolling Rate'
+            else:
+                recent['rate_pct'] = pd.to_numeric(recent['complication_rate'], errors='coerce') * 100
+                rate_type = 'Quarterly Rate'
+            
             recent['national_pct'] = pd.to_numeric(recent['national_average'], errors='coerce') * 100
-            fig = px.line(recent, x='quarter', y='rolling_pct', markers=True, title='12‑month Rolling Rate vs National', labels={'rolling_pct':'Rate (%)'})
-            fig.add_scatter(x=recent['quarter'], y=recent['national_pct'], mode='lines+markers', name='National', line=dict(dash='dash'))
-            fig.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig, use_container_width=True)
+            
+            # Only plot if we have valid data
+            valid_data = recent[recent['rate_pct'].notna()]
+            if not valid_data.empty:
+                fig = px.line(valid_data, x='quarter', y='rate_pct', markers=True, 
+                             title=f'{rate_type} vs National', labels={'rate_pct':'Rate (%)'})
+                fig.add_scatter(x=valid_data['quarter'], y=valid_data['national_pct'], 
+                               mode='lines+markers', name='National', line=dict(dash='dash'))
+                fig.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No valid rate data available to plot.")
         else:
-            st.info("Not enough rolling data points to draw the trend.")
+            st.info("No complications data available for this hospital.")
     else:
         st.info("No complications data available for this hospital.")
 
