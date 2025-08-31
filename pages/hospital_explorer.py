@@ -257,15 +257,26 @@ try:
         origin_lon = origin_city['longitude'].iloc[0]
         origin_name = origin_city['city_name'].iloc[0]
         
-        # Add origin marker with blue shading
+        # Add origin marker with blue shading (more prominent like in the image)
         folium.Circle(
             location=[origin_lat, origin_lon],
-            radius=2000,  # 2km radius for origin area
+            radius=3000,  # 3km radius for origin area (more visible)
             popup=f"<b>Origin: {origin_name}</b><br>Patients from this area",
             color='blue',
             fillColor='blue',
-            opacity=0.3,
-            fillOpacity=0.2
+            opacity=0.4,
+            fillOpacity=0.3
+        ).add_to(folium_map)
+        
+        # Add a smaller, darker center point for better visibility
+        folium.Circle(
+            location=[origin_lat, origin_lon],
+            radius=500,  # 500m radius for center point
+            popup=f"<b>Origin: {origin_name}</b><br>Patients from this area",
+            color='darkblue',
+            fillColor='darkblue',
+            opacity=0.8,
+            fillOpacity=0.6
         ).add_to(folium_map)
         
         # Get destination hospitals and their coordinates
@@ -306,25 +317,40 @@ try:
             # Calculate opacity based on percentage
             opacity = min(0.8, dest['percentage'] / 100 * 2)  # Cap at 0.8 opacity
             
-            # Create flow line from origin to hospital
+            # Create flow line from origin to hospital with arrowheads
             folium.PolyLine(
                 locations=[[origin_lat, origin_lon], [dest['latitude'], dest['longitude']]],
                 weight=line_width,
                 color='blue',
                 opacity=opacity,
-                popup=f"<b>{dest['name']}</b><br>Patients: {dest['patient_count']}<br>Percentage: {dest['percentage']:.1f}%"
+                popup=f"<b>{dest['name']}</b><br>Patients: {dest['patient_count']}<br>Percentage: {dest['percentage']:.1f}%",
+                # Add arrowheads to show direction
+                arrow_style='->',
+                arrow_size=12,
+                arrow_color='blue'
             ).add_to(folium_map)
             
-            # Add small circle at destination to show patient concentration
+            # Add destination marker to show patient concentration
             folium.Circle(
                 location=[dest['latitude'], dest['longitude']],
-                radius=300 + (normalized_width * 700),  # 300m to 1000m radius
+                radius=400 + (normalized_width * 800),  # 400m to 1200m radius (more visible)
                 popup=f"<b>{dest['name']}</b><br>Patients from {origin_name}: {dest['patient_count']}<br>Percentage: {dest['percentage']:.1f}%",
                 color='blue',
                 fillColor='blue',
-                opacity=0.6,
-                fillOpacity=opacity * 0.5
+                opacity=0.7,
+                fillOpacity=opacity * 0.6
             ).add_to(folium_map)
+            
+            # Add hospital name label
+            folium.Tooltip(
+                f"{dest['name']}<br>{dest['patient_count']} patients",
+                permanent=False
+            ).add_to(folium.Circle(
+                location=[dest['latitude'], dest['longitude']],
+                radius=1,  # Invisible circle just for the tooltip
+                color='transparent',
+                fillColor='transparent'
+            ).add_to(folium_map))
     
     # --- Display Results: Map and List ---
     if st.session_state.get('search_triggered', False) and not st.session_state.filtered_df.empty:
@@ -607,6 +633,21 @@ try:
             try:
                 city_code_to_use = st.session_state.neighbor_flow_city_code
                 add_neighbor_flow_to_map(m, city_code_to_use, recruitment_zones, cities, establishments)
+                
+                # Add legend for the neighbor flow visualization
+                legend_html = '''
+                <div style="position: fixed; 
+                            bottom: 50px; left: 50px; width: 200px; height: 120px; 
+                            background-color: white; border:2px solid grey; z-index:9999; 
+                            font-size:14px; padding: 10px">
+                <p><b>Patient Flow Legend</b></p>
+                <p><i class="fa fa-circle" style="color:blue"></i> Origin area</p>
+                <p><i class="fa fa-arrow-right" style="color:blue"></i> Patient flow (thicker = more patients)</p>
+                <p><i class="fa fa-circle" style="color:blue"></i> Destination hospitals</p>
+                </div>
+                '''
+                m.get_root().html.add_child(folium.Element(legend_html))
+                
             except Exception as e:
                 st.error(f"Error displaying neighbor flow: {e}")
                 st.info("Please try selecting a different city or check if the data is available.")
