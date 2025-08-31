@@ -339,6 +339,12 @@ def load_french_cities():
         if 'nomCommune' in df.columns:
             df = df.rename(columns={'nomCommune': 'city_name'})
             
+        # Fix coordinate columns - they are swapped in the CSV
+        if 'latitude' in df.columns and 'longitude' in df.columns:
+            # Swap the columns to fix the coordinate order
+            df = df.rename(columns={'latitude': 'temp_lat', 'longitude': 'latitude'})
+            df = df.rename(columns={'temp_lat': 'longitude'})
+            
         # Ensure proper data types
         if 'city_code' in df.columns:
             df['city_code'] = df['city_code'].astype(str)

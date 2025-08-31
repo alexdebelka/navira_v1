@@ -27,14 +27,17 @@ This document summarizes all the new features and enhancements added to the Navi
 - **Location**: Hospital Explorer page (`pages/hospital_explorer.py`)
 - **Feature**: Interactive map showing where patients from a specific neighborhood go for treatment
 - **Functionality**:
-  - **Origin Selection**: Dropdown to choose your neighborhood from 1,045+ French cities
+  - **Address Geocoding**: Enter any address, postal code, or city name (e.g., "Paris", "75001", "Bobigny")
+  - **Automatic City Matching**: Finds the nearest city with patient flow data within 50km radius
+  - **Manual City Selection**: Fallback dropdown to choose from 1,045+ French cities with data
   - **Flow Visualization**: Blue lines showing patient flow from origin to destination hospitals
   - **Line Thickness**: Based on patient volume (thicker lines = more patients)
   - **Origin Shading**: Blue shaded area around the selected neighborhood
   - **Destination Markers**: Blue circles at hospitals showing patient concentration
   - **Interactive Popups**: Show hospital name, patient count, and percentage
   - **Detailed Analysis**: Comprehensive breakdown of top destinations and geographic distribution
-- **Data Source**: `11_recruitement_zone.csv` + `COMMUNES_FRANCE_INSEE.csv` + `01_hospitals.csv`
+  - **Real-time Feedback**: Shows distance to nearest city with data and patient flow summary
+- **Data Source**: `11_recruitement_zone.csv` + `COMMUNES_FRANCE_INSEE.csv` + `01_hospitals.csv` + Geocoding API
 
 ### 2. Hospital Dashboard Enhancements
 

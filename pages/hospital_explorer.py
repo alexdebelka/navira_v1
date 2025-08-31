@@ -350,7 +350,7 @@ try:
         with viz_tab2:
             show_neighbor_flow = st.toggle("Show Where My Neighbors Go", value=False)
             if show_neighbor_flow:
-                st.markdown("**Select your neighborhood to see where patients from your area go for treatment:**")
+                st.markdown("**Enter your address or search for your neighborhood to see where patients from your area go for treatment:**")
                 
                 # Get available cities from recruitment data that have city information
                 available_cities = recruitment_zones['city_code'].unique()
@@ -360,6 +360,109 @@ try:
                 cities_with_names = cities_with_names[cities_with_names['city_name'].notna()]
                 
                 if not cities_with_names.empty:
+                    # Add address geocoding functionality
+                    address_input = st.text_input(
+                        "📍 Enter your address or postal code:",
+                        placeholder="e.g., Paris, 75001, Bobigny, or your full address...",
+                        key="neighbor_flow_address"
+                    )
+                    
+                    # Geocoding function for neighbor flow
+                    @st.cache_data(show_spinner="Finding your location...")
+                    def geocode_for_neighbor_flow(address):
+                        if not address: return None
+                        try:
+                            geolocator = Nominatim(user_agent="navira_streamlit_app_v26")
+                            location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
+                            return (location.latitude, location.longitude) if location else None
+                        except Exception as e:
+                            st.error(f"Geocoding failed: {e}")
+                            return None
+                    
+                    # Find nearest city with recruitment data
+                    def find_nearest_city_with_data(coords, cities_with_data, max_distance_km=50):
+                        if not coords or cities_with_data.empty:
+                            return None
+                        
+                        # Calculate distances to all cities with recruitment data
+                        distances = cities_with_data.apply(
+                            lambda row: geodesic(coords, (row['latitude'], row['longitude'])).km, 
+                            axis=1
+                        )
+                        
+                        # Find the closest city within max_distance_km
+                        min_distance_idx = distances.idxmin()
+                        min_distance = distances[min_distance_idx]
+                        
+                        if min_distance <= max_distance_km:
+                            return cities_with_data.loc[min_distance_idx], min_distance
+                        return None
+                    
+                    # Process address input
+                    if address_input:
+                        user_coords = geocode_for_neighbor_flow(address_input)
+                        
+                        if user_coords:
+                            # Find nearest city with recruitment data
+                            nearest_city_data = find_nearest_city_with_data(user_coords, cities_with_names)
+                            
+                            if nearest_city_data:
+                                nearest_city, distance = nearest_city_data
+                                selected_city_code = nearest_city['city_code']
+                                selected_city_name = nearest_city['city_name']
+                                
+                                # Store in session state for map rendering
+                                st.session_state.neighbor_flow_city_code = selected_city_code
+                                st.session_state.neighbor_flow_city_name = selected_city_name
+                                
+                                st.success(f"""
+                                **📍 Found your location!**
+                                - **Your address**: {address_input}
+                                - **Nearest city with data**: {selected_city_name} ({distance:.1f} km away)
+                                - **City code**: {selected_city_code}
+                                """)
+                                
+                                # Show flow data for this city
+                                city_flow = recruitment_zones[recruitment_zones['city_code'] == selected_city_code]
+                                if not city_flow.empty:
+                                    total_patients = city_flow['patient_count'].sum()
+                                    top_hospitals = city_flow.nlargest(3, 'patient_count')
+                                    
+                                    # Get hospital names
+                                    hospital_names = []
+                                    for _, row in top_hospitals.iterrows():
+                                        hospital_data = establishments[establishments['id'] == row['hospital_id']]
+                                        if not hospital_data.empty:
+                                            hospital_name = hospital_data['name'].iloc[0]
+                                        else:
+                                            hospital_name = 'Unknown Hospital'
+                                        hospital_names.append(f"{row['patient_count']} to {hospital_name}")
+                                    
+                                    st.info(f"""
+                                    **📊 Patient Flow Data for {selected_city_name}:**
+                                    - **Total patients**: {total_patients:,}
+                                    - **Top destinations**: {', '.join(hospital_names)}
+                                    """)
+                                else:
+                                    st.warning(f"No patient flow data available for {selected_city_name}.")
+                            else:
+                                st.warning(f"""
+                                **No nearby cities with patient flow data found.**
+                                - Your location: {address_input}
+                                - Searched within 50 km radius
+                                - Try a different address or use the manual city selection below
+                                """)
+                                
+                                # Fallback to manual city selection
+                                st.markdown("**Or manually select a city:**")
+                        else:
+                            st.error(f"Could not find the address: {address_input}")
+                            st.info("Try a different address, postal code, or city name.")
+                    
+                    # Manual city selection as fallback
+                    st.markdown("---")
+                    st.markdown("**🔍 Or search manually for a specific city:**")
+                    
                     # Add search functionality
                     search_term = st.text_input(
                         "🔍 Search for your city:",
@@ -394,6 +497,9 @@ try:
                         if selected_city_display:
                             # Extract city code from selection
                             selected_city_code = selected_city_display.split(" - ")[-1]
+                            
+                            # Store in session state for map rendering
+                            st.session_state.neighbor_flow_city_code = selected_city_code
                             
                             # Show summary of what will be displayed
                             origin_city_data = cities_with_names[cities_with_names['city_code'] == selected_city_code]
@@ -497,9 +603,10 @@ try:
             add_recruitment_zones_to_map(m, selected_hospital_for_recruitment, recruitment_zones, cities)
         
         # Add neighbor flow if toggled on
-        if show_neighbor_flow and 'selected_city_code' in locals():
+        if show_neighbor_flow and st.session_state.get('neighbor_flow_city_code'):
             try:
-                add_neighbor_flow_to_map(m, selected_city_code, recruitment_zones, cities, establishments)
+                city_code_to_use = st.session_state.neighbor_flow_city_code
+                add_neighbor_flow_to_map(m, city_code_to_use, recruitment_zones, cities, establishments)
             except Exception as e:
                 st.error(f"Error displaying neighbor flow: {e}")
                 st.info("Please try selecting a different city or check if the data is available.")
@@ -513,12 +620,12 @@ try:
                 st.switch_page("pages/dashboard.py")
         
         # Show detailed neighbor flow analysis if enabled
-        if show_neighbor_flow and 'selected_city_code' in locals():
+        if show_neighbor_flow and st.session_state.get('neighbor_flow_city_code'):
             st.markdown("---")
             st.markdown("#### 📊 Detailed Neighbor Flow Analysis")
             
             # Get flow data for selected city
-            city_flow = recruitment_zones[recruitment_zones['city_code'] == selected_city_code]
+            city_flow = recruitment_zones[recruitment_zones['city_code'] == st.session_state.neighbor_flow_city_code]
             if not city_flow.empty:
                 # Merge with hospital and city data for display
                 flow_with_details = city_flow.merge(
@@ -585,7 +692,7 @@ try:
                 st.markdown("##### 📍 Geographic Distribution")
                 
                 # Calculate distance from origin to each hospital
-                origin_city_data = cities[cities['city_code'] == selected_city_code]
+                origin_city_data = cities[cities['city_code'] == st.session_state.neighbor_flow_city_code]
                 if not origin_city_data.empty:
                     origin_lat = origin_city_data['latitude'].iloc[0]
                     origin_lon = origin_city_data['longitude'].iloc[0]
