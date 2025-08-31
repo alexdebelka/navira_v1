@@ -30,7 +30,8 @@ This document summarizes all the new features and enhancements added to the Navi
   - **Unified Search System**: Choose between address geocoding or manual city search
   - **Address Geocoding**: Enter any address, postal code, or city name (e.g., "Paris", "75001", "Bobigny")
   - **Automatic City Matching**: Finds the nearest city with patient flow data within 50km radius
-  - **Manual City Search**: Search and select from 1,045+ French cities with data
+  - **Manual City Search**: Search and auto-select from 1,045+ French cities with data
+  - **Auto-Selection**: Automatically selects the best match (exact → starts with → contains)
   - **Connected Search Methods**: Both search methods update the same region information
   - **Address Connection**: Red marker shows your exact address with connection line to nearest city with data
   - **Flow Visualization**: Blue arrows with arrowheads showing patient flow from origin to destination hospitals
@@ -224,7 +225,7 @@ Each dataset is automatically normalized with consistent column names:
 
 ---
 
-**Total Implementation**: ~1,300 lines of new code across 4 files
+**Total Implementation**: ~1,400 lines of new code across 4 files
 **New Visualizations**: 10 interactive charts and maps (including patient flow visualization)
 **New Metrics**: 18+ new analytical capabilities
-**Enhanced User Experience**: Comprehensive tooltips, explanations, and interactive controls
+**Enhanced User Experience**: Comprehensive tooltips, explanations, interactive controls, and auto-selection

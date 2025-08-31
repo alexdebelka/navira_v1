@@ -570,66 +570,58 @@ try:
                     
                     # Filter cities based on search
                     if search_term:
-                        filtered_cities = cities_with_names[
+                        # First, try exact matches
+                        exact_matches = cities_with_names[
+                            cities_with_names['city_name'].str.lower() == search_term.lower()
+                        ]
+                        
+                        # Then, try starts with matches
+                        starts_with_matches = cities_with_names[
+                            cities_with_names['city_name'].str.lower().str.startswith(search_term.lower())
+                        ]
+                        
+                        # Finally, try contains matches
+                        contains_matches = cities_with_names[
                             cities_with_names['city_name'].str.contains(search_term, case=False, na=False)
                         ]
-                    else:
-                        filtered_cities = cities_with_names
-                    
-                    if not filtered_cities.empty:
-                        # Create a searchable dropdown for cities
-                        city_options = filtered_cities.apply(
-                            lambda x: f"{x['city_name']} ({x['postal_code']}) - {x['city_code']}", 
-                            axis=1
-                        ).tolist()
                         
-                        # Sort by city name for easier browsing
-                        city_options.sort()
+                        # Combine and prioritize: exact matches first, then starts with, then contains
+                        filtered_cities = pd.concat([exact_matches, starts_with_matches, contains_matches]).drop_duplicates()
                         
-                        selected_city_display = st.selectbox(
-                            f"Choose your neighborhood ({len(city_options)} cities available):",
-                            options=city_options,
-                            key="neighbor_flow_city_selector"
-                        )
-                        
-                        if selected_city_display:
-                            # Extract city code from selection
-                            selected_city_code = selected_city_display.split(" - ")[-1]
-                            selected_city_name = selected_city_display.split(" - ")[0].split(" (")[0]
+                        if not filtered_cities.empty:
+                            # Auto-select the best match (first one after prioritization)
+                            best_match = filtered_cities.iloc[0]
+                            selected_city_code = best_match['city_code']
+                            selected_city_name = best_match['city_name']
                             
                             # Store in session state for map rendering
                             st.session_state.neighbor_flow_city_code = selected_city_code
                             st.session_state.neighbor_flow_city_name = selected_city_name
                             
-                            # Show summary of what will be displayed
-                            origin_city_data = cities_with_names[cities_with_names['city_code'] == selected_city_code]
-                            if not origin_city_data.empty:
-                                origin_name = origin_city_data['city_name'].iloc[0]
-                                
-                                # Get flow data for this city
-                                city_flow = recruitment_zones[recruitment_zones['city_code'] == selected_city_code]
-                                if not city_flow.empty:
-                                    total_patients = city_flow['patient_count'].sum()
-                                    top_hospitals = city_flow.nlargest(3, 'patient_count')
-                                    
-                                    # Get hospital names
-                                    hospital_names = []
-                                    for _, row in top_hospitals.iterrows():
-                                        hospital_data = establishments[establishments['id'] == row['hospital_id']]
-                                        if not hospital_data.empty:
-                                            hospital_name = hospital_data['name'].iloc[0]
-                                        else:
-                                            hospital_name = 'Unknown Hospital'
-                                        hospital_names.append(f"{row['patient_count']} to {hospital_name}")
-                                    
-                                    st.success(f"""
-                                    **📍 {origin_name}**
-                                    - **Total patients**: {total_patients:,}
-                                    - **Top destinations**: {', '.join(hospital_names)}
-                                    """)
-                                else:
-                                    st.warning(f"No patient flow data available for {origin_name}. This city may not have any recorded patient movements.")
-                    
+                            # Show what was auto-selected
+                            st.success(f"""
+                            **📍 Auto-selected: {selected_city_name}**
+                            - **Postal code**: {best_match['postal_code']}
+                            - **City code**: {selected_city_code}
+                            - **Other matches**: {len(filtered_cities)} cities found
+                            """)
+                            
+                            # If there are multiple matches, show them for reference
+                            if len(filtered_cities) > 1:
+                                with st.expander(f"🔍 See all {len(filtered_cities)} matching cities"):
+                                    for idx, city in filtered_cities.head(10).iterrows():
+                                        st.markdown(f"• **{city['city_name']}** ({city['postal_code']}) - {city['city_code']}")
+                                    if len(filtered_cities) > 10:
+                                        st.markdown(f"... and {len(filtered_cities) - 10} more")
+                        else:
+                            st.warning(f"No cities found matching '{search_term}'. Try a different search term.")
+                            selected_city_code = None
+                            selected_city_name = None
+                    else:
+                        # No search term entered
+                        selected_city_code = None
+                        selected_city_name = None
+                            
                     # Unified display section - show selected city info regardless of search method
                     if selected_city_code and selected_city_name:
                         st.markdown("---")
@@ -690,7 +682,7 @@ try:
                         
                         **How it works:**
                         1. **Search for your city** using the search box above
-                        2. **Select your neighborhood** from the dropdown
+                        2. **Auto-selection** of the best matching neighborhood
                         3. **View the map** showing patient flow lines to hospitals
                         4. **Explore the analysis** below the map for detailed insights
                         
