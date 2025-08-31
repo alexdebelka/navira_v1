@@ -302,7 +302,7 @@ with tab_activity:
             # Create national trend data
             nat_data = []
             for year in range(2020, 2025):
-                year_data = df[df['year'] == year]
+                year_data = annual[annual['annee'] == year]
                 if not year_data.empty:
                     avg_procedures = year_data['total_procedures_year'].mean()
                     nat_data.append({'Year': year, 'Avg Procedures': avg_procedures})
@@ -336,7 +336,7 @@ with tab_activity:
             # Create national procedure mix data
             nat_proc_data = []
             for year in range(2020, 2025):
-                year_data = df[df['year'] == year]
+                year_data = annual[annual['annee'] == year]
                 if not year_data.empty:
                     total_sleeve = year_data['SLE'].sum() if 'SLE' in year_data.columns else 0
                     total_bypass = year_data['BPG'].sum() if 'BPG' in year_data.columns else 0
@@ -373,7 +373,7 @@ with tab_activity:
             # Create national surgical approach data
             nat_appr_data = []
             for year in range(2020, 2025):
-                year_data = df[df['year'] == year]
+                year_data = annual[annual['annee'] == year]
                 if not year_data.empty:
                     total_robotic = year_data['ROB'].sum() if 'ROB' in year_data.columns else 0
                     total_coelio = year_data['COE'].sum() if 'COE' in year_data.columns else 0
