@@ -988,37 +988,7 @@ if approach_mix_2024:
             
             st.plotly_chart(fig, use_container_width=True)
         
-        with col2:
-            st.markdown("#### Hospital Comparison: Surgical Approaches")
-            # Create a sample hospital comparison pie chart
-            # For now, showing the same national data as a placeholder
-            fig2 = px.pie(
-                pie_df,
-                values='Count',
-                names='Approach',
-                title="Hospital vs National (2024)",
-                color_discrete_sequence=['#2E86AB', '#F7931E', '#A23B72', '#F18F01']
-            )
-            
-            fig2.update_layout(
-                height=400,
-                showlegend=True,
-                font=dict(size=12),
-                legend=dict(
-                    itemclick=False,
-                    itemdoubleclick=False
-                )
-            )
-            
-            fig2.update_traces(
-                hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent:.0f}%<extra></extra>',
-                textposition='outside',
-                text=pie_df['PctLabel'],
-                textinfo='text+label',
-                textfont=dict(size=16)
-            )
-            
-            st.plotly_chart(fig2, use_container_width=True)
+        
         # Dropdown with What to look for + Key findings
         try:
             total_approaches = pie_df['Count'].sum()
