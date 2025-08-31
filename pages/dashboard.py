@@ -390,36 +390,7 @@ with tab_activity:
                 nat_appr_df = pd.DataFrame(nat_appr_data)
                 st.plotly_chart(px.bar(nat_appr_df, x='Year', y='Share', color='Approach', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
     
-    # Hospital vs National Comparisons
-    st.markdown("#### Hospital vs National Averages (2024)")
-    
-    # Get 2024 data for the hospital
-    hosp_2024 = selected_hospital_all_data[selected_hospital_all_data['annee'] == 2024].iloc[0] if not selected_hospital_all_data.empty else None
-    
-    if hosp_2024 is not None and national_averages:
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            # Total procedures comparison
-            hosp_total = hosp_2024.get('total_procedures_year', 0)
-            nat_total = national_averages.get('total_procedures_avg', 0)
-            st.metric("Total Procedures", f"{int(hosp_total):,}", f"{int(hosp_total - nat_total):+,}")
-        
-        with col2:
-            # Sleeve Gastrectomy comparison
-            hosp_sleeve = hosp_2024.get('SLE', 0)
-            nat_sleeve = national_averages.get('procedure_averages', {}).get('SLE', 0)
-            sleeve_pct = (hosp_sleeve / hosp_total * 100) if hosp_total > 0 else 0
-            nat_sleeve_pct = (nat_sleeve / nat_total * 100) if nat_total > 0 else 0
-            st.metric("Sleeve Gastrectomy", f"{sleeve_pct:.1f}%", f"{sleeve_pct - nat_sleeve_pct:+.1f}%")
-        
-        with col3:
-            # Robotic approach comparison
-            hosp_robotic = hosp_2024.get('ROB', 0)
-            nat_robotic = national_averages.get('approach_averages', {}).get('ROB', 0)
-            robotic_pct = (hosp_robotic / hosp_total * 100) if hosp_total > 0 else 0
-            nat_robotic_pct = (nat_robotic / nat_total * 100) if nat_total > 0 else 0
-            st.metric("Robotic Approach", f"{robotic_pct:.1f}%", f"{robotic_pct - nat_robotic_pct:+.1f}%")
+
 
 with tab_complications:
     st.subheader("Complications")
