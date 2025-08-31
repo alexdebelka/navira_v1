@@ -186,13 +186,23 @@ tab_activity, tab_complications, tab_geo = st.tabs(["📈 Activity", "🧪 Compl
 
 def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, cities_df):
     try:
-        hosp_recr = recruitment_df[recruitment_df['hospital_id'] == str(hospital_id)]
-        if hosp_recr.empty or cities_df.empty:
+        # Normalize types to ensure join works
+        df_rec = recruitment_df.copy()
+        df_rec['hospital_id'] = df_rec['hospital_id'].astype(str)
+        df_rec['city_code'] = df_rec['city_code'].astype(str)
+        df_cities = cities_df.copy()
+        if 'city_code' in df_cities.columns:
+            df_cities['city_code'] = df_cities['city_code'].astype(str)
+        hosp_recr = df_rec[df_rec['hospital_id'] == str(hospital_id)]
+        if hosp_recr.empty or df_cities.empty:
+            st.info("No recruitment rows or city coordinates for this hospital.")
             return
-        df = hosp_recr.merge(cities_df[['city_code','latitude','longitude','city_name']], on='city_code', how='left')
+        df = hosp_recr.merge(df_cities[['city_code','latitude','longitude','city_name']], on='city_code', how='left')
         df = df.dropna(subset=['latitude','longitude'])
         if df.empty:
+            st.info("Recruitment rows found but missing city coordinates.")
             return
+        st.caption(f"Rendering {len(df)} recruitment zones")
         max_pat = df['patient_count'].max(); min_pat = df['patient_count'].min()
         for _, z in df.iterrows():
             norm = (z['patient_count'] - min_pat) / (max_pat - min_pat) if max_pat>min_pat else 0.5
@@ -253,10 +263,13 @@ with tab_complications:
         c1.metric("Total Procedures", f"{tot_proc:,}")
         c2.metric("Total Complications", f"{tot_comp:,}")
         c3.metric("Overall Rate", f"{rate:.1f}%")
-        recent = hosp_comp.tail(8)
+        recent = hosp_comp.tail(8).copy()
         if not recent.empty:
-            fig = px.line(recent, x='quarter', y=recent['rolling_rate']*100, markers=True, title='12‑month Rolling Rate vs National')
-            fig.add_scatter(x=recent['quarter'], y=recent['national_average']*100, mode='lines+markers', name='National', line=dict(dash='dash'))
+            # Build explicit percentage columns to avoid plotly silent failures
+            recent['rolling_pct'] = pd.to_numeric(recent['rolling_rate'], errors='coerce') * 100
+            recent['national_pct'] = pd.to_numeric(recent['national_average'], errors='coerce') * 100
+            fig = px.line(recent, x='quarter', y='rolling_pct', markers=True, title='12‑month Rolling Rate vs National', labels={'rolling_pct':'Rate (%)'})
+            fig.add_scatter(x=recent['quarter'], y=recent['national_pct'], mode='lines+markers', name='National', line=dict(dash='dash'))
             fig.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
     else:
