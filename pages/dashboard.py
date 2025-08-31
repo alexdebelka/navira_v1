@@ -199,6 +199,8 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
             return
         df = hosp_recr.merge(df_cities[['city_code','latitude','longitude','city_name','postal_code']], on='city_code', how='left')
         missing_coords = df[df['latitude'].isna() | df['longitude'].isna()].copy()
+        if not hosp_recr.empty:
+            st.caption(f"Recruitment rows: {len(hosp_recr)} | With coords: {len(df.dropna(subset=['latitude','longitude']))} | Missing coords: {len(missing_coords)}")
         if not missing_coords.empty:
             # Best-effort geocode a handful of top towns
             try:
@@ -220,6 +222,11 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
                                 df.loc[idx, 'longitude'] = df.loc[idx, 'longitude'].fillna(loc.longitude)
                         except Exception:
                             continue
+                # Show a few unresolved codes for troubleshooting
+                unresolved = df[df['latitude'].isna() | df['longitude'].isna()][['city_code','city_name','postal_code']].drop_duplicates()
+                if not unresolved.empty:
+                    with st.expander("Unmatched towns (no coordinates)"):
+                        st.dataframe(unresolved.head(15), use_container_width=True, hide_index=True)
             except Exception:
                 pass
         df = df.dropna(subset=['latitude','longitude'])
@@ -287,7 +294,8 @@ with tab_complications:
         c1.metric("Total Procedures", f"{tot_proc:,}")
         c2.metric("Total Complications", f"{tot_comp:,}")
         c3.metric("Overall Rate", f"{rate:.1f}%")
-        recent = hosp_comp.tail(8).copy()
+        # Prefer last 8 rows where rolling_rate is present
+        recent = hosp_comp[hosp_comp['rolling_rate'].notna()].tail(8).copy()
         if not recent.empty:
             # Build explicit percentage columns to avoid plotly silent failures
             recent['rolling_pct'] = pd.to_numeric(recent['rolling_rate'], errors='coerce') * 100
@@ -296,6 +304,8 @@ with tab_complications:
             fig.add_scatter(x=recent['quarter'], y=recent['national_pct'], mode='lines+markers', name='National', line=dict(dash='dash'))
             fig.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Not enough rolling data points to draw the trend.")
     else:
         st.info("No complications data available for this hospital.")
 
