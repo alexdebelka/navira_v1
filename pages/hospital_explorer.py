@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import folium
+import plotly.express as px
 from folium.plugins import MarkerCluster
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
@@ -826,7 +827,7 @@ try:
             if not city_flow.empty:
                 # Merge with hospital and city data for display
                 flow_with_details = city_flow.merge(
-                    establishments_full[['id', 'name', 'ville', 'statut']], 
+                    establishments_full[['id', 'name', 'ville', 'statut', 'latitude', 'longitude']], 
                     left_on='hospital_id', 
                     right_on='id', 
                     how='left'
