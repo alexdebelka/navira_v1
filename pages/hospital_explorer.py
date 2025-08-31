@@ -166,12 +166,39 @@ try:
     @st.cache_data(show_spinner="Geocoding address...")
     def geocode_address(address):
         if not address: return None
+        
+        # First try to extract postal code and use it directly
+        postal_code = _extract_postal_code(address)
+        if postal_code:
+            # Try to find coordinates from cities data using postal code
+            if not cities.empty and 'postal_code' in cities.columns:
+                matching_cities = cities[cities['postal_code'] == postal_code]
+                if not matching_cities.empty:
+                    # Use the first matching city's coordinates
+                    city_coords = matching_cities.iloc[0]
+                    if not pd.isna(city_coords['latitude']) and not pd.isna(city_coords['longitude']):
+                        st.success(f"Found coordinates for postal code {postal_code}")
+                        return (city_coords['latitude'], city_coords['longitude'])
+        
+        # Fallback to geocoding service
         try:
             geolocator = Nominatim(user_agent="navira_streamlit_app_v26")
             location = geolocator.geocode(f"{address.strip()}, France", timeout=10)
             return (location.latitude, location.longitude) if location else None
         except Exception as e:
-            st.error(f"Geocoding failed: {e}")
+            st.warning(f"Geocoding service unavailable: {str(e)}")
+            
+            # Try alternative geocoding with just postal code
+            if postal_code:
+                try:
+                    location = geolocator.geocode(f"{postal_code}, France", timeout=5)
+                    if location:
+                        st.info(f"Using approximate location for postal code {postal_code}")
+                        return (location.latitude, location.longitude)
+                except Exception:
+                    pass
+            
+            st.error("Address not found. Please try a different address or postal code.")
             return None
     
     # Helper to find nearest city with data from given coordinates (reusable)
@@ -206,12 +233,13 @@ try:
             if not coords:
                 return None
             geolocator = Nominatim(user_agent="navira_streamlit_app_v26")
-            location = geolocator.reverse(coords, timeout=10, language='en')
+            location = geolocator.reverse(coords, timeout=5, language='en')
             if location and isinstance(location.raw, dict):
                 addr = location.raw.get('address', {})
                 pc = addr.get('postcode')
                 return str(pc) if pc else None
         except Exception:
+            # Silently fail for reverse geocoding - not critical
             return None
         return None
 
