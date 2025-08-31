@@ -2,7 +2,8 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: [ main ]   # change if your default branch is different
+    branches: [ main ]
+  workflow_dispatch: {}
 
 concurrency:
   group: prod-deploy
@@ -11,9 +12,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: [self-hosted, navira]
-    defaults:
-      run:
-        shell: bash
+    defaults: { run: { shell: bash } }
     steps:
       - uses: actions/checkout@v4
 
@@ -22,12 +21,20 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y rsync curl python3 python3-venv python3-pip
 
-      - name: Sync repo to server path
+      - name: Prepare app dir & perms
         env: { APP: /home/appuser/app }
         run: |
           sudo mkdir -p "$APP"
+          sudo chmod 751 /home/appuser              # allow traversal
+          sudo chown -R appuser:appuser /home/appuser
+
+      - name: Sync repo to server path (preserve venv & secrets)
+        env: { APP: /home/appuser/app }
+        run: |
+          sudo rsync -a --delete \
+            --exclude '.git' --exclude '.venv' --exclude '.streamlit' \
+            "$GITHUB_WORKSPACE"/ "$APP"/
           sudo chown -R appuser:appuser "$APP"
-          rsync -a --delete --exclude '.git' "$GITHUB_WORKSPACE"/ "$APP"/
 
       - name: Install deps in venv (as appuser)
         env: { APP: /home/appuser/app }
@@ -55,6 +62,3 @@ jobs:
           echo "===== last 200 lines of navira ====="
           sudo journalctl -u navira -n 200 --no-pager
           exit 1
-
-
-
