@@ -286,7 +286,7 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
 with tab_activity:
     st.subheader("Activity Overview")
     # Total surgeries and quick mix charts
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns([2, 1])  # Hospital graphs larger (2), National graphs smaller (1)
     
     with col1:
         st.markdown("#### Hospital: Total Surgeries per Year")
@@ -315,7 +315,7 @@ with tab_activity:
     # Procedure share (3 buckets)
     proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
     if proc_codes:
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns([2, 1])  # Hospital graphs larger (2), National graphs smaller (1)
         
         with col1:
             st.markdown("#### Hospital: Procedure Mix (share %)")
@@ -353,7 +353,7 @@ with tab_activity:
     # Approaches share
     appr_codes = [c for c in SURGICAL_APPROACH_NAMES.keys() if c in selected_hospital_all_data.columns]
     if appr_codes:
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns([2, 1])  # Hospital graphs larger (2), National graphs smaller (1)
         
         with col1:
             st.markdown("#### Hospital: Surgical Approaches (share %)")

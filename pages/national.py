@@ -796,7 +796,7 @@ with col1:
                     pass
 
             # Create side-by-side comparison
-            col1, col2 = st.columns(2)
+            col1, col2 = st.columns([2, 1])  # National graphs larger (2), Hospital comparison smaller (1)
             
             with col1:
                 st.markdown("#### National: Procedure Mix Trends")
@@ -980,7 +980,7 @@ if approach_mix_2024:
         pie_df['PctLabel'] = (pie_df['Count'] / total_cnt * 100).round(0).astype(int).astype(str) + '%'
 
         # Create side-by-side comparison
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns([2, 1])  # National graphs larger (2), Hospital comparison smaller (1)
         
         with col1:
             st.markdown("#### National: Surgical Approach Distribution")
