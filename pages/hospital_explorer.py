@@ -466,7 +466,7 @@ try:
         
         if hospitals_with_coords.empty:
             st.error("No hospitals with valid coordinates found. Please check your data.")
-            return
+            st.stop()
         
         # Use the first hospital with valid coordinates as map center if user coords are invalid
         if user_coords and all(pd.notna(coord) for coord in user_coords):
