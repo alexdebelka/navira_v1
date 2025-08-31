@@ -795,26 +795,55 @@ with col1:
                 except Exception:
                     pass
 
-            fig = px.area(
-                plot_df, x='Year', y='Share', color='Procedure',
-                title=f'Procedure Mix Trends Over Time ({time_period})',
-                color_discrete_map=proc_colors,
-                category_orders={'Procedure': ['Sleeve', 'Gastric Bypass', 'Other']}
-            )
-            fig.update_layout(
-                height=380, 
-                xaxis_title='Year', 
-                yaxis_title='% of procedures', 
-                plot_bgcolor='rgba(0,0,0,0)', 
-                paper_bgcolor='rgba(0,0,0,0)'
-            )
-            # For single-year view, center 2024 and show only that tick
-            if toggle_2024_only:
-                fig.update_layout(xaxis=dict(tickmode='array', tickvals=[2024], ticktext=['2024'], range=[2023.25, 2024.75]))
-                fig.update_traces(hovertemplate='<b>%{fullData.name}</b><br>Year: 2024<br>Share: %{y:.1f}%<extra></extra>')
-            fig.update_traces(line=dict(width=0), opacity=0.9)
+            # Create side-by-side comparison
+            col1, col2 = st.columns(2)
             
-            st.plotly_chart(fig, use_container_width=True)
+            with col1:
+                st.markdown("#### National: Procedure Mix Trends")
+                fig = px.area(
+                    plot_df, x='Year', y='Share', color='Procedure',
+                    title=f'National Procedure Mix ({time_period})',
+                    color_discrete_map=proc_colors,
+                    category_orders={'Procedure': ['Sleeve', 'Gastric Bypass', 'Other']}
+                )
+                fig.update_layout(
+                    height=380, 
+                    xaxis_title='Year', 
+                    yaxis_title='% of procedures', 
+                    plot_bgcolor='rgba(0,0,0,0)', 
+                    paper_bgcolor='rgba(0,0,0,0)'
+                )
+                # For single-year view, center 2024 and show only that tick
+                if toggle_2024_only:
+                    fig.update_layout(xaxis=dict(tickmode='array', tickvals=[2024], ticktext=['2024'], range=[2023.25, 2024.75]))
+                    fig.update_traces(hovertemplate='<b>%{fullData.name}</b><br>Year: 2024<br>Share: %{y:.1f}%<extra></extra>')
+                fig.update_traces(line=dict(width=0), opacity=0.9)
+                
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                st.markdown("#### Hospital Comparison: Procedure Mix")
+                # Create a sample hospital comparison (you can modify this to show specific hospital data)
+                # For now, showing the same national data as a placeholder
+                fig2 = px.area(
+                    plot_df, x='Year', y='Share', color='Procedure',
+                    title=f'Hospital vs National ({time_period})',
+                    color_discrete_map=proc_colors,
+                    category_orders={'Procedure': ['Sleeve', 'Gastric Bypass', 'Other']}
+                )
+                fig2.update_layout(
+                    height=380, 
+                    xaxis_title='Year', 
+                    yaxis_title='% of procedures', 
+                    plot_bgcolor='rgba(0,0,0,0)', 
+                    paper_bgcolor='rgba(0,0,0,0)'
+                )
+                if toggle_2024_only:
+                    fig2.update_layout(xaxis=dict(tickmode='array', tickvals=[2024], ticktext=['2024'], range=[2023.25, 2024.75]))
+                    fig2.update_traces(hovertemplate='<b>%{fullData.name}</b><br>Year: 2024<br>Share: %{y:.1f}%<extra></extra>')
+                fig2.update_traces(line=dict(width=0), opacity=0.9)
+                
+                st.plotly_chart(fig2, use_container_width=True)
             
             # National Averages Summary
             st.markdown("#### National Averages Summary (2024)")
@@ -950,33 +979,70 @@ if approach_mix_2024:
         total_cnt = max(1, int(pie_df['Count'].sum()))
         pie_df['PctLabel'] = (pie_df['Count'] / total_cnt * 100).round(0).astype(int).astype(str) + '%'
 
-        fig = px.pie(
-            pie_df,
-            values='Count',
-            names='Approach',
-            title="Surgical Approach Distribution (2024)",
-            color_discrete_sequence=['#2E86AB', '#F7931E', '#A23B72', '#F18F01']
-        )
+        # Create side-by-side comparison
+        col1, col2 = st.columns(2)
         
-        fig.update_layout(
-            height=400,
-            showlegend=True,
-            font=dict(size=12),
-            legend=dict(
-                itemclick=False,
-                itemdoubleclick=False
+        with col1:
+            st.markdown("#### National: Surgical Approach Distribution")
+            fig = px.pie(
+                pie_df,
+                values='Count',
+                names='Approach',
+                title="National Approach Distribution (2024)",
+                color_discrete_sequence=['#2E86AB', '#F7931E', '#A23B72', '#F18F01']
             )
-        )
+            
+            fig.update_layout(
+                height=400,
+                showlegend=True,
+                font=dict(size=12),
+                legend=dict(
+                    itemclick=False,
+                    itemdoubleclick=False
+                )
+            )
+            
+            fig.update_traces(
+                hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent:.0f}%<extra></extra>',
+                textposition='outside',
+                text=pie_df['PctLabel'],
+                textinfo='text+label',
+                textfont=dict(size=16)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
         
-        fig.update_traces(
-            hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent:.0f}%<extra></extra>',
-            textposition='outside',
-            text=pie_df['PctLabel'],
-            textinfo='text+label',
-            textfont=dict(size=16)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
+        with col2:
+            st.markdown("#### Hospital Comparison: Surgical Approaches")
+            # Create a sample hospital comparison pie chart
+            # For now, showing the same national data as a placeholder
+            fig2 = px.pie(
+                pie_df,
+                values='Count',
+                names='Approach',
+                title="Hospital vs National (2024)",
+                color_discrete_sequence=['#2E86AB', '#F7931E', '#A23B72', '#F18F01']
+            )
+            
+            fig2.update_layout(
+                height=400,
+                showlegend=True,
+                font=dict(size=12),
+                legend=dict(
+                    itemclick=False,
+                    itemdoubleclick=False
+                )
+            )
+            
+            fig2.update_traces(
+                hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent:.0f}%<extra></extra>',
+                textposition='outside',
+                text=pie_df['PctLabel'],
+                textinfo='text+label',
+                textfont=dict(size=16)
+            )
+            
+            st.plotly_chart(fig2, use_container_width=True)
         # Dropdown with What to look for + Key findings
         try:
             total_approaches = pie_df['Count'].sum()

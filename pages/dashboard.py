@@ -286,40 +286,109 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
 with tab_activity:
     st.subheader("Activity Overview")
     # Total surgeries and quick mix charts
-    hosp_year = selected_hospital_all_data[['annee','total_procedures_year']].dropna()
-    if not hosp_year.empty:
-        fig = px.line(hosp_year, x='annee', y='total_procedures_year', markers=True, title='Total Surgeries per Year')
-        fig.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig, use_container_width=True)
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Hospital: Total Surgeries per Year")
+        hosp_year = selected_hospital_all_data[['annee','total_procedures_year']].dropna()
+        if not hosp_year.empty:
+            fig = px.line(hosp_year, x='annee', y='total_procedures_year', markers=True, title='Hospital Total Surgeries')
+            fig.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        st.markdown("#### National: Average Surgeries per Hospital")
+        if national_averages:
+            # Create national trend data
+            nat_data = []
+            for year in range(2020, 2025):
+                year_data = df[df['year'] == year]
+                if not year_data.empty:
+                    avg_procedures = year_data['total_procedures_year'].mean()
+                    nat_data.append({'Year': year, 'Avg Procedures': avg_procedures})
+            
+            if nat_data:
+                nat_df = pd.DataFrame(nat_data)
+                fig = px.line(nat_df, x='Year', y='Avg Procedures', markers=True, title='National Average')
+                fig.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
     # Procedure share (3 buckets)
     proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
     if proc_codes:
-        proc_df = selected_hospital_all_data[['annee']+proc_codes].copy()
-        proc_long = []
-        for _, r in proc_df.iterrows():
-            total = max(1, sum(r[c] for c in proc_codes))
-            sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
-            other = total - sleeve - bypass
-            for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
-                proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
-        pl = pd.DataFrame(proc_long)
-        if not pl.empty:
-            st.markdown("#### Procedure Mix (share %)")
-            st.plotly_chart(px.bar(pl, x='annee', y='Share', color='Procedures', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### Hospital: Procedure Mix (share %)")
+            proc_df = selected_hospital_all_data[['annee']+proc_codes].copy()
+            proc_long = []
+            for _, r in proc_df.iterrows():
+                total = max(1, sum(r[c] for c in proc_codes))
+                sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
+                other = total - sleeve - bypass
+                for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
+                    proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
+            pl = pd.DataFrame(proc_long)
+            if not pl.empty:
+                st.plotly_chart(px.bar(pl, x='annee', y='Share', color='Procedures', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+        
+        with col2:
+            st.markdown("#### National: Procedure Mix (share %)")
+            # Create national procedure mix data
+            nat_proc_data = []
+            for year in range(2020, 2025):
+                year_data = df[df['year'] == year]
+                if not year_data.empty:
+                    total_sleeve = year_data['SLE'].sum() if 'SLE' in year_data.columns else 0
+                    total_bypass = year_data['BPG'].sum() if 'BPG' in year_data.columns else 0
+                    total_other = year_data[proc_codes].sum().sum() - total_sleeve - total_bypass
+                    total_all = total_sleeve + total_bypass + total_other
+                    
+                    if total_all > 0:
+                        for label, val in [("Sleeve", total_sleeve), ("Gastric Bypass", total_bypass), ("Other", total_other)]:
+                            nat_proc_data.append({'Year': year, 'Procedures': label, 'Share': (val / total_all) * 100})
+            
+            if nat_proc_data:
+                nat_proc_df = pd.DataFrame(nat_proc_data)
+                st.plotly_chart(px.bar(nat_proc_df, x='Year', y='Share', color='Procedures', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
     # Approaches share
     appr_codes = [c for c in SURGICAL_APPROACH_NAMES.keys() if c in selected_hospital_all_data.columns]
     if appr_codes:
-        appr_df = selected_hospital_all_data[['annee']+appr_codes].copy()
-        appr_long = []
-        for _, r in appr_df.iterrows():
-            total = max(1, sum(r[c] for c in appr_codes))
-            for code,name in SURGICAL_APPROACH_NAMES.items():
-                if code in r:
-                    appr_long.append({'annee':int(r['annee']),'Approach':name,'Share':r[code]/total*100})
-        al = pd.DataFrame(appr_long)
-        if not al.empty:
-            st.markdown("#### Surgical Approaches (share %)")
-            st.plotly_chart(px.bar(al, x='annee', y='Share', color='Approach', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### Hospital: Surgical Approaches (share %)")
+            appr_df = selected_hospital_all_data[['annee']+appr_codes].copy()
+            appr_long = []
+            for _, r in appr_df.iterrows():
+                total = max(1, sum(r[c] for c in appr_codes))
+                for code,name in SURGICAL_APPROACH_NAMES.items():
+                    if code in r:
+                        appr_long.append({'annee':int(r['annee']),'Approach':name,'Share':r[code]/total*100})
+            al = pd.DataFrame(appr_long)
+            if not al.empty:
+                st.plotly_chart(px.bar(al, x='annee', y='Share', color='Approach', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+        
+        with col2:
+            st.markdown("#### National: Surgical Approaches (share %)")
+            # Create national surgical approach data
+            nat_appr_data = []
+            for year in range(2020, 2025):
+                year_data = df[df['year'] == year]
+                if not year_data.empty:
+                    total_robotic = year_data['ROB'].sum() if 'ROB' in year_data.columns else 0
+                    total_coelio = year_data['COE'].sum() if 'COE' in year_data.columns else 0
+                    total_open = year_data['LAP'].sum() if 'LAP' in year_data.columns else 0
+                    total_all = total_robotic + total_coelio + total_open
+                    
+                    if total_all > 0:
+                        for code, name in SURGICAL_APPROACH_NAMES.items():
+                            if code in year_data.columns:
+                                total_val = year_data[code].sum()
+                                nat_appr_data.append({'Year': year, 'Approach': name, 'Share': (total_val / total_all) * 100})
+            
+            if nat_appr_data:
+                nat_appr_df = pd.DataFrame(nat_appr_data)
+                st.plotly_chart(px.bar(nat_appr_df, x='Year', y='Share', color='Approach', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
     
     # Hospital vs National Comparisons
     st.markdown("#### Hospital vs National Averages (2024)")
