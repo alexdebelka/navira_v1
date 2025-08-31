@@ -181,6 +181,17 @@ try:
             if min_distance <= threshold:
                 return cities_with_data.loc[min_distance_idx], min_distance
         return None
+
+    # Extract a 5-digit postal code from a freeform address
+    def _extract_postal_code(address: str | None) -> str | None:
+        try:
+            if not address:
+                return None
+            import re
+            m = re.search(r"\b\d{5}\b", str(address))
+            return m.group(0) if m else None
+        except Exception:
+            return None
             
     if st.session_state.get('search_triggered', False):
         user_coords = geocode_address(st.session_state.address)
@@ -206,9 +217,17 @@ try:
                 available_cities = recruitment_zones['city_code'].unique()
                 cities_with_names = cities[cities['city_code'].isin(available_cities)]
                 cities_with_names = cities_with_names[cities_with_names['city_name'].notna()]
-                nearest_city_data = _find_nearest_city_with_data(user_coords, cities_with_names, max_distance_km=radius_km)
-                if nearest_city_data:
-                    nearest_city, nf_distance = nearest_city_data
+                # Prefer same postal code if provided in address
+                postal = _extract_postal_code(st.session_state.address)
+                chosen = None
+                if postal and 'postal_code' in cities_with_names.columns:
+                    same_pc = cities_with_names[cities_with_names['postal_code'] == str(postal)]
+                    if not same_pc.empty:
+                        chosen = _find_nearest_city_with_data(user_coords, same_pc, max_distance_km=radius_km)
+                if not chosen:
+                    chosen = _find_nearest_city_with_data(user_coords, cities_with_names, max_distance_km=radius_km)
+                if chosen:
+                    nearest_city, nf_distance = chosen
                     st.session_state.neighbor_flow_city_code = nearest_city['city_code']
                     st.session_state.neighbor_flow_city_name = nearest_city['city_name']
             except Exception:
@@ -523,7 +542,16 @@ try:
                                 if user_coords:
                                     st.session_state.user_address_coords = user_coords
                             if user_coords:
-                                nearest_city_data = _find_nearest_city_with_data(user_coords, cities_with_names, max_distance_km=radius_km)
+                                # Prefer same postal code if provided
+                                postal = _extract_postal_code(st.session_state.address)
+                                chosen = None
+                                if postal and 'postal_code' in cities_with_names.columns:
+                                    same_pc = cities_with_names[cities_with_names['postal_code'] == str(postal)]
+                                    if not same_pc.empty:
+                                        chosen = _find_nearest_city_with_data(user_coords, same_pc, max_distance_km=radius_km)
+                                if not chosen:
+                                    chosen = _find_nearest_city_with_data(user_coords, cities_with_names, max_distance_km=radius_km)
+                                nearest_city_data = chosen
                                 if nearest_city_data:
                                     nearest_city, distance = nearest_city_data
                                     selected_city_code = nearest_city['city_code']
