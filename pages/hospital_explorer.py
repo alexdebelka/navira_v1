@@ -416,12 +416,24 @@ try:
                 cities_with_names = cities_with_names[cities_with_names['city_name'].notna()]
                 
                 if not cities_with_names.empty:
-                    # Add address geocoding functionality
-                    address_input = st.text_input(
-                        "📍 Enter your address or postal code:",
-                        placeholder="e.g., Paris, 75001, Bobigny, or your full address...",
-                        key="neighbor_flow_address"
+                    # Unified search system
+                    search_method = st.radio(
+                        "Choose search method:",
+                        ["📍 Address/Postal Code", "🔍 Manual City Search"],
+                        horizontal=True,
+                        key="search_method"
                     )
+                    
+                    selected_city_code = None
+                    selected_city_name = None
+                    
+                    if search_method == "📍 Address/Postal Code":
+                        # Address geocoding functionality
+                        address_input = st.text_input(
+                            "📍 Enter your address or postal code:",
+                            placeholder="e.g., Paris, 75001, Bobigny, or your full address...",
+                            key="neighbor_flow_address"
+                        )
                     
                     # Geocoding function for neighbor flow
                     @st.cache_data(show_spinner="Finding your location...")
@@ -506,18 +518,15 @@ try:
                                 **No nearby cities with patient flow data found.**
                                 - Your location: {address_input}
                                 - Searched within 50 km radius
-                                - Try a different address or use the manual city selection below
+                                - Try switching to manual city search below
                                 """)
-                                
-                                # Fallback to manual city selection
-                                st.markdown("**Or manually select a city:**")
                         else:
                             st.error(f"Could not find the address: {address_input}")
                             st.info("Try a different address, postal code, or city name.")
                     
-                    # Manual city selection as fallback
-                    st.markdown("---")
-                    st.markdown("**🔍 Or search manually for a specific city:**")
+                    elif search_method == "🔍 Manual City Search":
+                        # Manual city selection
+                        st.markdown("**🔍 Search for a specific city:**")
                     
                     # Add search functionality
                     search_term = st.text_input(
@@ -553,9 +562,11 @@ try:
                         if selected_city_display:
                             # Extract city code from selection
                             selected_city_code = selected_city_display.split(" - ")[-1]
+                            selected_city_name = selected_city_display.split(" - ")[0].split(" (")[0]
                             
                             # Store in session state for map rendering
                             st.session_state.neighbor_flow_city_code = selected_city_code
+                            st.session_state.neighbor_flow_city_name = selected_city_name
                             
                             # Show summary of what will be displayed
                             origin_city_data = cities_with_names[cities_with_names['city_code'] == selected_city_code]
@@ -585,6 +596,49 @@ try:
                                     """)
                                 else:
                                     st.warning(f"No patient flow data available for {origin_name}. This city may not have any recorded patient movements.")
+                    
+                    # Unified display section - show selected city info regardless of search method
+                    if selected_city_code and selected_city_name:
+                        st.markdown("---")
+                        st.markdown("**📊 Selected Region Information:**")
+                        
+                        # Get flow data for the selected city
+                        city_flow = recruitment_zones[recruitment_zones['city_code'] == selected_city_code]
+                        if not city_flow.empty:
+                            total_patients = city_flow['patient_count'].sum()
+                            unique_hospitals = len(city_flow)
+                            
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Selected City", selected_city_name)
+                            with col2:
+                                st.metric("Total Patients", f"{total_patients:,}")
+                            with col3:
+                                st.metric("Destination Hospitals", unique_hospitals)
+                            
+                            # Show top destinations in a more detailed format
+                            st.markdown("**🏥 Top Destination Hospitals:**")
+                            top_hospitals = city_flow.nlargest(5, 'patient_count')
+                            
+                            for idx, row in top_hospitals.iterrows():
+                                hospital_data = establishments[establishments['id'] == row['hospital_id']]
+                                if not hospital_data.empty:
+                                    hospital_name = hospital_data['name'].iloc[0]
+                                    hospital_city = hospital_data['ville'].iloc[0]
+                                    
+                                    col1, col2, col3 = st.columns([3, 2, 1])
+                                    with col1:
+                                        st.markdown(f"**{hospital_name}**")
+                                        st.caption(f"📍 {hospital_city}")
+                                    with col2:
+                                        st.metric("Patients", f"{row['patient_count']:,}")
+                                    with col3:
+                                        percentage = row.get('percentage', 0)
+                                        st.metric("Share", f"{percentage:.1f}%")
+                                    
+                                    st.markdown("---")
+                        else:
+                            st.warning(f"No patient flow data available for {selected_city_name}.")
                     else:
                         if search_term:
                             st.warning(f"No cities found matching '{search_term}'. Try a different search term.")

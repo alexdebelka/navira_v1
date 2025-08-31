@@ -27,9 +27,11 @@ This document summarizes all the new features and enhancements added to the Navi
 - **Location**: Hospital Explorer page (`pages/hospital_explorer.py`)
 - **Feature**: Interactive map showing where patients from a specific neighborhood go for treatment
 - **Functionality**:
+  - **Unified Search System**: Choose between address geocoding or manual city search
   - **Address Geocoding**: Enter any address, postal code, or city name (e.g., "Paris", "75001", "Bobigny")
   - **Automatic City Matching**: Finds the nearest city with patient flow data within 50km radius
-  - **Manual City Selection**: Fallback dropdown to choose from 1,045+ French cities with data
+  - **Manual City Search**: Search and select from 1,045+ French cities with data
+  - **Connected Search Methods**: Both search methods update the same region information
   - **Flow Visualization**: Blue arrows with arrowheads showing patient flow from origin to destination hospitals
   - **Arrow Thickness**: Based on patient volume (thicker arrows = more patients)
   - **Origin Shading**: Prominent blue shaded area (3km radius) with darker center point
@@ -38,6 +40,7 @@ This document summarizes all the new features and enhancements added to the Navi
   - **Visual Legend**: On-map legend with dark text on light background for visibility
   - **Enhanced Arrows**: Blue flow lines with triangular arrow markers showing direction
   - **Debug Information**: Clear feedback about what's being visualized and any issues
+  - **Adaptive Region Section**: Shows selected city information regardless of search method
   - **Detailed Analysis**: Comprehensive breakdown of top destinations and geographic distribution
   - **Real-time Feedback**: Shows distance to nearest city with data and patient flow summary
 - **Data Source**: `11_recruitement_zone.csv` + `COMMUNES_FRANCE_INSEE.csv` + `01_hospitals.csv` + Geocoding API
