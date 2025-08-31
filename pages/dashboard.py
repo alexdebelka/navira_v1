@@ -2,6 +2,8 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
+import folium
+from streamlit_folium import st_folium
 import plotly.express as px
 import plotly.graph_objects as go
 from navira.data_loader import get_dataframes, get_all_dataframes
@@ -68,6 +70,8 @@ try:
     competitors = all_data.get('competitors', pd.DataFrame())
     complications = all_data.get('complications', pd.DataFrame())
     procedure_details = all_data.get('procedure_details', pd.DataFrame())
+    recruitment = all_data.get('recruitment', pd.DataFrame())
+    cities = all_data.get('cities', pd.DataFrame())
 except Exception:
     st.error("Parquet data not found. Please run: make parquet")
     st.stop()
@@ -175,9 +179,124 @@ with metric_col2:
             st.markdown("##### Robotic Share Trend (%)")
             st.plotly_chart(spark2, use_container_width=True)
 
-# --- Hospital Competitors Section ---
+    
+# --- New Tabbed Layout: Activity, Complications, Geography ---
 st.markdown("---")
-st.header("🏥 Hospital Competitors")
+tab_activity, tab_complications, tab_geo = st.tabs(["📈 Activity", "🧪 Complications", "🗺️ Geography"])
+
+def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, cities_df):
+    try:
+        hosp_recr = recruitment_df[recruitment_df['hospital_id'] == str(hospital_id)]
+        if hosp_recr.empty or cities_df.empty:
+            return
+        df = hosp_recr.merge(cities_df[['city_code','latitude','longitude','city_name']], on='city_code', how='left')
+        df = df.dropna(subset=['latitude','longitude'])
+        if df.empty:
+            return
+        max_pat = df['patient_count'].max(); min_pat = df['patient_count'].min()
+        for _, z in df.iterrows():
+            norm = (z['patient_count'] - min_pat) / (max_pat - min_pat) if max_pat>min_pat else 0.5
+            radius = 500 + norm*4500
+            opacity = min(0.8, (z.get('percentage', 0) or 0) / 100 * 3)
+            folium.Circle(location=[z['latitude'], z['longitude']], radius=radius,
+                          popup=f"<b>{z.get('city_name','Unknown')}</b><br>Patients: {int(z['patient_count'])}<br>Share: {z.get('percentage',0):.1f}%",
+                          color='orange', fillColor='orange', opacity=0.6, fillOpacity=opacity).add_to(folium_map)
+    except Exception:
+        pass
+
+with tab_activity:
+    st.subheader("Activity Overview")
+    # Total surgeries and quick mix charts
+    hosp_year = selected_hospital_all_data[['annee','total_procedures_year']].dropna()
+    if not hosp_year.empty:
+        fig = px.line(hosp_year, x='annee', y='total_procedures_year', markers=True, title='Total Surgeries per Year')
+        fig.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig, use_container_width=True)
+    # Procedure share (3 buckets)
+    proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
+    if proc_codes:
+        proc_df = selected_hospital_all_data[['annee']+proc_codes].copy()
+        proc_long = []
+        for _, r in proc_df.iterrows():
+            total = max(1, sum(r[c] for c in proc_codes))
+            sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
+            other = total - sleeve - bypass
+            for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
+                proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
+        pl = pd.DataFrame(proc_long)
+        if not pl.empty:
+            st.markdown("#### Procedure Mix (share %)")
+            st.plotly_chart(px.bar(pl, x='annee', y='Share', color='Procedures', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+    # Approaches share
+    appr_codes = [c for c in SURGICAL_APPROACH_NAMES.keys() if c in selected_hospital_all_data.columns]
+    if appr_codes:
+        appr_df = selected_hospital_all_data[['annee']+appr_codes].copy()
+        appr_long = []
+        for _, r in appr_df.iterrows():
+            total = max(1, sum(r[c] for c in appr_codes))
+            for code,name in SURGICAL_APPROACH_NAMES.items():
+                if code in r:
+                    appr_long.append({'annee':int(r['annee']),'Approach':name,'Share':r[code]/total*100})
+        al = pd.DataFrame(appr_long)
+        if not al.empty:
+            st.markdown("#### Surgical Approaches (share %)")
+            st.plotly_chart(px.bar(al, x='annee', y='Share', color='Approach', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+
+with tab_complications:
+    st.subheader("Complications")
+    hosp_comp = complications[complications['hospital_id'] == str(selected_hospital_id)].sort_values('quarter_date')
+    if not hosp_comp.empty:
+        tot_proc = int(hosp_comp['procedures_count'].sum())
+        tot_comp = int(hosp_comp['complications_count'].sum())
+        rate = (tot_comp / tot_proc * 100) if tot_proc>0 else 0
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total Procedures", f"{tot_proc:,}")
+        c2.metric("Total Complications", f"{tot_comp:,}")
+        c3.metric("Overall Rate", f"{rate:.1f}%")
+        recent = hosp_comp.tail(8)
+        if not recent.empty:
+            fig = px.line(recent, x='quarter', y=recent['rolling_rate']*100, markers=True, title='12‑month Rolling Rate vs National')
+            fig.add_scatter(x=recent['quarter'], y=recent['national_average']*100, mode='lines+markers', name='National', line=dict(dash='dash'))
+            fig.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No complications data available for this hospital.")
+
+with tab_geo:
+    st.subheader("Recruitment Zone and Competitors")
+    # Map
+    try:
+        center = [float(selected_hospital_details.get('latitude')), float(selected_hospital_details.get('longitude'))]
+        if any(pd.isna(center)):
+            raise ValueError
+    except Exception:
+        center = [48.8566, 2.3522]
+    m = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
+    # Hospital marker
+    try:
+        folium.Marker(location=[selected_hospital_details['latitude'], selected_hospital_details['longitude']], popup=selected_hospital_details['name'], icon=folium.Icon(color='red', icon='hospital-o', prefix='fa')).add_to(m)
+    except Exception:
+        pass
+    _add_recruitment_zones_to_map(m, selected_hospital_id, recruitment, cities)
+    st_folium(m, width="100%", height=420, key="folium_map_dashboard")
+
+    # Competitors list
+    st.markdown("#### Nearby/Competitor Hospitals")
+    hosp_competitors = competitors[competitors['hospital_id'] == str(selected_hospital_id)]
+    if not hosp_competitors.empty:
+        comp_named = hosp_competitors.merge(establishments[['id','name','ville','statut']], left_on='competitor_id', right_on='id', how='left')
+        comp_named = comp_named.sort_values('competitor_patients', ascending=False)
+        for _, r in comp_named.head(5).iterrows():
+            c1, c2, c3 = st.columns([3,2,1])
+            c1.markdown(f"**{r.get('name','Unknown')}**")
+            c1.caption(f"📍 {r.get('ville','')} ")
+            c2.markdown(r.get('statut',''))
+            c3.metric("Patients", f"{int(r.get('competitor_patients',0)):,}")
+    else:
+        st.info("No competitor data available.")
+
+# Stop here to avoid rendering legacy sections below while we transition to the tabbed layout
+st.stop()
 
 # Get competitors for this hospital
 hospital_competitors = competitors[competitors['hospital_id'] == str(selected_hospital_id)]
