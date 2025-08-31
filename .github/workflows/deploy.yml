@@ -38,9 +38,12 @@ jobs:
           APP: /home/appuser/app
         run: |
           sudo rsync -a --delete \
-            --exclude '.git' --exclude '.venv' --exclude '.streamlit' \
+            --filter='P .venv/' \
+            --filter='P .streamlit/' \
+            --exclude='.git' \
             "$GITHUB_WORKSPACE"/ "$APP"/
           sudo chown -R appuser:appuser "$APP"
+        
 
       - name: Install deps in venv (as appuser)
         env:
