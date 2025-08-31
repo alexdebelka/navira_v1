@@ -39,6 +39,8 @@ try:
     all_data = get_all_dataframes()
     recruitment_zones = all_data.get('recruitment', pd.DataFrame())
     cities = all_data.get('cities', pd.DataFrame())
+    # Keep an unfiltered copy of establishments for cross-referencing flows
+    establishments_full = all_data.get('establishments', establishments)
     
     # Filter establishments to only include hospitals with actual data
     # First, get hospitals that have data in the annual dataset
@@ -168,6 +170,8 @@ try:
     if st.session_state.get('search_triggered', False):
         user_coords = geocode_address(st.session_state.address)
         if user_coords:
+            # Persist user coordinates for neighbor flow visualization
+            st.session_state.user_address_coords = user_coords
             temp_df = establishments.copy()
             temp_df['Distance (km)'] = temp_df.apply(lambda row: geodesic(user_coords, (row['latitude'], row['longitude'])).km, axis=1)
             temp_df = temp_df[temp_df['Distance (km)'] <= radius_km]
@@ -360,8 +364,10 @@ try:
             # Create flow line from origin to hospital with arrowheads
             # Note: Folium doesn't support arrow_style, arrow_size, arrow_color parameters
             # We'll use a regular PolyLine with thicker weight to make it more visible
+            start_lat = user_address_coords[0] if user_address_coords else origin_lat
+            start_lon = user_address_coords[1] if user_address_coords else origin_lon
             folium.PolyLine(
-                locations=[[origin_lat, origin_lon], [dest['latitude'], dest['longitude']]],
+                locations=[[start_lat, start_lon], [dest['latitude'], dest['longitude']]],
                 weight=line_width,
                 color='blue',
                 opacity=opacity,
@@ -371,7 +377,7 @@ try:
             # Add a small arrow marker at the end to show direction
             # Calculate a point near the destination to place the arrow
             import math
-            lat1, lon1 = origin_lat, origin_lon
+            lat1, lon1 = (user_address_coords if user_address_coords else (origin_lat, origin_lon))
             lat2, lon2 = dest['latitude'], dest['longitude']
             
             # Calculate midpoint for arrow placement (80% towards destination)
@@ -491,12 +497,14 @@ try:
                             axis=1
                         )
                         
-                        # Find the closest city within max_distance_km
+                        # Find the closest city within max_distance_km; relax threshold if needed
                         min_distance_idx = distances.idxmin()
                         min_distance = distances[min_distance_idx]
-                        
                         if min_distance <= max_distance_km:
                             return cities_with_data.loc[min_distance_idx], min_distance
+                        for threshold in (100, 150, 200):
+                            if min_distance <= threshold:
+                                return cities_with_data.loc[min_distance_idx], min_distance
                         return None
                     
                     # Process address input
@@ -504,6 +512,8 @@ try:
                         user_coords = geocode_for_neighbor_flow(address_input)
                         
                         if user_coords:
+                            # Persist user coordinates for flow map
+                            st.session_state.user_address_coords = user_coords
                             # Find nearest city with recruitment data
                             nearest_city_data = find_nearest_city_with_data(user_coords, cities_with_names)
                             
@@ -532,7 +542,7 @@ try:
                                     # Get hospital names
                                     hospital_names = []
                                     for _, row in top_hospitals.iterrows():
-                                        hospital_data = establishments[establishments['id'] == row['hospital_id']]
+                                        hospital_data = establishments_full[establishments_full['id'] == row['hospital_id']]
                                         if not hospital_data.empty:
                                             hospital_name = hospital_data['name'].iloc[0]
                                         else:
@@ -646,7 +656,7 @@ try:
                             top_hospitals = city_flow.nlargest(5, 'patient_count')
                             
                             for idx, row in top_hospitals.iterrows():
-                                hospital_data = establishments[establishments['id'] == row['hospital_id']]
+                                hospital_data = establishments_full[establishments_full['id'] == row['hospital_id']]
                                 if not hospital_data.empty:
                                     hospital_name = hospital_data['name'].iloc[0]
                                     hospital_city = hospital_data['ville'].iloc[0]
@@ -750,7 +760,7 @@ try:
                 # Get user coordinates if available
                 user_coords = st.session_state.get('user_address_coords')
                 
-                add_neighbor_flow_to_map(m, city_code_to_use, recruitment_zones, cities, establishments, user_coords)
+                add_neighbor_flow_to_map(m, city_code_to_use, recruitment_zones, cities, establishments_full, user_coords)
                 
                 # Add legend for the neighbor flow visualization
                 legend_html = '''
@@ -790,7 +800,7 @@ try:
             if not city_flow.empty:
                 # Merge with hospital and city data for display
                 flow_with_details = city_flow.merge(
-                    establishments[['id', 'name', 'ville', 'statut']], 
+                    establishments_full[['id', 'name', 'ville', 'statut']], 
                     left_on='hospital_id', 
                     right_on='id', 
                     how='left'
