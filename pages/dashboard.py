@@ -353,10 +353,10 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
         if heat_points:
             HeatMap(
                 heat_points,
-                radius=22,
-                blur=18,
+                radius=20,
+                blur=15,
                 max_zoom=12,
-                min_opacity=0.25
+                min_opacity=0.05
             ).add_to(folium_map)
             
     except Exception as e:

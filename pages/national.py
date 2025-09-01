@@ -109,7 +109,7 @@ with st.expander("🗺️ National Recruitment Heatmap (All Hospitals)", expande
                     for _, r in agg.iterrows()
                 ]
                 if heat_points:
-                    HeatMap(heat_points, radius=20, blur=16, max_zoom=12, min_opacity=0.25).add_to(m)
+                    HeatMap(heat_points, radius=18, blur=14, max_zoom=12, min_opacity=0.05).add_to(m)
                     st_folium(m, width="100%", height=520, key="national_recruitment_heatmap")
             else:
                 st.info("No recruitment rows with coordinates available.")
