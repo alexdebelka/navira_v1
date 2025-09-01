@@ -341,6 +341,29 @@ with col2:
     st.markdown(f"<span style='color: grey; font-size: 0.9em; display:block; margin-top:-8px;'>{private_not_profit_pct}% of total</span>", unsafe_allow_html=True)
 
 # Second block: Stacked bar chart
+# Calculate hospital labels statistics
+try:
+    total_hospitals = sum(sum(label_breakdown[cat].values()) for cat in label_breakdown.keys())
+    university_hospitals = sum(label_breakdown.get('Public – Univ.', {}).values()) if 'Public – Univ.' in label_breakdown else 0
+    private_hospitals = sum(label_breakdown.get('Private – For-profit', {}).values()) + sum(label_breakdown.get('Private – Not-for-profit', {}).values())
+    
+    university_labeled = (label_breakdown.get('Public – Univ.', {}).get('SOFFCO Label', 0) + 
+                         label_breakdown.get('Public – Univ.', {}).get('CSO Label', 0) + 
+                         label_breakdown.get('Public – Univ.', {}).get('Both', 0)) if 'Public – Univ.' in label_breakdown else 0
+    private_labeled = (label_breakdown.get('Private – For-profit', {}).get('SOFFCO Label', 0) + 
+                      label_breakdown.get('Private – For-profit', {}).get('CSO Label', 0) + 
+                      label_breakdown.get('Private – For-profit', {}).get('Both', 0) +
+                      label_breakdown.get('Private – Not-for-profit', {}).get('SOFFCO Label', 0) + 
+                      label_breakdown.get('Private – Not-for-profit', {}).get('CSO Label', 0) + 
+                      label_breakdown.get('Private – Not-for-profit', {}).get('Both', 0))
+    
+    university_pct = (university_labeled / university_hospitals * 100) if university_hospitals > 0 else 0
+    private_pct = (private_labeled / private_hospitals * 100) if private_hospitals > 0 else 0
+    
+    st.markdown(f"**{university_pct:.1f}% of university hospitals have SOFFCO and CSO labels, and {private_pct:.1f}% of private hospitals have these labels**")
+except Exception:
+    pass
+
 st.markdown(
     """
     <div class=\"nv-info-wrap\">
@@ -557,10 +580,7 @@ procedure_totals_2020_2024 = get_2020_2024_procedure_totals(df)
 # Toggle between 2020-2024 totals and 2024 only
 toggle_2024_only = st.toggle("Show 2024 data only", value=False)
 
-# Two-column layout
-col1, col2 = st.columns([2, 1])
-
-with col1:
+# Single column layout (removed second column)
     if not toggle_2024_only:
         st.markdown(
             """
@@ -623,7 +643,7 @@ with col1:
                 'Value': other_total,
                 'Percentage': percentage
             })
-        chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=False)
+        chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=True)  # Reverse order - highest first
         y_title = "Total count (2020-2024)"
         chart_title = "Total Procedures by Type (2020-2024)"
         hover_tmpl = '<b>%{x}</b><br>Total 2020-2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
@@ -689,7 +709,7 @@ with col1:
                 'Value': other_total,
                 'Percentage': percentage
             })
-        chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=False)
+        chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=True)  # Reverse order - highest first
         y_title = "Total count (2024)"
         chart_title = "Total Procedures by Type (2024)"
         hover_tmpl = '<b>%{x}</b><br>Total 2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
@@ -698,6 +718,7 @@ with col1:
 
         # Use a single blue color for all bars to emphasize totals
         # Build label: show one decimal for percentages <1%, otherwise whole number
+        # Ensure "Other" category shows only one percentage
         chart_df = chart_df.assign(Label=chart_df['Percentage'].apply(lambda p: f"{p:.1f}%" if p < 1 else f"{p:.0f}%"))
 
         fig = px.bar(
@@ -879,35 +900,7 @@ with col1:
             st.info("Procedure trends chart unavailable - insufficient data or missing columns.")
 
 
-with col2:
-    if not toggle_2024_only:
-        st.subheader("2020-2024 Totals")
-        # Sleeve Gastrectomies 2020-2024
-        sleeve_total = procedure_totals_2020_2024.get('SLE', 0)
-        st.metric(
-            "Sleeve Gastrectomies (2020-2024)",
-            f"{int(round(sleeve_total)):,}"
-        )
-        # Total procedures 2020-2024
-        total_all = procedure_totals_2020_2024.get('total_all', 0)
-        st.metric(
-            "Total Procedures (2020-2024)",
-            f"{int(round(total_all)):,}"
-        )
-    else:
-        st.subheader("2024 Totals")
-        # Sleeve Gastrectomies in 2024
-        sleeve_2024 = procedure_totals_2024.get('SLE', 0)
-        st.metric(
-            "Sleeve Gastrectomies (2024)",
-            f"{int(round(sleeve_2024)):,}"
-        )
-        # Total procedures in 2024
-        total_2024 = procedure_totals_2024.get('total_all', 0)
-        st.metric(
-            "Total Procedures (2024)",
-            f"{int(round(total_2024)):,}"
-        )
+
 
 st.caption("Data computed across eligible hospital-years (≥25 procedures per year).")
 
@@ -955,10 +948,7 @@ if approach_mix_2024:
         total_cnt = max(1, int(pie_df['Count'].sum()))
         pie_df['PctLabel'] = (pie_df['Count'] / total_cnt * 100).round(0).astype(int).astype(str) + '%'
 
-        # Create side-by-side comparison
-        col1, col2 = st.columns([2, 1])  # National graphs larger (2), Hospital comparison smaller (1)
-        
-        with col1:
+        # Single column layout (removed second column)
             st.markdown("#### National: Surgical Approach Distribution")
             fig = px.pie(
                 pie_df,
@@ -970,12 +960,8 @@ if approach_mix_2024:
             
             fig.update_layout(
                 height=400,
-                showlegend=True,
-                font=dict(size=12),
-                legend=dict(
-                    itemclick=False,
-                    itemdoubleclick=False
-                )
+                showlegend=False,  # Remove legend
+                font=dict(size=12)
             )
             
             fig.update_traces(
@@ -1010,9 +996,7 @@ if approach_mix_2024:
             pass
 else:
     st.info("No approach data available for 2024.")
-# Two-column layout for trends and pie chart
-col1, col2 = st.columns([2, 1])
-with col1:
+# Single column layout for trends (removed second column)
     st.markdown(
         """
         <div class=\"nv-info-wrap\">
@@ -1054,7 +1038,7 @@ with col1:
         yaxis_title="Number of Robotic Surgeries",
         hovermode='x unified',
         height=400,
-        showlegend=True,
+        showlegend=False,  # Remove legend
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         font=dict(size=12),
@@ -1218,19 +1202,26 @@ with st.expander("🗺️ 1. Geographic Analysis - Regional Robotic Adoption"):
     """)
     
     if robotic_geographic['regions'] and len(robotic_geographic['regions']) > 0:
+        # Sort by percentage in descending order (highest first)
+        sorted_data = sorted(zip(robotic_geographic['regions'], robotic_geographic['percentages'], robotic_geographic['robotic_counts']), 
+                            key=lambda x: x[1], reverse=True)
+        regions_sorted = [x[0] for x in sorted_data]
+        percentages_sorted = [x[1] for x in sorted_data]
+        robotic_counts_sorted = [x[2] for x in sorted_data]
+        
         fig = px.bar(
-            x=robotic_geographic['percentages'],
-            y=robotic_geographic['regions'],
+            x=percentages_sorted,
+            y=regions_sorted,
             orientation='h',
             title="Robotic Surgery Adoption by Region (2024)",
-            color=robotic_geographic['percentages'],
+            color=percentages_sorted,
             color_continuous_scale='Oranges',
-            text=[f"{p:.1f}%" for p in robotic_geographic['percentages']]
+            text=[f"{p:.1f}%" for p in percentages_sorted]
         )
         
         fig.update_layout(
             xaxis_title="Robotic Surgery Percentage (%)",
-            yaxis_title="Region",
+            yaxis_title="",  # Remove y-axis title
             height=440,
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
@@ -1241,15 +1232,14 @@ with st.expander("🗺️ 1. Geographic Analysis - Regional Robotic Adoption"):
         
         fig.update_traces(
             hovertemplate='<b>%{y}</b><br>Percentage: %{x:.1f}%<br>Robotic: %{customdata}<extra></extra>',
-            customdata=robotic_geographic['robotic_counts']
+            customdata=robotic_counts_sorted
         )
         fig.update_traces(textposition='outside', cliponaxis=False)
         
         st.plotly_chart(fig, use_container_width=True)
         try:
-            top_idx = int(pd.Series(robotic_geographic['percentages']).idxmax())
-            top_region = robotic_geographic['regions'][top_idx]
-            top_pct = robotic_geographic['percentages'][top_idx]
+            top_region = regions_sorted[0]
+            top_pct = percentages_sorted[0]
             with st.expander("What to look for and key findings"):
                 st.markdown(f"""
                 **What to look for:**
@@ -1299,7 +1289,7 @@ with st.expander("🏥 2. Affiliation Analysis"):
     if merged_x:
         fig_merge = px.bar(x=merged_x, y=merged_y, color=merged_color, title="Robotic Adoption by Sector and Affiliation (2024)",
                            color_discrete_map={'Sector':'#34a853','Affiliation':'#db4437'})
-        fig_merge.update_layout(height=380, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis_title=None, yaxis_title='Robotic Surgery Percentage (%)')
+        fig_merge.update_layout(height=380, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis_title=None, yaxis_title='Robotic Surgery Percentage (%)', showlegend=False)
         fig_merge.update_traces(hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<extra></extra>', marker_line_width=0)
         st.plotly_chart(fig_merge, use_container_width=True)
         with st.expander("What to look for and key findings"):
@@ -1366,7 +1356,8 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
                 y='hospital_pct',
                 color='volume_category',
                 opacity=0.65,
-                title='Hospital volume (continuous) vs robotic %'
+                title='Hospital volume (continuous) vs robotic %',
+                hover_data=['hospital_name', 'hospital_id']
             )
             # Linear trendline removed per request
             cont.update_layout(
@@ -1375,6 +1366,9 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
                 height=420,
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)'
+            )
+            cont.update_traces(
+                hovertemplate='<b>%{customdata[0]}</b><br>Hospital ID: %{customdata[1]}<br>Volume: %{x} surgeries<br>Robotic: %{y:.1f}%<extra></extra>'
             )
             st.plotly_chart(cont, use_container_width=True)
 
@@ -1475,6 +1469,7 @@ if not complications.empty:
     
     # Hospital performance trends (“spaghetti” plot)
     st.markdown("#### Hospital Performance Over Time")
+    st.markdown("*Note: 'Top 100 by volume' means we show the 100 hospitals with the highest total procedure counts to ensure the chart displays meaningful trends from high-volume centers.*")
     
     hosp_trends = complications.copy()
     if not hosp_trends.empty:
@@ -1514,13 +1509,13 @@ if not complications.empty:
                 ))
             
             spaghetti.update_layout(
-                title='Hospital 12‑month Rolling Complication Rates (top 100 by volume)',
+                title='Hospital 12‑month Rolling Complication Rates (top 100 hospitals by procedure volume)',
                 xaxis_title='Quarter',
                 yaxis_title='Complication Rate (%)',
                 height=420,
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
-                showlegend=True
+                showlegend=False  # Remove legend
             )
             st.plotly_chart(spaghetti, use_container_width=True)
 

@@ -448,24 +448,54 @@ with tab_complications:
         c1.metric("Total Procedures", f"{tot_proc:,}")
         c2.metric("Total Complications", f"{tot_comp:,}")
         c3.metric("Overall Rate", f"{rate:.1f}%")
+        
+        # Calculate national averages for comparison
+        @st.cache_data(show_spinner=False)
+        def calculate_national_complication_averages():
+            if complications.empty:
+                return pd.DataFrame()
+            
+            # Calculate national averages by quarter
+            national_avg = complications.groupby('quarter_date').agg({
+                'complications_count': 'sum',
+                'procedures_count': 'sum'
+            }).reset_index()
+            
+            national_avg['national_rate'] = (national_avg['complications_count'] / national_avg['procedures_count'] * 100)
+            national_avg['quarter'] = national_avg['quarter_date'].dt.strftime('%YQ%q')
+            
+            return national_avg
+        
+        national_avg_data = calculate_national_complication_averages()
+        
         # Show trend with available data (rolling rate preferred, fallback to quarterly rate)
         recent = hosp_comp.tail(8).copy()
         if not recent.empty:
             # Try rolling rate first, fallback to quarterly rate
-            if recent['rolling_rate'].notna().any():
+            if 'rolling_rate' in recent.columns and recent['rolling_rate'].notna().any():
                 recent['rate_pct'] = pd.to_numeric(recent['rolling_rate'], errors='coerce') * 100
                 rate_type = '12‑month Rolling Rate'
-            else:
+            elif 'complication_rate' in recent.columns:
                 recent['rate_pct'] = pd.to_numeric(recent['complication_rate'], errors='coerce') * 100
                 rate_type = 'Quarterly Rate'
+            else:
+                # Calculate rate manually if columns don't exist
+                recent['rate_pct'] = (recent['complications_count'] / recent['procedures_count'] * 100)
+                rate_type = 'Quarterly Rate'
             
-            recent['national_pct'] = pd.to_numeric(recent['national_average'], errors='coerce') * 100
+            # Merge with national averages
+            if not national_avg_data.empty:
+                recent = recent.merge(national_avg_data[['quarter_date', 'national_rate']], 
+                                    on='quarter_date', how='left')
+                recent['national_pct'] = recent['national_rate']
+            else:
+                recent['national_pct'] = 0  # Fallback if no national data
             
             # Only plot if we have valid data with at least 2 data points
             valid_data = recent[recent['rate_pct'].notna()]
             if len(valid_data) >= 2:
                 fig = px.line(valid_data, x='quarter', y='rate_pct', markers=True, 
-                             title=f'{rate_type} vs National', labels={'rate_pct':'Rate (%)'})
+                             title=f'{rate_type} vs National (2020-2024)', labels={'rate_pct':'Rate (%)'})
                 fig.add_scatter(x=valid_data['quarter'], y=valid_data['national_pct'], 
                                mode='lines+markers', name='National', line=dict(dash='dash'))
                 fig.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
@@ -479,12 +509,15 @@ with tab_complications:
                 with col1:
                     st.metric("Hospital Rate", f"{single_point['rate_pct']:.1f}%")
                 with col2:
-                    st.metric("National Average", f"{single_point['national_pct']:.1f}%")
+                    national_val = single_point.get('national_pct', 0)
+                    if pd.isna(national_val):
+                        national_val = 0
+                    st.metric("National Average", f"{national_val:.1f}%")
                 
                 # Create a simple bar comparison
                 comparison_data = pd.DataFrame({
                     'Metric': ['Hospital', 'National'],
-                    'Rate (%)': [single_point['rate_pct'], single_point['national_pct']]
+                    'Rate (%)': [single_point['rate_pct'], national_val]
                 })
                 
                 fig = px.bar(comparison_data, x='Metric', y='Rate (%)', 
