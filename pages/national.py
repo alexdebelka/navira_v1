@@ -647,11 +647,10 @@ with col1:
         # Add "Other" category for grouped procedures
         if other_total > 0:
             other_percentage = (other_total / total_procedures) * 100 if total_procedures > 0 else 0
-            percentage = round(other_percentage, 1) if other_percentage < 1 else round(other_percentage)
             tot_data.append({
                 'Procedure': 'Other',
                 'Value': other_total,
-                'Percentage': percentage
+                'Percentage': other_percentage  # Store raw percentage, format later
             })
         chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=False)
         y_title = "Total count (2020-2024)"
@@ -713,11 +712,10 @@ with col1:
         # Add "Other" category for grouped procedures
         if other_total > 0:
             other_percentage = (other_total / total_procedures) * 100 if total_procedures > 0 else 0
-            percentage = round(other_percentage, 1) if other_percentage < 1 else round(other_percentage)
             tot_data.append({
                 'Procedure': 'Other',
                 'Value': other_total,
-                'Percentage': percentage
+                'Percentage': other_percentage  # Store raw percentage, format later
             })
         chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=False)
         y_title = "Total count (2024)"
@@ -1321,11 +1319,34 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
             dist_df = pd.DataFrame()
         if not dist_df.empty:
             st.subheader("Continuous relationship: volume vs robotic %")
+            
+            # Add hospital names to the dataframe for hover information
+            try:
+                establishments, _ = get_dataframes()
+                if 'id' in establishments.columns and 'name' in establishments.columns:
+                    # Ensure consistent data types
+                    establishments['id'] = establishments['id'].astype(str)
+                    dist_df['hospital_id'] = dist_df['hospital_id'].astype(str)
+                    
+                    # Merge hospital names
+                    dist_df = dist_df.merge(
+                        establishments[['id', 'name']].drop_duplicates(subset=['id']),
+                        left_on='hospital_id',
+                        right_on='id',
+                        how='left'
+                    )
+                    dist_df['hospital_name'] = dist_df['name'].fillna('Unknown Hospital')
+                else:
+                    dist_df['hospital_name'] = 'Hospital ' + dist_df['hospital_id'].astype(str)
+            except Exception:
+                dist_df['hospital_name'] = 'Hospital ' + dist_df['hospital_id'].astype(str)
+            
             cont = px.scatter(
                 dist_df,
                 x='total_surgeries',
                 y='hospital_pct',
                 color='volume_category',
+                hover_data=['hospital_name'],
                 opacity=0.65,
                 title='Hospital volume (continuous) vs robotic %'
             )
@@ -1437,16 +1458,14 @@ if not complications.empty:
     # Hospital performance trends ("spaghetti" plot)
     st.markdown("#### Hospital Performance Over Time")
     
-    st.info("💡 **About 'top 100 by volume'**: To ensure readability and performance, the spaghetti plot shows only the 100 hospitals with the highest total procedure volume. This represents the largest and most active bariatric surgery centers while maintaining chart clarity.")
+    st.info("💡 **About this chart**: The spaghetti plot shows complication rate trends for all hospitals performing bariatric surgery. Each thin line represents one hospital's 12-month rolling complication rate, while the bold orange line shows the national average.")
     
     hosp_trends = complications.copy()
     if not hosp_trends.empty:
         # Build per-hospital series of rolling rates
         hosp_trends['rolling_pct'] = pd.to_numeric(hosp_trends['rolling_rate'], errors='coerce') * 100
-        # Keep reasonable number of lines for performance: top 100 hospitals by total procedures
-        totals = hosp_trends.groupby('hospital_id')['procedures_count'].sum().sort_values(ascending=False)
-        keep_ids = set(totals.head(100).index.astype(str))
-        sub = hosp_trends[hosp_trends['hospital_id'].astype(str).isin(keep_ids)].copy()
+        # Show all hospitals in the complications trends
+        sub = hosp_trends.copy()
         if not sub.empty:
             # Create spaghetti plot using go.Figure for opacity control
             spaghetti = go.Figure()
@@ -1477,7 +1496,7 @@ if not complications.empty:
                 ))
             
             spaghetti.update_layout(
-                title='Hospital 12‑month Rolling Complication Rates (top 100 by volume)',
+                title='Hospital 12‑month Rolling Complication Rates (all hospitals)',
                 xaxis_title='Quarter',
                 yaxis_title='Complication Rate (%)',
                 height=420,
