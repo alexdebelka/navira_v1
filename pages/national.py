@@ -652,7 +652,7 @@ with col1:
                 'Value': other_total,
                 'Percentage': other_percentage  # Store raw percentage, format later
             })
-        chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=False)
+        chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=True)
         y_title = "Total count (2020-2024)"
         chart_title = "Total Procedures by Type (2020-2024)"
         hover_tmpl = '<b>%{x}</b><br>Total 2020-2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
@@ -717,7 +717,7 @@ with col1:
                 'Value': other_total,
                 'Percentage': other_percentage  # Store raw percentage, format later
             })
-        chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=False)
+        chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=True)
         y_title = "Total count (2024)"
         chart_title = "Total Procedures by Type (2024)"
         hover_tmpl = '<b>%{x}</b><br>Total 2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
@@ -1189,7 +1189,6 @@ with st.expander("🗺️ 1. Geographic Analysis - Regional Robotic Adoption"):
         
         fig.update_layout(
             xaxis_title="Robotic Surgery Percentage (%)",
-            yaxis_title="Region",
             height=440,
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
