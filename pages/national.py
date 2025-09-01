@@ -6,6 +6,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import sys
 import os
+import folium
+from folium.plugins import HeatMap
+from streamlit_folium import st_folium
 
 # Add the parent directory to the Python path to import lib
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -44,6 +47,8 @@ df = load_and_prepare_data()
 # Load additional datasets
 from navira.data_loader import get_all_dataframes
 all_data = get_all_dataframes()
+recruitment = all_data.get('recruitment', pd.DataFrame())
+french_cities = all_data.get('cities', pd.DataFrame())
 complications = all_data.get('complications', pd.DataFrame())
 procedure_details = all_data.get('procedure_details', pd.DataFrame())
 
@@ -83,6 +88,35 @@ national_averages = calculate_national_averages(df)
 
 # --- Page Title and Notice ---
 st.title("🇫🇷 National Overview")
+# --- National Recruitment Heatmap ---
+with st.expander("🗺️ National Recruitment Heatmap (All Hospitals)", expanded=False):
+    try:
+        if not recruitment.empty and not french_cities.empty:
+            rec = recruitment.copy()
+            rec['city_code'] = rec['city_code'].astype(str)
+            cities = french_cities[['city_code','latitude','longitude']].copy()
+            cities['city_code'] = cities['city_code'].astype(str)
+            rec = rec.merge(cities, on='city_code', how='left')
+            rec = rec.dropna(subset=['latitude','longitude','patient_count'])
+            if not rec.empty:
+                # Center on France
+                m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
+                # Aggregate weight by city across all hospitals
+                agg = rec.groupby(['city_code','latitude','longitude'], as_index=False)['patient_count'].sum()
+                max_pat = float(agg['patient_count'].max() or 1)
+                heat_points = [
+                    [float(r['latitude']), float(r['longitude']), float(r['patient_count'])/max_pat]
+                    for _, r in agg.iterrows()
+                ]
+                if heat_points:
+                    HeatMap(heat_points, radius=20, blur=16, max_zoom=12, min_opacity=0.25).add_to(m)
+                    st_folium(m, width="100%", height=520, key="national_recruitment_heatmap")
+            else:
+                st.info("No recruitment rows with coordinates available.")
+        else:
+            st.info("Recruitment or city coordinate data not available.")
+    except Exception as e:
+        st.warning(f"Could not render national recruitment heatmap: {str(e)}")
 
 # Track page view
 try:

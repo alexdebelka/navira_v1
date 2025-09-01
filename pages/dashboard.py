@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import folium
+from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 import plotly.express as px
 import plotly.graph_objects as go
@@ -236,8 +237,8 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
             st.info("No recruitment data found for this hospital.")
             return
         
-        # Sort by patient count and take top 5 zones
-        hosp_recr = hosp_recr.sort_values('patient_count', ascending=False).head(5)
+        # Sort by patient count and take top N zones for heatmap (broader view)
+        hosp_recr = hosp_recr.sort_values('patient_count', ascending=False).head(200)
             
         if df_cities.empty:
             st.info("No city coordinate data available.")
@@ -342,24 +343,20 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
             st.warning("No cities with coordinates found. Recruitment zones cannot be displayed.")
             return
             
-        # Render recruitment zones
-        st.success(f"Rendering top {len(df)} recruitment zones")
-        max_pat = df['patient_count'].max()
-        min_pat = df['patient_count'].min()
-        
-        for _, z in df.iterrows():
-            norm = (z['patient_count'] - min_pat) / (max_pat - min_pat) if max_pat > min_pat else 0.5
-            radius = 500 + norm * 4500
-            opacity = min(0.8, (z.get('percentage', 0) or 0) / 100 * 3)
-            
-            folium.Circle(
-                location=[z['latitude'], z['longitude']], 
-                radius=radius,
-                popup=f"<b>{z.get('city_name','Unknown')}</b><br>Patients: {int(z['patient_count'])}<br>Share: {z.get('percentage',0):.1f}%",
-                color='orange', 
-                fillColor='orange', 
-                opacity=0.6, 
-                fillOpacity=opacity
+        # Render heat map of recruitment zones (weights by patient_count)
+        st.success(f"Rendering recruitment heatmap from {len(df)} zones")
+        max_pat = float(df['patient_count'].max() or 1)
+        heat_points = [
+            [float(r['latitude']), float(r['longitude']), float(r['patient_count']) / max_pat]
+            for _, r in df.iterrows()
+        ]
+        if heat_points:
+            HeatMap(
+                heat_points,
+                radius=22,
+                blur=18,
+                max_zoom=12,
+                min_opacity=0.25
             ).add_to(folium_map)
             
     except Exception as e:
@@ -581,13 +578,54 @@ with tab_geo:
     except Exception:
         center = [48.8566, 2.3522]
     m = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
-    # Hospital marker
+    # Hospital marker (highlight as primary)
     try:
-        folium.Marker(location=[selected_hospital_details['latitude'], selected_hospital_details['longitude']], popup=selected_hospital_details['name'], icon=folium.Icon(color='red', icon='hospital-o', prefix='fa')).add_to(m)
+        folium.CircleMarker(
+            location=[selected_hospital_details['latitude'], selected_hospital_details['longitude']],
+            radius=16,
+            color='#d62728',
+            fill=True,
+            fill_color='#d62728',
+            fill_opacity=0.9,
+            popup=f"<b>{selected_hospital_details['name']}</b><br><i>Selected hospital</i>"
+        ).add_to(m)
     except Exception:
         pass
+
+    # Add recruitment heatmap
     _add_recruitment_zones_to_map(m, selected_hospital_id, recruitment, cities)
-    st_folium(m, width="100%", height=420, key="folium_map_dashboard")
+
+    # Add top-5 competitors as ranked markers
+    try:
+        hosp_competitors = competitors[competitors['hospital_id'] == str(selected_hospital_id)]
+        if not hosp_competitors.empty:
+            comp_named = hosp_competitors.merge(
+                establishments[['id','name','ville','statut','latitude','longitude']].copy(),
+                left_on='competitor_id', right_on='id', how='left'
+            )
+            comp_named = comp_named.dropna(subset=['latitude','longitude'])
+            comp_named = comp_named.sort_values('competitor_patients', ascending=False).head(5).reset_index(drop=True)
+            # Size by rank (1 largest)
+            size_by_rank = {0:14, 1:12, 2:10, 3:9, 4:8}
+            color = '#1f77b4'
+            for idx, r in comp_named.iterrows():
+                radius = size_by_rank.get(idx, 8)
+                name = r.get('name', 'Competitor')
+                pts = int(r.get('competitor_patients', 0) or 0)
+                popup = f"<b>{name}</b><br>Rank: {idx+1}<br>Patients: {pts:,}"
+                folium.CircleMarker(
+                    location=[float(r['latitude']), float(r['longitude'])],
+                    radius=radius,
+                    color=color,
+                    fill=True,
+                    fill_color=color,
+                    fill_opacity=0.75,
+                    popup=popup
+                ).add_to(m)
+    except Exception:
+        pass
+
+    st_folium(m, width="100%", height=460, key="folium_map_dashboard")
 
     # Competitors list
     st.markdown("#### Nearby/Competitor Hospitals")
