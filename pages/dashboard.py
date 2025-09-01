@@ -439,7 +439,7 @@ with tab_activity:
 
 with tab_complications:
     st.subheader("Complications")
-    hosp_comp = complications[complications['hospital_id'] == str(selected_hospital_id)].sort_values('quarter_date')
+    hosp_comp = _get_hospital_complications(complications, str(selected_hospital_id)).sort_values('quarter_date')
     if not hosp_comp.empty:
         tot_proc = int(hosp_comp['procedures_count'].sum())
         tot_comp = int(hosp_comp['complications_count'].sum())
@@ -689,10 +689,8 @@ else:
 # --- Complications Statistics Section ---
 st.markdown("---")
 st.header("📊 Complications Statistics")
-
 # Get complications data for this hospital
-hospital_complications = complications[complications['hospital_id'] == str(selected_hospital_id)]
-
+hospital_complications = _get_hospital_complications(complications, str(selected_hospital_id))
 if not hospital_complications.empty:
     # Sort by quarter date
     hospital_complications = hospital_complications.sort_values('quarter_date')
@@ -810,7 +808,7 @@ if not hospital_complications.empty:
                 st.info(f"📈 **Recent Trend**: Complication rate is {trend_direction} (change of {trend_change*100:.1f} percentage points from previous quarter)")
 
 else:
-    st.info("No complications data available for this hospital.")
+    st.info("No complications statistics available for this hospital.")
 
 st.markdown("---")
 st.header("Annual Statistics")
@@ -1497,3 +1495,40 @@ else:
     - Primary vs revisional robotic procedures breakdown
     - Detailed temporal trends by procedure type and approach
     """)
+
+# --- Helper: robust complications lookup by hospital id ---
+@st.cache_data(show_spinner=False)
+def _get_hospital_complications(complications_df: pd.DataFrame, hospital_id: str) -> pd.DataFrame:
+    try:
+        if complications_df is None or complications_df.empty:
+            return pd.DataFrame()
+        df = complications_df.copy()
+        if 'hospital_id' not in df.columns:
+            return pd.DataFrame()
+        # Normalize types/strings
+        df['hospital_id'] = df['hospital_id'].astype(str).str.strip()
+        hid = str(hospital_id).strip()
+        # Exact string match first
+        exact = df[df['hospital_id'] == hid]
+        if not exact.empty:
+            return exact
+        # Try zero-pad to 9 digits (common FINESS length)
+        if hid.isdigit():
+            pad9 = hid.zfill(9)
+            pad_match = df[df['hospital_id'].str.zfill(9) == pad9]
+            if not pad_match.empty:
+                return pad_match
+        # Remove non-digits and compare numeric-only identifiers
+        import re
+        df['_hid_digits'] = df['hospital_id'].apply(lambda s: re.sub(r'\D+', '', s))
+        hid_digits = re.sub(r'\D+', '', hid)
+        digit_match = df[df['_hid_digits'] == hid_digits]
+        if not digit_match.empty:
+            return digit_match.drop(columns=['_hid_digits'])
+        # Fallback: case-insensitive compare
+        ci = df[df['hospital_id'].str.lower() == hid.lower()]
+        if not ci.empty:
+            return ci
+        return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()

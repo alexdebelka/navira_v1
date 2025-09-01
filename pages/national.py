@@ -1189,6 +1189,7 @@ with st.expander("🗺️ 1. Geographic Analysis - Regional Robotic Adoption"):
         
         fig.update_layout(
             xaxis_title="Robotic Surgery Percentage (%)",
+            yaxis_title="",
             height=440,
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
