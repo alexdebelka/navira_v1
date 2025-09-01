@@ -774,19 +774,6 @@ with tab_geo:
     except Exception:
         center = [48.8566, 2.3522]
     m = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
-    # Hospital marker (highlight as primary)
-    try:
-        folium.CircleMarker(
-            location=[selected_hospital_details['latitude'], selected_hospital_details['longitude']],
-            radius=16,
-            color='#d62728',
-            fill=True,
-            fill_color='#d62728',
-            fill_opacity=0.9,
-            popup=f"<b>{selected_hospital_details['name']}</b><br><i>Selected hospital</i>"
-        ).add_to(m)
-    except Exception:
-        pass
 
     # Add recruitment layer
     if map_mode.startswith("Heatmap"):
@@ -797,6 +784,20 @@ with tab_geo:
         _add_recruitment_choropleth_region_to_map(m, selected_hospital_id, recruitment)
     else:
         _add_recruitment_choropleth_commune_to_map(m, selected_hospital_id, recruitment)
+
+    # Hospital marker (added AFTER layers to ensure it stays on top)
+    try:
+        folium.CircleMarker(
+            location=[selected_hospital_details['latitude'], selected_hospital_details['longitude']],
+            radius=16,
+            color='#d62728',
+            fill=True,
+            fill_color='#d62728',
+            fill_opacity=0.95,
+            popup=f"<b>{selected_hospital_details['name']}</b><br><i>Selected hospital</i>"
+        ).add_to(m)
+    except Exception:
+        pass
 
     # Add top-5 competitors as ranked markers
     try:
