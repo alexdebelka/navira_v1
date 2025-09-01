@@ -172,7 +172,7 @@ with st.expander("🗺️ National Recruitment Choropleth – Department", expan
                         data=dep,
                         columns=['dept_code', 'patient_count'],
                         key_on='feature.properties.code',
-                        fill_color='YlOrRd',
+                        fill_color='YlGn',
                         fill_opacity=0.7,
                         line_opacity=0.2,
                         nan_fill_opacity=0,
@@ -274,12 +274,15 @@ with st.expander("🗺️ National Recruitment Choropleth – Commune (top)", ex
             rec['city_code'] = (
                 rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
             )
+            # Recruitment codes are postal codes; map to communes by postal list
+            rec['postal'] = rec['city_code'].str.replace(r'\D+', '', regex=True).str.zfill(5)
             agg = (
-                rec.groupby('city_code', as_index=False)['patient_count'].sum()
+                rec[rec['postal'].str.len() == 5]
+                .groupby('postal', as_index=False)['patient_count'].sum()
                 .sort_values('patient_count', ascending=False)
                 .head(1000)  # limit for performance
             )
-            codes = set(agg['city_code'].astype(str))
+            codes = set(agg['postal'].astype(str))
             # Fetch communes geojson
             def _get_fr_communes_geojson():
                 try:
@@ -292,15 +295,32 @@ with st.expander("🗺️ National Recruitment Choropleth – Commune (top)", ex
             gj_all = _get_fr_communes_geojson()
             if gj_all:
                 feats = gj_all.get('features', [])
-                filtered = [f for f in feats if str(f.get('properties', {}).get('code', '')).zfill(5) in codes]
+                rows = []
+                filtered = []
+                for f in feats:
+                    props = f.get('properties', {})
+                    insee = str(props.get('code', '')).strip()
+                    postals = props.get('codesPostaux') or props.get('codes_postaux') or []
+                    try:
+                        if isinstance(postals, str):
+                            postals = [p.strip() for p in postals.split(',') if p.strip()]
+                    except Exception:
+                        postals = []
+                    matched = [p for p in postals if p in codes]
+                    if matched:
+                        s = float(agg[agg['postal'].isin(matched)]['patient_count'].sum())
+                        if s > 0:
+                            rows.append({"insee": insee, "patient_count": s})
+                            filtered.append(f)
                 if filtered:
                     gj = {"type": "FeatureCollection", "features": filtered}
                     m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
+                    data_df = pd.DataFrame(rows)
                     folium.Choropleth(
                         geo_data=gj,
                         name='Recruitment (commune)',
-                        data=agg,
-                        columns=['city_code', 'patient_count'],
+                        data=data_df,
+                        columns=['insee', 'patient_count'],
                         key_on='feature.properties.code',
                         fill_color='YlOrRd',
                         fill_opacity=0.75,
@@ -308,7 +328,7 @@ with st.expander("🗺️ National Recruitment Choropleth – Commune (top)", ex
                         nan_fill_opacity=0,
                         legend_name='Patients (commune sum)'
                     ).add_to(m)
-                    st.caption("Top 1000 communes by patients are shown for performance.")
+                    st.caption("Top 1000 postal zones mapped to communes (aggregated) for performance.")
                     st_folium(m, width="100%", height=540, key="national_recruitment_choropleth_commune")
                 else:
                     st.info("No commune polygons matched the recruitment codes.")

@@ -367,7 +367,7 @@ def _add_recruitment_choropleth_to_map(folium_map, hospital_id, recruitment_df):
             data=dep,
             columns=['dept_code', 'patient_count'],
             key_on='feature.properties.code',
-            fill_color='YlOrRd',
+            fill_color='YlGn',
             fill_opacity=0.7,
             line_opacity=0.2,
             nan_fill_opacity=0,
@@ -493,28 +493,49 @@ def _add_recruitment_choropleth_commune_to_map(folium_map, hospital_id, recruitm
         df_rec['city_code'] = (
             df_rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
         )
+        # Treat codes primarily as postal codes (dataset uses postal codes)
+        df_rec['postal'] = df_rec['city_code'].str.replace(r'\D+', '', regex=True).str.zfill(5)
         agg = (
-            df_rec.groupby('city_code', as_index=False)['patient_count'].sum()
+            df_rec[df_rec['postal'].str.len() == 5]
+            .groupby('postal', as_index=False)['patient_count'].sum()
             .sort_values('patient_count', ascending=False)
             .head(max_communes)
         )
-        codes = set(agg['city_code'].astype(str))
+        codes = set(agg['postal'].astype(str))
         gj_all = _get_fr_communes_geojson()
         if not gj_all:
             st.warning("Commune boundaries unavailable. Choropleth cannot be displayed.")
             return
-        # Filter GeoJSON to only features we need
         feats = gj_all.get('features', [])
-        filtered = [f for f in feats if str(f.get('properties', {}).get('code', '')).zfill(5) in codes]
-        if not filtered:
+        # Build per-commune (INSEE code) sums by matching postal codes to feature 'codesPostaux'
+        rows = []
+        filtered = []
+        for f in feats:
+            props = f.get('properties', {})
+            insee = str(props.get('code', '')).strip()
+            postals = props.get('codesPostaux') or props.get('codes_postaux') or []
+            try:
+                if isinstance(postals, str):
+                    postals = [p.strip() for p in postals.split(',') if p.strip()]
+            except Exception:
+                postals = []
+            matched = [p for p in postals if p in codes]
+            if matched:
+                # Sum patient counts for all matched postals to this commune
+                s = float(agg[agg['postal'].isin(matched)]['patient_count'].sum())
+                if s > 0:
+                    rows.append({"insee": insee, "patient_count": s})
+                    filtered.append(f)
+        if not rows:
             st.info("No commune polygons matched the recruitment codes.")
             return
         gj = {"type": "FeatureCollection", "features": filtered}
+        data_df = pd.DataFrame(rows)
         folium.Choropleth(
             geo_data=gj,
             name='Recruitment (commune)',
-            data=agg,
-            columns=['city_code', 'patient_count'],
+            data=data_df,
+            columns=['insee', 'patient_count'],
             key_on='feature.properties.code',
             fill_color='YlOrRd',
             fill_opacity=0.75,
@@ -522,7 +543,7 @@ def _add_recruitment_choropleth_commune_to_map(folium_map, hospital_id, recruitm
             nan_fill_opacity=0,
             legend_name='Patients (commune sum)'
         ).add_to(folium_map)
-        st.caption(f"Commune choropleth rendered with top {len(agg)} communes by patients (filtered for performance).")
+        st.caption(f"Commune choropleth rendered from top {len(agg)} postal zones (mapped to communes).")
     except Exception as e:
         st.error(f"Error rendering commune choropleth: {str(e)}")
 
