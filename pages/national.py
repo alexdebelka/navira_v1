@@ -1065,29 +1065,6 @@ else:
             """)
     except Exception:
         pass
-        
-
-        - **Hospital volume** correlation with robotic use
-        - **Affiliation type** correlation (public vs private)
-        
-        **What we CANNOT analyze (data limitation):**
-        - **Procedure-specific robotic rates** (e.g., % of gastric sleeves done robotically)
-        - **Primary vs revisional** robotic procedures
-        - **Robotic approach by procedure type** (which procedures are more likely to be robotic)
-        
-        **Key Insights from Available Data:**
-        - **Growth trend**: Robotic surgery adoption has increased significantly
-        - **Current usage**: ~5.6% of all bariatric surgeries are robotic (2024)
-        - **Peak year**: 2023 had the highest robotic volume (2,209 procedures)
-        - **Market penetration**: Still relatively low but growing rapidly
-        
-        **Possible Comparisons:**
-        1. **Temporal**: Year-over-year growth in robotic adoption
-        2. **Geographic**: Regional differences in robotic availability
-        3. **Institutional**: Hospital type vs robotic adoption
-        4. **Volume-based**: High-volume vs low-volume center robotic use
-        5. **Affiliation**: Public vs private hospital robotic adoption
-        """)
 
 # --- ROBOTIC SURGERY COMPARATIVE ANALYSIS ---
 st.header("Robotic Surgery Comparative Analysis")
