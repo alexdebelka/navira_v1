@@ -1458,14 +1458,16 @@ if not complications.empty:
     # Hospital performance trends ("spaghetti" plot)
     st.markdown("#### Hospital Performance Over Time")
     
-    st.info("💡 **About this chart**: The spaghetti plot shows complication rate trends for all hospitals performing bariatric surgery. Each thin line represents one hospital's 12-month rolling complication rate, while the bold orange line shows the national average.")
+    st.info("💡 **About 'top 100 by volume'**: To ensure readability and performance, the spaghetti plot shows only the 100 hospitals with the highest total procedure volume. This represents the largest and most active bariatric surgery centers while maintaining chart clarity.")
     
     hosp_trends = complications.copy()
     if not hosp_trends.empty:
         # Build per-hospital series of rolling rates
         hosp_trends['rolling_pct'] = pd.to_numeric(hosp_trends['rolling_rate'], errors='coerce') * 100
-        # Show all hospitals in the complications trends
-        sub = hosp_trends.copy()
+        # Keep reasonable number of lines for performance: top 100 hospitals by total procedures
+        totals = hosp_trends.groupby('hospital_id')['procedures_count'].sum().sort_values(ascending=False)
+        keep_ids = set(totals.head(100).index.astype(str))
+        sub = hosp_trends[hosp_trends['hospital_id'].astype(str).isin(keep_ids)].copy()
         if not sub.empty:
             # Create spaghetti plot using go.Figure for opacity control
             spaghetti = go.Figure()
@@ -1496,7 +1498,7 @@ if not complications.empty:
                 ))
             
             spaghetti.update_layout(
-                title='Hospital 12‑month Rolling Complication Rates (all hospitals)',
+                title='Hospital 12‑month Rolling Complication Rates (top 100 by volume)',
                 xaxis_title='Quarter',
                 yaxis_title='Complication Rate (%)',
                 height=420,
