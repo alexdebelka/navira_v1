@@ -4,6 +4,7 @@ import pandas as pd
 import altair as alt
 import folium
 from folium.plugins import HeatMap
+import requests
 from streamlit_folium import st_folium
 import plotly.express as px
 import plotly.graph_objects as go
@@ -319,6 +320,62 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
     except Exception as e:
         st.error(f"Error rendering recruitment zones: {str(e)}")
 
+
+@st.cache_data(show_spinner=False)
+def _get_fr_departments_geojson():
+    try:
+        url = "https://france-geojson.gregoiredavid.fr/repo/departements.geojson"
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception:
+        return None
+
+
+def _dept_code_from_insee(code: str) -> str:
+    c = str(code).strip().upper()
+    if c.startswith('97') or c.startswith('98'):
+        return c[:3]
+    if c.startswith('2A') or c.startswith('2B'):
+        return c[:2]
+    return c[:2]
+
+
+def _add_recruitment_choropleth_to_map(folium_map, hospital_id, recruitment_df):
+    try:
+        df_rec = recruitment_df.copy()
+        df_rec['hospital_id'] = df_rec['hospital_id'].astype(str)
+        df_rec = df_rec[df_rec['hospital_id'] == str(hospital_id)]
+        if df_rec.empty:
+            st.info("No recruitment data for this hospital.")
+            return
+        df_rec['city_code'] = (
+            df_rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
+        )
+        df_rec['dept_code'] = df_rec['city_code'].apply(_dept_code_from_insee)
+        dep = df_rec.groupby('dept_code', as_index=False)['patient_count'].sum()
+        if dep.empty:
+            st.info("No recruitment data to render.")
+            return
+        gj = _get_fr_departments_geojson()
+        if not gj:
+            st.warning("Department boundaries unavailable. Choropleth cannot be displayed.")
+            return
+        folium.Choropleth(
+            geo_data=gj,
+            name='Recruitment (dept)',
+            data=dep,
+            columns=['dept_code', 'patient_count'],
+            key_on='feature.properties.code',
+            fill_color='YlOrRd',
+            fill_opacity=0.7,
+            line_opacity=0.2,
+            nan_fill_opacity=0,
+            legend_name='Patients (department sum)'
+        ).add_to(folium_map)
+    except Exception as e:
+        st.error(f"Error rendering choropleth: {str(e)}")
+
 with tab_activity:
     st.subheader("Activity Overview")
     # Total surgeries and quick mix charts
@@ -527,6 +584,7 @@ with tab_complications:
 
 with tab_geo:
     st.subheader("Recruitment Zone and Competitors")
+    map_mode = st.radio("Map mode", options=["Heatmap", "Choropleth (by department)"], horizontal=True, index=0)
     # Map
     try:
         center = [float(selected_hospital_details.get('latitude')), float(selected_hospital_details.get('longitude'))]
@@ -549,8 +607,11 @@ with tab_geo:
     except Exception:
         pass
 
-    # Add recruitment heatmap
-    _add_recruitment_zones_to_map(m, selected_hospital_id, recruitment, cities)
+    # Add recruitment layer
+    if map_mode.startswith("Heatmap"):
+        _add_recruitment_zones_to_map(m, selected_hospital_id, recruitment, cities)
+    else:
+        _add_recruitment_choropleth_to_map(m, selected_hospital_id, recruitment)
 
     # Add top-5 competitors as ranked markers
     try:

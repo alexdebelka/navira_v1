@@ -6,6 +6,10 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import sys
 import os
+import requests
+import folium
+from folium.plugins import HeatMap
+from streamlit_folium import st_folium
 import folium
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
@@ -49,6 +53,24 @@ from navira.data_loader import get_all_dataframes
 all_data = get_all_dataframes()
 recruitment = all_data.get('recruitment', pd.DataFrame())
 french_cities = all_data.get('cities', pd.DataFrame())
+# GeoJSON helper for departments
+@st.cache_data(show_spinner=False)
+def _get_fr_departments_geojson():
+    try:
+        url = "https://france-geojson.gregoiredavid.fr/repo/departements.geojson"
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception:
+        return None
+
+def _dept_code_from_insee(code: str) -> str:
+    c = str(code).strip().upper()
+    if c.startswith('97') or c.startswith('98'):
+        return c[:3]
+    if c.startswith('2A') or c.startswith('2B'):
+        return c[:2]
+    return c[:2]
 complications = all_data.get('complications', pd.DataFrame())
 procedure_details = all_data.get('procedure_details', pd.DataFrame())
 
@@ -129,6 +151,42 @@ with st.expander("🗺️ National Recruitment Heatmap (All Hospitals)", expande
             st.info("Recruitment or city coordinate data not available.")
     except Exception as e:
         st.warning(f"Could not render national recruitment heatmap: {str(e)}")
+
+# Choropleth alternative
+with st.expander("🗺️ National Recruitment Choropleth (by department)", expanded=False):
+    try:
+        if not recruitment.empty:
+            rec = recruitment.copy()
+            rec['city_code'] = (
+                rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
+            )
+            rec['dept_code'] = rec['city_code'].apply(_dept_code_from_insee)
+            dep = rec.groupby('dept_code', as_index=False)['patient_count'].sum()
+            if not dep.empty:
+                m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
+                gj = _get_fr_departments_geojson()
+                if gj:
+                    folium.Choropleth(
+                        geo_data=gj,
+                        name='Recruitment (dept)',
+                        data=dep,
+                        columns=['dept_code', 'patient_count'],
+                        key_on='feature.properties.code',
+                        fill_color='YlOrRd',
+                        fill_opacity=0.7,
+                        line_opacity=0.2,
+                        nan_fill_opacity=0,
+                        legend_name='Patients (department sum)'
+                    ).add_to(m)
+                    st_folium(m, width="100%", height=520, key="national_recruitment_choropleth")
+                else:
+                    st.info("Department boundaries unavailable.")
+            else:
+                st.info("No recruitment data to aggregate.")
+        else:
+            st.info("Recruitment data not available.")
+    except Exception as e:
+        st.warning(f"Could not render national choropleth: {str(e)}")
 
 # Track page view
 try:
