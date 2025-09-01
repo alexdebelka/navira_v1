@@ -647,72 +647,72 @@ if not toggle_2024_only:
     y_title = "Total count (2020-2024)"
     chart_title = "Total Procedures by Type (2020-2024)"
     hover_tmpl = '<b>%{x}</b><br>Total 2020-2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
-    else:
+else:
+    st.markdown(
+        """
+        <div class=\"nv-info-wrap\">
+          <div class=\"nv-h3\">Total Procedures (2024)</div>
+          <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+            <div class=\"nv-tooltiptext\">
+              <b>Understanding this chart:</b><br/>
+              This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.<br/><br/>
+              <b>Time Period:</b><br/>
+              Toggle OFF: Shows data for the entire 2020–2024 period (5 years)<br/>
+              Toggle ON: Shows data for 2024 only
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    with st.expander("What to look for and key findings"):
         st.markdown(
             """
-            <div class=\"nv-info-wrap\">
-              <div class=\"nv-h3\">Total Procedures (2024)</div>
-              <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
-                <div class=\"nv-tooltiptext\">
-                  <b>Understanding this chart:</b><br/>
-                  This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.<br/><br/>
-                  <b>Time Period:</b><br/>
-                  Toggle OFF: Shows data for the entire 2020–2024 period (5 years)<br/>
-                  Toggle ON: Shows data for 2024 only
-                </div>
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        with st.expander("What to look for and key findings"):
-            st.markdown(
-                """
-                This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.
+            This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.
 
-                **Time Period:**
-                - Toggle OFF: Shows data for the entire 2020–2024 period (5 years)
-                - Toggle ON: Shows data for 2024 only
-                """
-            )
-        # Prepare data for bar chart (2024 totals only)
-        tot_data = []
-        total_procedures = sum(procedure_totals_2024.get(proc_code, 0) for proc_code in BARIATRIC_PROCEDURE_NAMES.keys())
-        
-        # Group less common procedures under "Other"
-        other_procedures = ['NDD', 'GVC', 'DBP']  # Not Defined, Calibrated Vertical Gastroplasty, Bilio-pancreatic Diversion
-        other_total = sum(procedure_totals_2024.get(proc_code, 0) for proc_code in other_procedures)
-        
-        for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
-            if proc_code in procedure_totals_2024:
-                value = procedure_totals_2024[proc_code]
+            **Time Period:**
+            - Toggle OFF: Shows data for the entire 2020–2024 period (5 years)
+            - Toggle ON: Shows data for 2024 only
+            """
+        )
+    # Prepare data for bar chart (2024 totals only)
+    tot_data = []
+    total_procedures = sum(procedure_totals_2024.get(proc_code, 0) for proc_code in BARIATRIC_PROCEDURE_NAMES.keys())
+    
+    # Group less common procedures under "Other"
+    other_procedures = ['NDD', 'GVC', 'DBP']  # Not Defined, Calibrated Vertical Gastroplasty, Bilio-pancreatic Diversion
+    other_total = sum(procedure_totals_2024.get(proc_code, 0) for proc_code in other_procedures)
+    
+    for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
+        if proc_code in procedure_totals_2024:
+            value = procedure_totals_2024[proc_code]
+            
+            # Skip individual entries for procedures that will be grouped under "Other"
+            if proc_code in other_procedures:
+                continue
                 
-                # Skip individual entries for procedures that will be grouped under "Other"
-                if proc_code in other_procedures:
-                    continue
-                    
-                raw_percentage = (value / total_procedures) * 100 if total_procedures > 0 else 0
-                # Show decimals for percentages less than 1%, otherwise round to whole number
-                percentage = round(raw_percentage, 1) if raw_percentage < 1 else round(raw_percentage)
-                tot_data.append({
-                    'Procedure': proc_name,
-                    'Value': value,
-                    'Percentage': percentage
-                })
-        
-        # Add "Other" category for grouped procedures
-        if other_total > 0:
-            other_percentage = (other_total / total_procedures) * 100 if total_procedures > 0 else 0
-            percentage = round(other_percentage, 1) if other_percentage < 1 else round(other_percentage)
+            raw_percentage = (value / total_procedures) * 100 if total_procedures > 0 else 0
+            # Show decimals for percentages less than 1%, otherwise round to whole number
+            percentage = round(raw_percentage, 1) if raw_percentage < 1 else round(raw_percentage)
             tot_data.append({
-                'Procedure': 'Other',
-                'Value': other_total,
+                'Procedure': proc_name,
+                'Value': value,
                 'Percentage': percentage
             })
-        chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=True)  # Reverse order - highest first
-        y_title = "Total count (2024)"
-        chart_title = "Total Procedures by Type (2024)"
-        hover_tmpl = '<b>%{x}</b><br>Total 2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
+    
+    # Add "Other" category for grouped procedures
+    if other_total > 0:
+        other_percentage = (other_total / total_procedures) * 100 if total_procedures > 0 else 0
+        percentage = round(other_percentage, 1) if other_percentage < 1 else round(other_percentage)
+        tot_data.append({
+            'Procedure': 'Other',
+            'Value': other_total,
+            'Percentage': percentage
+        })
+    chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=True)  # Reverse order - highest first
+    y_title = "Total count (2024)"
+    chart_title = "Total Procedures by Type (2024)"
+    hover_tmpl = '<b>%{x}</b><br>Total 2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
 
     if not chart_df.empty:
 
