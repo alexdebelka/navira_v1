@@ -366,7 +366,7 @@ try:
     )
     private_pct = round((private_labeled / private_total * 100)) if private_total > 0 else 0
     
-    st.markdown(f"### **{univ_pct}%** of the university hospitals have SOFFCO, CSO or both labels and **{private_pct}%** of private hospitals have SOFFCO, CSO or both labels")
+    st.markdown(f"## **{univ_pct}%** of the university hospitals have SOFFCO, CSO or both labels and **{private_pct}%** of private hospitals have SOFFCO, CSO or both labels")
 except Exception:
     st.markdown("Label statistics unavailable")
 
