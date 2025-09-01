@@ -227,10 +227,23 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
         # Normalize types to ensure join works
         df_rec = recruitment_df.copy()
         df_rec['hospital_id'] = df_rec['hospital_id'].astype(str)
-        df_rec['city_code'] = df_rec['city_code'].astype(str)
+        # Normalize codes to improve join hit-rate
+        df_rec['city_code'] = (
+            df_rec['city_code']
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .str.zfill(5)
+        )
         df_cities = cities_df.copy()
         if 'city_code' in df_cities.columns:
-            df_cities['city_code'] = df_cities['city_code'].astype(str)
+            df_cities['city_code'] = (
+                df_cities['city_code']
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .str.zfill(5)
+            )
         
         hosp_recr = df_rec[df_rec['hospital_id'] == str(hospital_id)]
         if hosp_recr.empty:
@@ -238,7 +251,7 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
             return
         
         # Sort by patient count and take top N zones for heatmap (broader view)
-        hosp_recr = hosp_recr.sort_values('patient_count', ascending=False).head(200)
+        hosp_recr = hosp_recr.sort_values('patient_count', ascending=False).head(60)
             
         if df_cities.empty:
             st.info("No city coordinate data available.")
@@ -251,85 +264,29 @@ def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, citie
         # Show diagnostic info
         st.caption(f"Top 5 recruitment zones: {len(hosp_recr)} | With coords: {len(df.dropna(subset=['latitude','longitude']))} | Missing coords: {len(missing_coords)}")
         
-        # If we have missing coordinates, try to get them from other sources
+        # If we have missing coordinates, optionally attempt a very small geocoding fallback
         if not missing_coords.empty:
-            st.info("Top recruitment zones found but missing city coordinates.")
-            
-            # Try to get city information from multiple sources
+            st.info("Top recruitment zones found but some city coordinates are missing.")
             try:
-                from navira.data_loader import get_dataframes, get_all_dataframes
-                establishments, _ = get_dataframes()
-                all_data = get_all_dataframes()
-                french_cities = all_data.get('cities', pd.DataFrame())
-                
-                # Create a mapping from city codes to coordinates using multiple sources
-                city_mapping = {}
-                
-                # First try French cities data (should have coordinates)
-                if not french_cities.empty and 'city_code' in french_cities.columns:
-                    for _, row in missing_coords.iterrows():
-                        city_code = row['city_code']
-                        matching_city = french_cities[french_cities['city_code'] == city_code]
-                        if not matching_city.empty:
-                            lat = matching_city['latitude'].iloc[0]
-                            lon = matching_city['longitude'].iloc[0]
-                            if not pd.isna(lat) and not pd.isna(lon):
-                                city_mapping[city_code] = {'latitude': lat, 'longitude': lon}
-                                continue
-                
-                # Then try establishments data
-                if not establishments.empty and 'ville' in establishments.columns:
-                    # Try to match by city code (if available)
-                    for _, row in missing_coords.iterrows():
-                        city_code = row['city_code']
-                        
-                        if city_code in city_mapping:  # Skip if already found
-                            continue
-                            
-                        # Try to find by city code in establishments
-                        if 'code_insee' in establishments.columns:
-                            matching_est = establishments[establishments['code_insee'] == city_code]
-                            if not matching_est.empty:
-                                lat = matching_est['latitude'].mean()
-                                lon = matching_est['longitude'].mean()
-                                if not pd.isna(lat) and not pd.isna(lon):
-                                    city_mapping[city_code] = {'latitude': lat, 'longitude': lon}
-                                    continue
-                
-                # Finally try geocoding for remaining cities
-                for _, row in missing_coords.iterrows():
-                    city_code = row['city_code']
-                    
-                    if city_code in city_mapping:  # Skip if already found
-                        continue
-                        
-                    # Try geocoding using the city code as postal code
+                limited = missing_coords.head(8)
+                from geopy.geocoders import Nominatim
+                geolocator = Nominatim(user_agent="navira_hospital_dashboard_geography")
+                filled = 0
+                for _, row in limited.iterrows():
+                    city_code = str(row['city_code'])
                     try:
-                        from geopy.geocoders import Nominatim
-                        geolocator = Nominatim(user_agent="navira_hospital_dashboard_geography")
-                        
-                        # Try geocoding with city code as postal code
                         q = f"{city_code}, France"
-                        loc = geolocator.geocode(q, timeout=5)
+                        loc = geolocator.geocode(q, timeout=2)
                         if loc:
-                            city_mapping[city_code] = {'latitude': loc.latitude, 'longitude': loc.longitude}
+                            df.loc[df['city_code'] == city_code, 'latitude'] = df.loc[df['city_code'] == city_code, 'latitude'].fillna(loc.latitude)
+                            df.loc[df['city_code'] == city_code, 'longitude'] = df.loc[df['city_code'] == city_code, 'longitude'].fillna(loc.longitude)
+                            filled += 1
                     except Exception:
                         continue
-                
-                # Apply the mapping to fill missing coordinates
-                geocoded_count = 0
-                for city_code, coords in city_mapping.items():
-                    idx = (df['city_code'] == city_code)
-                    if idx.any():
-                        df.loc[idx, 'latitude'] = df.loc[idx, 'latitude'].fillna(coords['latitude'])
-                        df.loc[idx, 'longitude'] = df.loc[idx, 'longitude'].fillna(coords['longitude'])
-                        geocoded_count += 1
-                
-                if geocoded_count > 0:
-                    st.success(f"Successfully found coordinates for {geocoded_count} top recruitment zones.")
-                    
-            except Exception as e:
-                st.warning(f"Could not retrieve additional city data: {str(e)}")
+                if filled:
+                    st.success(f"Filled coordinates for {filled} zones via quick geocoding.")
+            except Exception:
+                pass
             
             # Show unresolved cities for debugging
             unresolved = df[df['latitude'].isna() | df['longitude'].isna()][['city_code','city_name','postal_code']].drop_duplicates()

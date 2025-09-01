@@ -93,9 +93,21 @@ with st.expander("🗺️ National Recruitment Heatmap (All Hospitals)", expande
     try:
         if not recruitment.empty and not french_cities.empty:
             rec = recruitment.copy()
-            rec['city_code'] = rec['city_code'].astype(str)
+            rec['city_code'] = (
+                rec['city_code']
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .str.zfill(5)
+            )
             cities = french_cities[['city_code','latitude','longitude']].copy()
-            cities['city_code'] = cities['city_code'].astype(str)
+            cities['city_code'] = (
+                cities['city_code']
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .str.zfill(5)
+            )
             rec = rec.merge(cities, on='city_code', how='left')
             rec = rec.dropna(subset=['latitude','longitude','patient_count'])
             if not rec.empty:
