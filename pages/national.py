@@ -1066,27 +1066,7 @@ else:
     except Exception:
         pass
         
-with col2:
-    robotic_2024 = approach_trends['robotic'].get(2024, 0)
-    total_2024 = approach_trends['all'].get(2024, 0)
-    robotic_pct_2024 = round((robotic_2024 / total_2024) * 100, 1) if total_2024 > 0 else 0
-    
-    st.metric(
-        "Total Robotic Surgeries (2024)",
-        f"{int(round(robotic_2024)):,}",
-        delta=f"{robotic_pct_2024}% of total surgeries"
-    )
-    
-    # Add comprehensive robotic surgery analysis
-    with st.expander("🔍 Robotic Surgery Analysis"):
-        st.markdown("""
-        **Robotic Surgery Data Availability:**
-        
-        **What we CAN analyze:**
-        - **Total robotic surgeries** by year (2020-2024)
-        - **Robotic vs non-robotic** overall trends
-        - **Robotic adoption rate** over time
-        - **Geographic distribution** of robotic centers
+
         - **Hospital volume** correlation with robotic use
         - **Affiliation type** correlation (public vs private)
         
