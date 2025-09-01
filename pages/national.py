@@ -581,7 +581,7 @@ procedure_totals_2020_2024 = get_2020_2024_procedure_totals(df)
 toggle_2024_only = st.toggle("Show 2024 data only", value=False)
 
 # Single column layout (removed second column)
-    if not toggle_2024_only:
+if not toggle_2024_only:
         st.markdown(
             """
             <div class=\"nv-info-wrap\">
