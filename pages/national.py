@@ -340,30 +340,37 @@ with col2:
     )
     st.markdown(f"<span style='color: grey; font-size: 0.9em; display:block; margin-top:-8px;'>{private_not_profit_pct}% of total</span>", unsafe_allow_html=True)
 
-# Second block: Stacked bar chart
-# Calculate hospital labels statistics
+# Calculate label statistics for university vs private hospitals
 try:
-    total_hospitals = sum(sum(label_breakdown[cat].values()) for cat in label_breakdown.keys())
-    university_hospitals = sum(label_breakdown.get('Public – Univ.', {}).values()) if 'Public – Univ.' in label_breakdown else 0
-    private_hospitals = sum(label_breakdown.get('Private – For-profit', {}).values()) + sum(label_breakdown.get('Private – Not-for-profit', {}).values())
+    # Calculate university hospitals with labels
+    univ_total = affiliation_counts.get('Public – Univ.', 0)
+    univ_labeled = (
+        label_breakdown.get('Public – Univ.', {}).get('SOFFCO Label', 0) +
+        label_breakdown.get('Public – Univ.', {}).get('CSO Label', 0) +
+        label_breakdown.get('Public – Univ.', {}).get('Both', 0)
+    )
+    univ_pct = round((univ_labeled / univ_total * 100)) if univ_total > 0 else 0
     
-    university_labeled = (label_breakdown.get('Public – Univ.', {}).get('SOFFCO Label', 0) + 
-                         label_breakdown.get('Public – Univ.', {}).get('CSO Label', 0) + 
-                         label_breakdown.get('Public – Univ.', {}).get('Both', 0)) if 'Public – Univ.' in label_breakdown else 0
-    private_labeled = (label_breakdown.get('Private – For-profit', {}).get('SOFFCO Label', 0) + 
-                      label_breakdown.get('Private – For-profit', {}).get('CSO Label', 0) + 
-                      label_breakdown.get('Private – For-profit', {}).get('Both', 0) +
-                      label_breakdown.get('Private – Not-for-profit', {}).get('SOFFCO Label', 0) + 
-                      label_breakdown.get('Private – Not-for-profit', {}).get('CSO Label', 0) + 
-                      label_breakdown.get('Private – Not-for-profit', {}).get('Both', 0))
+    # Calculate private hospitals with labels
+    private_total = (
+        affiliation_counts.get('Private – For-profit', 0) +
+        affiliation_counts.get('Private – Not-for-profit', 0)
+    )
+    private_labeled = (
+        label_breakdown.get('Private – For-profit', {}).get('SOFFCO Label', 0) +
+        label_breakdown.get('Private – For-profit', {}).get('CSO Label', 0) +
+        label_breakdown.get('Private – For-profit', {}).get('Both', 0) +
+        label_breakdown.get('Private – Not-for-profit', {}).get('SOFFCO Label', 0) +
+        label_breakdown.get('Private – Not-for-profit', {}).get('CSO Label', 0) +
+        label_breakdown.get('Private – Not-for-profit', {}).get('Both', 0)
+    )
+    private_pct = round((private_labeled / private_total * 100)) if private_total > 0 else 0
     
-    university_pct = (university_labeled / university_hospitals * 100) if university_hospitals > 0 else 0
-    private_pct = (private_labeled / private_hospitals * 100) if private_hospitals > 0 else 0
-    
-    st.markdown(f"**{university_pct:.1f}% of university hospitals have SOFFCO and CSO labels, and {private_pct:.1f}% of private hospitals have these labels**")
+    st.markdown(f"**{univ_pct}%** of university hospitals have SOFFCO and CSO labels and **{private_pct}%** of private hospitals have these labels")
 except Exception:
-    pass
+    st.markdown("Label statistics unavailable")
 
+# Second block: Stacked bar chart
 st.markdown(
     """
     <div class=\"nv-info-wrap\">
@@ -580,9 +587,12 @@ procedure_totals_2020_2024 = get_2020_2024_procedure_totals(df)
 # Toggle between 2020-2024 totals and 2024 only
 toggle_2024_only = st.toggle("Show 2024 data only", value=False)
 
-# Single column layout (removed second column)
-if not toggle_2024_only:
-    st.markdown(
+# Single column layout
+col1 = st.columns(1)[0]
+
+with col1:
+    if not toggle_2024_only:
+        st.markdown(
             """
             <div class=\"nv-info-wrap\">
               <div class=\"nv-h3\">Total Procedures (2020–2024)</div>
@@ -599,127 +609,132 @@ if not toggle_2024_only:
             """,
             unsafe_allow_html=True
         )
-    with st.expander("What to look for and key findings"):
-        st.markdown(
-            """
-            This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.
+        with st.expander("What to look for and key findings"):
+            st.markdown(
+                """
+                This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.
 
-            **Time Period:**
-            - Toggle OFF: Shows data for the entire 2020–2024 period (5 years)
-            - Toggle ON: Shows data for 2024 only
-            """
-        )
-    # Prepare data for bar chart (2020-2024 totals)
-    tot_data = []
-    total_procedures = sum(procedure_totals_2020_2024.get(proc_code, 0) for proc_code in BARIATRIC_PROCEDURE_NAMES.keys())
-    
-    # Group less common procedures under "Other"
-    other_procedures = ['NDD', 'GVC', 'DBP']  # Not Defined, Calibrated Vertical Gastroplasty, Bilio-pancreatic Diversion
-    other_total = sum(procedure_totals_2020_2024.get(proc_code, 0) for proc_code in other_procedures)
-    
-    for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
-        if proc_code in procedure_totals_2020_2024:
-            value = procedure_totals_2020_2024[proc_code]
-            
-            # Skip individual entries for procedures that will be grouped under "Other"
-            if proc_code in other_procedures:
-                continue
+                **Time Period:**
+                - Toggle OFF: Shows data for the entire 2020–2024 period (5 years)
+                - Toggle ON: Shows data for 2024 only
+                """
+            )
+        # Prepare data for bar chart (2020-2024 totals)
+        tot_data = []
+        total_procedures = sum(procedure_totals_2020_2024.get(proc_code, 0) for proc_code in BARIATRIC_PROCEDURE_NAMES.keys())
+        
+        # Group less common procedures under "Other"
+        other_procedures = ['NDD', 'GVC', 'DBP']  # Not Defined, Calibrated Vertical Gastroplasty, Bilio-pancreatic Diversion
+        other_total = sum(procedure_totals_2020_2024.get(proc_code, 0) for proc_code in other_procedures)
+        
+        for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
+            if proc_code in procedure_totals_2020_2024:
+                value = procedure_totals_2020_2024[proc_code]
                 
-            raw_percentage = (value / total_procedures) * 100 if total_procedures > 0 else 0
-            # Show decimals for percentages less than 1%, otherwise round to whole number
-            percentage = round(raw_percentage, 1) if raw_percentage < 1 else round(raw_percentage)
+                # Skip individual entries for procedures that will be grouped under "Other"
+                if proc_code in other_procedures:
+                    continue
+                    
+                raw_percentage = (value / total_procedures) * 100 if total_procedures > 0 else 0
+                # Show decimals for percentages less than 1%, otherwise round to whole number
+                percentage = round(raw_percentage, 1) if raw_percentage < 1 else round(raw_percentage)
+                tot_data.append({
+                    'Procedure': proc_name,
+                    'Value': value,
+                    'Percentage': percentage
+                })
+        
+        # Add "Other" category for grouped procedures
+        if other_total > 0:
+            other_percentage = (other_total / total_procedures) * 100 if total_procedures > 0 else 0
+            percentage = round(other_percentage, 1) if other_percentage < 1 else round(other_percentage)
             tot_data.append({
-                'Procedure': proc_name,
-                'Value': value,
+                'Procedure': 'Other',
+                'Value': other_total,
                 'Percentage': percentage
             })
-    
-    # Add "Other" category for grouped procedures
-    if other_total > 0:
-        other_percentage = (other_total / total_procedures) * 100 if total_procedures > 0 else 0
-        percentage = round(other_percentage, 1) if other_percentage < 1 else round(other_percentage)
-        tot_data.append({
-            'Procedure': 'Other',
-            'Value': other_total,
-            'Percentage': percentage
-        })
-    chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=True)  # Reverse order - highest first
-    y_title = "Total count (2020-2024)"
-    chart_title = "Total Procedures by Type (2020-2024)"
-    hover_tmpl = '<b>%{x}</b><br>Total 2020-2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
-else:
-    st.markdown(
-        """
-        <div class=\"nv-info-wrap\">
-          <div class=\"nv-h3\">Total Procedures (2024)</div>
-          <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
-            <div class=\"nv-tooltiptext\">
-              <b>Understanding this chart:</b><br/>
-              This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.<br/><br/>
-              <b>Time Period:</b><br/>
-              Toggle OFF: Shows data for the entire 2020–2024 period (5 years)<br/>
-              Toggle ON: Shows data for 2024 only
+        chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=False)
+        y_title = "Total count (2020-2024)"
+        chart_title = "Total Procedures by Type (2020-2024)"
+        hover_tmpl = '<b>%{x}</b><br>Total 2020-2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
+    else:
+        st.markdown(
+            """
+            <div class=\"nv-info-wrap\">
+              <div class=\"nv-h3\">Total Procedures (2024)</div>
+              <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+                <div class=\"nv-tooltiptext\">
+                  <b>Understanding this chart:</b><br/>
+                  This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.<br/><br/>
+                  <b>Time Period:</b><br/>
+                  Toggle OFF: Shows data for the entire 2020–2024 period (5 years)<br/>
+                  Toggle ON: Shows data for 2024 only
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    with st.expander("What to look for and key findings"):
-        st.markdown(
-            """
-            This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.
-
-            **Time Period:**
-            - Toggle OFF: Shows data for the entire 2020–2024 period (5 years)
-            - Toggle ON: Shows data for 2024 only
-            """
+            """,
+            unsafe_allow_html=True
         )
-    # Prepare data for bar chart (2024 totals only)
-    tot_data = []
-    total_procedures = sum(procedure_totals_2024.get(proc_code, 0) for proc_code in BARIATRIC_PROCEDURE_NAMES.keys())
-    
-    # Group less common procedures under "Other"
-    other_procedures = ['NDD', 'GVC', 'DBP']  # Not Defined, Calibrated Vertical Gastroplasty, Bilio-pancreatic Diversion
-    other_total = sum(procedure_totals_2024.get(proc_code, 0) for proc_code in other_procedures)
-    
-    for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
-        if proc_code in procedure_totals_2024:
-            value = procedure_totals_2024[proc_code]
-            
-            # Skip individual entries for procedures that will be grouped under "Other"
-            if proc_code in other_procedures:
-                continue
+        with st.expander("What to look for and key findings"):
+            st.markdown(
+                """
+                This bar chart shows the distribution of different bariatric surgery procedures. The bars represent the total number of procedures performed, and the height indicates the volume of each procedure type.
+
+                **Time Period:**
+                - Toggle OFF: Shows data for the entire 2020–2024 period (5 years)
+                - Toggle ON: Shows data for 2024 only
+                """
+            )
+        # Prepare data for bar chart (2024 totals only)
+        tot_data = []
+        total_procedures = sum(procedure_totals_2024.get(proc_code, 0) for proc_code in BARIATRIC_PROCEDURE_NAMES.keys())
+        
+        # Group less common procedures under "Other"
+        other_procedures = ['NDD', 'GVC', 'DBP']  # Not Defined, Calibrated Vertical Gastroplasty, Bilio-pancreatic Diversion
+        other_total = sum(procedure_totals_2024.get(proc_code, 0) for proc_code in other_procedures)
+        
+        for proc_code, proc_name in BARIATRIC_PROCEDURE_NAMES.items():
+            if proc_code in procedure_totals_2024:
+                value = procedure_totals_2024[proc_code]
                 
-            raw_percentage = (value / total_procedures) * 100 if total_procedures > 0 else 0
-            # Show decimals for percentages less than 1%, otherwise round to whole number
-            percentage = round(raw_percentage, 1) if raw_percentage < 1 else round(raw_percentage)
+                # Skip individual entries for procedures that will be grouped under "Other"
+                if proc_code in other_procedures:
+                    continue
+                    
+                raw_percentage = (value / total_procedures) * 100 if total_procedures > 0 else 0
+                # Show decimals for percentages less than 1%, otherwise round to whole number
+                percentage = round(raw_percentage, 1) if raw_percentage < 1 else round(raw_percentage)
+                tot_data.append({
+                    'Procedure': proc_name,
+                    'Value': value,
+                    'Percentage': percentage
+                })
+        
+        # Add "Other" category for grouped procedures
+        if other_total > 0:
+            other_percentage = (other_total / total_procedures) * 100 if total_procedures > 0 else 0
+            percentage = round(other_percentage, 1) if other_percentage < 1 else round(other_percentage)
             tot_data.append({
-                'Procedure': proc_name,
-                'Value': value,
+                'Procedure': 'Other',
+                'Value': other_total,
                 'Percentage': percentage
             })
-    
-    # Add "Other" category for grouped procedures
-    if other_total > 0:
-        other_percentage = (other_total / total_procedures) * 100 if total_procedures > 0 else 0
-        percentage = round(other_percentage, 1) if other_percentage < 1 else round(other_percentage)
-        tot_data.append({
-            'Procedure': 'Other',
-            'Value': other_total,
-            'Percentage': percentage
-        })
-    chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=True)  # Reverse order - highest first
-    y_title = "Total count (2024)"
-    chart_title = "Total Procedures by Type (2024)"
-    hover_tmpl = '<b>%{x}</b><br>Total 2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
+        chart_df = pd.DataFrame(tot_data).sort_values('Value', ascending=False)
+        y_title = "Total count (2024)"
+        chart_title = "Total Procedures by Type (2024)"
+        hover_tmpl = '<b>%{x}</b><br>Total 2024: %{y:,}<br>Percentage: %{customdata[0]}%<extra></extra>'
 
     if not chart_df.empty:
 
         # Use a single blue color for all bars to emphasize totals
         # Build label: show one decimal for percentages <1%, otherwise whole number
-        # Ensure "Other" category shows only one percentage
-        chart_df = chart_df.assign(Label=chart_df['Percentage'].apply(lambda p: f"{p:.1f}%" if p < 1 else f"{p:.0f}%"))
+        # Use a fresh calculation to ensure consistency
+        def format_percentage(p):
+            if p < 1:
+                return f"{p:.1f}%"
+            else:
+                return f"{p:.0f}%"
+        chart_df = chart_df.assign(Label=chart_df['Percentage'].apply(format_percentage))
 
         fig = px.bar(
             chart_df,
@@ -948,31 +963,34 @@ if approach_mix_2024:
         total_cnt = max(1, int(pie_df['Count'].sum()))
         pie_df['PctLabel'] = (pie_df['Count'] / total_cnt * 100).round(0).astype(int).astype(str) + '%'
 
-        # Single column layout (removed second column)
-        st.markdown("#### National: Surgical Approach Distribution")
-        fig = px.pie(
-            pie_df,
-            values='Count',
-            names='Approach',
-            title="National Approach Distribution (2024)",
-            color_discrete_sequence=['#2E86AB', '#F7931E', '#A23B72', '#F18F01']
-        )
+        # Create side-by-side comparison
+        col1, col2 = st.columns([2, 1])  # National graphs larger (2), Hospital comparison smaller (1)
         
-        fig.update_layout(
-            height=400,
-            showlegend=False,  # Remove legend
-            font=dict(size=12)
-        )
-        
-        fig.update_traces(
-            hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent:.0f}%<extra></extra>',
-            textposition='outside',
-            text=pie_df['PctLabel'],
-            textinfo='text+label',
-            textfont=dict(size=16)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
+        with col1:
+            st.markdown("#### National: Surgical Approach Distribution")
+            fig = px.pie(
+                pie_df,
+                values='Count',
+                names='Approach',
+                title="National Approach Distribution (2024)",
+                color_discrete_sequence=['#2E86AB', '#F7931E', '#A23B72', '#F18F01']
+            )
+            
+            fig.update_layout(
+                height=400,
+                showlegend=False,
+                font=dict(size=12)
+            )
+            
+            fig.update_traces(
+                hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent:.0f}%<extra></extra>',
+                textposition='outside',
+                text=pie_df['PctLabel'],
+                textinfo='text+label',
+                textfont=dict(size=16)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
         
         
         # Dropdown with What to look for + Key findings
@@ -996,7 +1014,8 @@ if approach_mix_2024:
             pass
 else:
     st.info("No approach data available for 2024.")
-# Single column layout for trends (removed second column)
+# Single column layout for trends
+with st.container():
     st.markdown(
         """
         <div class=\"nv-info-wrap\">
@@ -1038,7 +1057,7 @@ else:
         yaxis_title="Number of Robotic Surgeries",
         hovermode='x unified',
         height=400,
-        showlegend=False,  # Remove legend
+        showlegend=False,
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         font=dict(size=12),
@@ -1065,6 +1084,7 @@ else:
             """)
     except Exception:
         pass
+
 
 # --- ROBOTIC SURGERY COMPARATIVE ANALYSIS ---
 st.header("Robotic Surgery Comparative Analysis")
@@ -1159,44 +1179,38 @@ with st.expander("🗺️ 1. Geographic Analysis - Regional Robotic Adoption"):
     """)
     
     if robotic_geographic['regions'] and len(robotic_geographic['regions']) > 0:
-        # Sort by percentage in descending order (highest first)
-        sorted_data = sorted(zip(robotic_geographic['regions'], robotic_geographic['percentages'], robotic_geographic['robotic_counts']), 
-                            key=lambda x: x[1], reverse=True)
-        regions_sorted = [x[0] for x in sorted_data]
-        percentages_sorted = [x[1] for x in sorted_data]
-        robotic_counts_sorted = [x[2] for x in sorted_data]
-        
         fig = px.bar(
-            x=percentages_sorted,
-            y=regions_sorted,
+            x=robotic_geographic['percentages'],
+            y=robotic_geographic['regions'],
             orientation='h',
             title="Robotic Surgery Adoption by Region (2024)",
-            color=percentages_sorted,
+            color=robotic_geographic['percentages'],
             color_continuous_scale='Oranges',
-            text=[f"{p:.1f}%" for p in percentages_sorted]
+            text=[f"{p:.1f}%" for p in robotic_geographic['percentages']]
         )
         
         fig.update_layout(
             xaxis_title="Robotic Surgery Percentage (%)",
-            yaxis_title="",  # Remove y-axis title
+            yaxis_title="Region",
             height=440,
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             font=dict(size=12),
             margin=dict(l=160, r=50, t=80, b=40),
-            yaxis=dict(automargin=True)
+            yaxis=dict(automargin=True, categoryorder='total ascending')
         )
         
         fig.update_traces(
             hovertemplate='<b>%{y}</b><br>Percentage: %{x:.1f}%<br>Robotic: %{customdata}<extra></extra>',
-            customdata=robotic_counts_sorted
+            customdata=robotic_geographic['robotic_counts']
         )
         fig.update_traces(textposition='outside', cliponaxis=False)
         
         st.plotly_chart(fig, use_container_width=True)
         try:
-            top_region = regions_sorted[0]
-            top_pct = percentages_sorted[0]
+            top_idx = int(pd.Series(robotic_geographic['percentages']).idxmax())
+            top_region = robotic_geographic['regions'][top_idx]
+            top_pct = robotic_geographic['percentages'][top_idx]
             with st.expander("What to look for and key findings"):
                 st.markdown(f"""
                 **What to look for:**
@@ -1313,8 +1327,7 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
                 y='hospital_pct',
                 color='volume_category',
                 opacity=0.65,
-                title='Hospital volume (continuous) vs robotic %',
-                hover_data=['hospital_name', 'hospital_id']
+                title='Hospital volume (continuous) vs robotic %'
             )
             # Linear trendline removed per request
             cont.update_layout(
@@ -1323,9 +1336,6 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
                 height=420,
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)'
-            )
-            cont.update_traces(
-                hovertemplate='<b>%{customdata[0]}</b><br>Hospital ID: %{customdata[1]}<br>Volume: %{x} surgeries<br>Robotic: %{y:.1f}%<extra></extra>'
             )
             st.plotly_chart(cont, use_container_width=True)
 
@@ -1424,9 +1434,10 @@ if not complications.empty:
         
         st.plotly_chart(fig, use_container_width=True)
     
-    # Hospital performance trends (“spaghetti” plot)
+    # Hospital performance trends ("spaghetti" plot)
     st.markdown("#### Hospital Performance Over Time")
-    st.markdown("*Note: 'Top 100 by volume' means we show the 100 hospitals with the highest total procedure counts to ensure the chart displays meaningful trends from high-volume centers.*")
+    
+    st.info("💡 **About 'top 100 by volume'**: To ensure readability and performance, the spaghetti plot shows only the 100 hospitals with the highest total procedure volume. This represents the largest and most active bariatric surgery centers while maintaining chart clarity.")
     
     hosp_trends = complications.copy()
     if not hosp_trends.empty:
@@ -1466,13 +1477,13 @@ if not complications.empty:
                 ))
             
             spaghetti.update_layout(
-                title='Hospital 12‑month Rolling Complication Rates (top 100 hospitals by procedure volume)',
+                title='Hospital 12‑month Rolling Complication Rates (top 100 by volume)',
                 xaxis_title='Quarter',
                 yaxis_title='Complication Rate (%)',
                 height=420,
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
-                showlegend=False  # Remove legend
+                showlegend=False
             )
             st.plotly_chart(spaghetti, use_container_width=True)
 
