@@ -582,7 +582,7 @@ toggle_2024_only = st.toggle("Show 2024 data only", value=False)
 
 # Single column layout (removed second column)
 if not toggle_2024_only:
-        st.markdown(
+    st.markdown(
             """
             <div class=\"nv-info-wrap\">
               <div class=\"nv-h3\">Total Procedures (2020–2024)</div>
