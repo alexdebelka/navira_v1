@@ -949,30 +949,30 @@ if approach_mix_2024:
         pie_df['PctLabel'] = (pie_df['Count'] / total_cnt * 100).round(0).astype(int).astype(str) + '%'
 
         # Single column layout (removed second column)
-            st.markdown("#### National: Surgical Approach Distribution")
-            fig = px.pie(
-                pie_df,
-                values='Count',
-                names='Approach',
-                title="National Approach Distribution (2024)",
-                color_discrete_sequence=['#2E86AB', '#F7931E', '#A23B72', '#F18F01']
-            )
-            
-            fig.update_layout(
-                height=400,
-                showlegend=False,  # Remove legend
-                font=dict(size=12)
-            )
-            
-            fig.update_traces(
-                hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent:.0f}%<extra></extra>',
-                textposition='outside',
-                text=pie_df['PctLabel'],
-                textinfo='text+label',
-                textfont=dict(size=16)
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
+        st.markdown("#### National: Surgical Approach Distribution")
+        fig = px.pie(
+            pie_df,
+            values='Count',
+            names='Approach',
+            title="National Approach Distribution (2024)",
+            color_discrete_sequence=['#2E86AB', '#F7931E', '#A23B72', '#F18F01']
+        )
+        
+        fig.update_layout(
+            height=400,
+            showlegend=False,  # Remove legend
+            font=dict(size=12)
+        )
+        
+        fig.update_traces(
+            hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent:.0f}%<extra></extra>',
+            textposition='outside',
+            text=pie_df['PctLabel'],
+            textinfo='text+label',
+            textfont=dict(size=16)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
         
         
         # Dropdown with What to look for + Key findings
