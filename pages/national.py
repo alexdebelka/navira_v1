@@ -153,7 +153,7 @@ with st.expander("🗺️ National Recruitment Heatmap (All Hospitals)", expande
         st.warning(f"Could not render national recruitment heatmap: {str(e)}")
 
 # Choropleth alternative
-with st.expander("🗺️ National Recruitment Choropleth (by department)", expanded=False):
+with st.expander("🗺️ National Recruitment Choropleth – Department", expanded=False):
     try:
         if not recruitment.empty:
             rec = recruitment.copy()
@@ -187,6 +187,137 @@ with st.expander("🗺️ National Recruitment Choropleth (by department)", expa
             st.info("Recruitment data not available.")
     except Exception as e:
         st.warning(f"Could not render national choropleth: {str(e)}")
+
+with st.expander("🗺️ National Recruitment Choropleth – Region", expanded=False):
+    try:
+        if not recruitment.empty:
+            rec = recruitment.copy()
+            rec['city_code'] = (
+                rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
+            )
+            # Map city INSEE to department then to region
+            def _dept_code_from_insee(code: str) -> str:
+                c = str(code).strip().upper()
+                if c.startswith('97') or c.startswith('98'):
+                    return c[:3]
+                if c.startswith('2A') or c.startswith('2B'):
+                    return c[:2]
+                return c[:2]
+            rec['dept_code'] = rec['city_code'].apply(_dept_code_from_insee)
+            # Build dept->region map from departments GeoJSON
+            dgj = _get_fr_departments_geojson()
+            d2r = {}
+            if dgj:
+                for f in dgj.get('features', []):
+                    props = f.get('properties', {})
+                    dept = str(props.get('code', '')).strip()
+                    reg = props.get('code_region') or props.get('codeRegion') or props.get('region')
+                    if dept and reg is not None:
+                        d2r[dept] = str(reg)
+            if not d2r:
+                st.info("Could not map departments to regions.")
+            else:
+                rec['region_code'] = rec['dept_code'].map(d2r)
+                reg = rec.dropna(subset=['region_code']).groupby('region_code', as_index=False)['patient_count'].sum()
+                if not reg.empty:
+                    m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
+                    # Fetch regions geojson
+                    def _get_fr_regions_geojson():
+                        try:
+                            url = "https://france-geojson.gregoiredavid.fr/repo/regions.geojson"
+                            r = requests.get(url, timeout=10)
+                            r.raise_for_status()
+                            return r.json()
+                        except Exception:
+                            return None
+                    rgj = _get_fr_regions_geojson()
+                    if rgj:
+                        # Try to infer the region code property name
+                        code_key = None
+                        feats = rgj.get('features', [])
+                        if feats:
+                            props = feats[0].get('properties', {})
+                            for k in ['code','code_insee','codeRegion','code_region','code_reg']:
+                                if k in props:
+                                    code_key = k
+                                    break
+                        if code_key:
+                            reg['region_code'] = reg['region_code'].astype(str)
+                            folium.Choropleth(
+                                geo_data=rgj,
+                                name='Recruitment (region)',
+                                data=reg,
+                                columns=['region_code', 'patient_count'],
+                                key_on=f'feature.properties.{code_key}',
+                                fill_color='YlOrRd',
+                                fill_opacity=0.7,
+                                line_opacity=0.2,
+                                nan_fill_opacity=0,
+                                legend_name='Patients (region sum)'
+                            ).add_to(m)
+                            st_folium(m, width="100%", height=520, key="national_recruitment_choropleth_region")
+                        else:
+                            st.info("Could not infer region code key from GeoJSON.")
+                    else:
+                        st.info("Region boundaries unavailable.")
+                else:
+                    st.info("No recruitment data to aggregate at region level.")
+        else:
+            st.info("Recruitment data not available.")
+    except Exception as e:
+        st.warning(f"Could not render national choropleth (region): {str(e)}")
+
+with st.expander("🗺️ National Recruitment Choropleth – Commune (top)", expanded=False):
+    try:
+        if not recruitment.empty:
+            rec = recruitment.copy()
+            rec['city_code'] = (
+                rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
+            )
+            agg = (
+                rec.groupby('city_code', as_index=False)['patient_count'].sum()
+                .sort_values('patient_count', ascending=False)
+                .head(1000)  # limit for performance
+            )
+            codes = set(agg['city_code'].astype(str))
+            # Fetch communes geojson
+            def _get_fr_communes_geojson():
+                try:
+                    url = "https://france-geojson.gregoiredavid.fr/repo/communes.geojson"
+                    r = requests.get(url, timeout=30)
+                    r.raise_for_status()
+                    return r.json()
+                except Exception:
+                    return None
+            gj_all = _get_fr_communes_geojson()
+            if gj_all:
+                feats = gj_all.get('features', [])
+                filtered = [f for f in feats if str(f.get('properties', {}).get('code', '')).zfill(5) in codes]
+                if filtered:
+                    gj = {"type": "FeatureCollection", "features": filtered}
+                    m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
+                    folium.Choropleth(
+                        geo_data=gj,
+                        name='Recruitment (commune)',
+                        data=agg,
+                        columns=['city_code', 'patient_count'],
+                        key_on='feature.properties.code',
+                        fill_color='YlOrRd',
+                        fill_opacity=0.75,
+                        line_opacity=0.2,
+                        nan_fill_opacity=0,
+                        legend_name='Patients (commune sum)'
+                    ).add_to(m)
+                    st.caption("Top 1000 communes by patients are shown for performance.")
+                    st_folium(m, width="100%", height=540, key="national_recruitment_choropleth_commune")
+                else:
+                    st.info("No commune polygons matched the recruitment codes.")
+            else:
+                st.info("Commune boundaries unavailable.")
+        else:
+            st.info("Recruitment data not available.")
+    except Exception as e:
+        st.warning(f"Could not render national choropleth (commune): {str(e)}")
 
 # Track page view
 try:

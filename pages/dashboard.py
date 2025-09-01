@@ -376,6 +376,156 @@ def _add_recruitment_choropleth_to_map(folium_map, hospital_id, recruitment_df):
     except Exception as e:
         st.error(f"Error rendering choropleth: {str(e)}")
 
+
+@st.cache_data(show_spinner=False)
+def _get_fr_regions_geojson():
+    try:
+        url = "https://france-geojson.gregoiredavid.fr/repo/regions.geojson"
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception:
+        return None
+
+
+def _infer_geojson_code_key(gj, candidates: list[str]) -> str | None:
+    try:
+        feats = gj.get('features', [])
+        if not feats:
+            return None
+        props = feats[0].get('properties', {})
+        for k in candidates:
+            if k in props:
+                return k
+        return None
+    except Exception:
+        return None
+
+
+@st.cache_data(show_spinner=False)
+def _build_dept_to_region_map() -> dict[str, str]:
+    gj = _get_fr_departments_geojson()
+    if not gj:
+        return {}
+    mapping: dict[str, str] = {}
+    for f in gj.get('features', []):
+        props = f.get('properties', {})
+        dept = str(props.get('code', '')).strip()
+        # Try multiple property names for region code
+        reg = (
+            props.get('code_region')
+            or props.get('codeRegion')
+            or props.get('region')
+            or props.get('reg_code')
+            or props.get('code_reg')
+        )
+        if dept and reg is not None:
+            mapping[str(dept)] = str(reg)
+    return mapping
+
+
+def _add_recruitment_choropleth_region_to_map(folium_map, hospital_id, recruitment_df):
+    try:
+        df_rec = recruitment_df.copy()
+        df_rec['hospital_id'] = df_rec['hospital_id'].astype(str)
+        df_rec = df_rec[df_rec['hospital_id'] == str(hospital_id)]
+        if df_rec.empty:
+            st.info("No recruitment data for this hospital.")
+            return
+        df_rec['city_code'] = (
+            df_rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
+        )
+        df_rec['dept_code'] = df_rec['city_code'].apply(_dept_code_from_insee)
+        d2r = _build_dept_to_region_map()
+        if not d2r:
+            st.warning("Could not map departments to regions.")
+            return
+        df_rec['region_code'] = df_rec['dept_code'].map(d2r)
+        reg = df_rec.dropna(subset=['region_code']).groupby('region_code', as_index=False)['patient_count'].sum()
+        if reg.empty:
+            st.info("No recruitment data to render.")
+            return
+        gj = _get_fr_regions_geojson()
+        if not gj:
+            st.warning("Region boundaries unavailable. Choropleth cannot be displayed.")
+            return
+        code_key = _infer_geojson_code_key(gj, ['code','code_insee','codeRegion','code_region','code_reg'])
+        if not code_key:
+            st.warning("Could not infer region code key in GeoJSON.")
+            return
+        # Normalize keys to strings
+        reg['region_code'] = reg['region_code'].astype(str)
+        folium.Choropleth(
+            geo_data=gj,
+            name='Recruitment (region)',
+            data=reg,
+            columns=['region_code', 'patient_count'],
+            key_on=f'feature.properties.{code_key}',
+            fill_color='YlOrRd',
+            fill_opacity=0.7,
+            line_opacity=0.2,
+            nan_fill_opacity=0,
+            legend_name='Patients (region sum)'
+        ).add_to(folium_map)
+    except Exception as e:
+        st.error(f"Error rendering regional choropleth: {str(e)}")
+
+
+@st.cache_data(show_spinner=False)
+def _get_fr_communes_geojson():
+    try:
+        url = "https://france-geojson.gregoiredavid.fr/repo/communes.geojson"
+        r = requests.get(url, timeout=25)
+        r.raise_for_status()
+        return r.json()
+    except Exception:
+        return None
+
+
+def _add_recruitment_choropleth_commune_to_map(folium_map, hospital_id, recruitment_df, max_communes: int = 300):
+    try:
+        df_rec = recruitment_df.copy()
+        df_rec['hospital_id'] = df_rec['hospital_id'].astype(str)
+        df_rec = df_rec[df_rec['hospital_id'] == str(hospital_id)]
+        if df_rec.empty:
+            st.info("No recruitment data for this hospital.")
+            return
+        df_rec['city_code'] = (
+            df_rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
+        )
+        agg = (
+            df_rec.groupby('city_code', as_index=False)['patient_count'].sum()
+            .sort_values('patient_count', ascending=False)
+            .head(max_communes)
+        )
+        codes = set(agg['city_code'].astype(str))
+        gj_all = _get_fr_communes_geojson()
+        if not gj_all:
+            st.warning("Commune boundaries unavailable. Choropleth cannot be displayed.")
+            return
+        # Filter GeoJSON to only features we need
+        feats = gj_all.get('features', [])
+        filtered = [f for f in feats if str(f.get('properties', {}).get('code', '')).zfill(5) in codes]
+        if not filtered:
+            st.info("No commune polygons matched the recruitment codes.")
+            return
+        gj = {"type": "FeatureCollection", "features": filtered}
+        folium.Choropleth(
+            geo_data=gj,
+            name='Recruitment (commune)',
+            data=agg,
+            columns=['city_code', 'patient_count'],
+            key_on='feature.properties.code',
+            fill_color='YlOrRd',
+            fill_opacity=0.75,
+            line_opacity=0.2,
+            nan_fill_opacity=0,
+            legend_name='Patients (commune sum)'
+        ).add_to(folium_map)
+        st.caption(f"Commune choropleth rendered with top {len(agg)} communes by patients (filtered for performance).")
+    except Exception as e:
+        st.error(f"Error rendering commune choropleth: {str(e)}")
+
 with tab_activity:
     st.subheader("Activity Overview")
     # Total surgeries and quick mix charts
@@ -584,7 +734,17 @@ with tab_complications:
 
 with tab_geo:
     st.subheader("Recruitment Zone and Competitors")
-    map_mode = st.radio("Map mode", options=["Heatmap", "Choropleth (by department)"], horizontal=True, index=0)
+    map_mode = st.radio(
+        "Map mode",
+        options=[
+            "Heatmap",
+            "Choropleth – Department",
+            "Choropleth – Region",
+            "Choropleth – Commune (top)"
+        ],
+        horizontal=True,
+        index=0
+    )
     # Map
     try:
         center = [float(selected_hospital_details.get('latitude')), float(selected_hospital_details.get('longitude'))]
@@ -610,8 +770,12 @@ with tab_geo:
     # Add recruitment layer
     if map_mode.startswith("Heatmap"):
         _add_recruitment_zones_to_map(m, selected_hospital_id, recruitment, cities)
-    else:
+    elif "Department" in map_mode:
         _add_recruitment_choropleth_to_map(m, selected_hospital_id, recruitment)
+    elif "Region" in map_mode:
+        _add_recruitment_choropleth_region_to_map(m, selected_hospital_id, recruitment)
+    else:
+        _add_recruitment_choropleth_commune_to_map(m, selected_hospital_id, recruitment)
 
     # Add top-5 competitors as ranked markers
     try:
