@@ -153,191 +153,130 @@ with st.expander("🗺️ National Recruitment Heatmap (All Hospitals)", expande
         st.warning(f"Could not render national recruitment heatmap: {str(e)}")
 
 # Choropleth alternative
-with st.expander("🗺️ National Recruitment Choropleth – Department", expanded=False):
-    try:
-        if not recruitment.empty:
-            rec = recruitment.copy()
-            rec['city_code'] = (
-                rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
-            )
-            rec['dept_code'] = rec['city_code'].apply(_dept_code_from_insee)
-            dep = rec.groupby('dept_code', as_index=False)['patient_count'].sum()
-            if not dep.empty:
-                m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
-                gj = _get_fr_departments_geojson()
-                if gj:
-                    folium.Choropleth(
-                        geo_data=gj,
-                        name='Recruitment (dept)',
-                        data=dep,
-                        columns=['dept_code', 'patient_count'],
-                        key_on='feature.properties.code',
-                        fill_color='YlGn',
-                        fill_opacity=0.7,
-                        line_opacity=0.2,
-                        nan_fill_opacity=0,
-                        legend_name='Patients (department sum)'
-                    ).add_to(m)
-                    st_folium(m, width="100%", height=520, key="national_recruitment_choropleth")
-                else:
-                    st.info("Department boundaries unavailable.")
-            else:
-                st.info("No recruitment data to aggregate.")
+st.markdown("### National Recruitment Choropleth – Commune")
+try:
+    if not recruitment.empty:
+        rec = recruitment.copy()
+        rec['city_code'] = rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
+        cp_tot = rec.groupby('city_code', as_index=False)['patient_count'].sum()
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        cp_map = build_cp_to_insee(os.path.join(data_dir, 'COMMUNES_FRANCE_INSEE.csv'))
+        cp_tot['insee_list'] = cp_tot['city_code'].map(lambda c: cp_map.get(c, []))
+        exploded = cp_tot.explode('insee_list').dropna(subset=['insee_list']).copy()
+        exploded['insee'] = exploded['insee_list'].astype(str).str.zfill(5)
+        agg = exploded.groupby('insee', as_index=False)['patient_count'].sum()
+        gj = load_communes_geojson_filtered(agg['insee']) or load_communes_geojson(None)
+        key = detect_insee_key(gj) if gj else None
+        if gj and key and not agg.empty:
+            m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
+            vmin = float(agg['patient_count'].min()); vmax = float(agg['patient_count'].max())
+            colormap = cm.linear.YlOrRd_09.scale(vmin, vmax)
+            colormap.caption = 'Patients recruited'
+            colormap.add_to(m)
+            val_map = dict(zip(agg['insee'].astype(str), agg['patient_count'].astype(float)))
+            def _style_fn(feat):
+                code = str(feat.get('properties', {}).get(key, '')).zfill(5)
+                v = val_map.get(code)
+                if v is None:
+                    return {"fillOpacity": 0.0, "weight": 0.0, "color": "#00000000"}
+                return {"fillColor": colormap(v), "color": "#444444", "weight": 0.4, "fillOpacity": 0.6}
+            folium.GeoJson(gj, style_function=_style_fn).add_to(m)
+            st_folium(m, width="100%", height=540, key="national_recruitment_choropleth_commune_v2")
         else:
-            st.info("Recruitment data not available.")
-    except Exception as e:
-        st.warning(f"Could not render national choropleth: {str(e)}")
+            st.info('Commune polygons unavailable or no data.')
+    else:
+        st.info('Recruitment data not available.')
+except Exception as e:
+    st.warning(f'Could not render national choropleth (commune): {e}')
 
-with st.expander("🗺️ National Recruitment Choropleth – Region", expanded=False):
-    try:
-        if not recruitment.empty:
-            rec = recruitment.copy()
-            rec['city_code'] = (
-                rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
-            )
-            # Map city INSEE to department then to region
-            def _dept_code_from_insee(code: str) -> str:
-                c = str(code).strip().upper()
-                if c.startswith('97') or c.startswith('98'):
-                    return c[:3]
-                if c.startswith('2A') or c.startswith('2B'):
-                    return c[:2]
-                return c[:2]
-            rec['dept_code'] = rec['city_code'].apply(_dept_code_from_insee)
-            # Build dept->region map from departments GeoJSON
-            dgj = _get_fr_departments_geojson()
-            d2r = {}
-            if dgj:
-                for f in dgj.get('features', []):
-                    props = f.get('properties', {})
-                    dept = str(props.get('code', '')).strip()
-                    reg = props.get('code_region') or props.get('codeRegion') or props.get('region')
-                    if dept and reg is not None:
-                        d2r[dept] = str(reg)
-            if not d2r:
-                st.info("Could not map departments to regions.")
-            else:
-                rec['region_code'] = rec['dept_code'].map(d2r)
-                reg = rec.dropna(subset=['region_code']).groupby('region_code', as_index=False)['patient_count'].sum()
-                if not reg.empty:
-                    m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
-                    # Fetch regions geojson
-                    def _get_fr_regions_geojson():
-                        try:
-                            url = "https://france-geojson.gregoiredavid.fr/repo/regions.geojson"
-                            r = requests.get(url, timeout=10)
-                            r.raise_for_status()
-                            return r.json()
-                        except Exception:
-                            return None
-                    rgj = _get_fr_regions_geojson()
-                    if rgj:
-                        # Try to infer the region code property name
-                        code_key = None
-                        feats = rgj.get('features', [])
-                        if feats:
-                            props = feats[0].get('properties', {})
-                            for k in ['code','code_insee','codeRegion','code_region','code_reg']:
-                                if k in props:
-                                    code_key = k
-                                    break
-                        if code_key:
-                            reg['region_code'] = reg['region_code'].astype(str)
-                            folium.Choropleth(
-                                geo_data=rgj,
-                                name='Recruitment (region)',
-                                data=reg,
-                                columns=['region_code', 'patient_count'],
-                                key_on=f'feature.properties.{code_key}',
-                                fill_color='YlOrRd',
-                                fill_opacity=0.7,
-                                line_opacity=0.2,
-                                nan_fill_opacity=0,
-                                legend_name='Patients (region sum)'
-                            ).add_to(m)
-                            st_folium(m, width="100%", height=520, key="national_recruitment_choropleth_region")
-                        else:
-                            st.info("Could not infer region code key from GeoJSON.")
-                    else:
-                        st.info("Region boundaries unavailable.")
-                else:
-                    st.info("No recruitment data to aggregate at region level.")
-        else:
-            st.info("Recruitment data not available.")
-    except Exception as e:
-        st.warning(f"Could not render national choropleth (region): {str(e)}")
+# --- National Complication Survival (Kaplan–Meier style) ---
+st.header("National Complication Survival (Kaplan–Meier)")
 
-with st.expander("🗺️ National Recruitment Choropleth – Commune (top)", expanded=False):
-    try:
-        if not recruitment.empty:
-            rec = recruitment.copy()
-            rec['city_code'] = (
-                rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
-            )
-            # Recruitment codes are postal codes; map to communes by postal list
-            rec['postal'] = rec['city_code'].str.replace(r'\D+', '', regex=True).str.zfill(5)
-            agg = (
-                rec[rec['postal'].str.len() == 5]
-                .groupby('postal', as_index=False)['patient_count'].sum()
-                .sort_values('patient_count', ascending=False)
-                .head(1000)  # limit for performance
-            )
-            codes = set(agg['postal'].astype(str))
-            # Fetch communes geojson
-            def _get_fr_communes_geojson():
-                try:
-                    url = "https://france-geojson.gregoiredavid.fr/repo/communes.geojson"
-                    r = requests.get(url, timeout=30)
-                    r.raise_for_status()
-                    return r.json()
-                except Exception:
-                    return None
-            gj_all = _get_fr_communes_geojson()
-            if gj_all:
-                feats = gj_all.get('features', [])
-                rows = []
-                filtered = []
-                for f in feats:
-                    props = f.get('properties', {})
-                    insee = str(props.get('code', '')).strip()
-                    postals = props.get('codesPostaux') or props.get('codes_postaux') or []
-                    try:
-                        if isinstance(postals, str):
-                            postals = [p.strip() for p in postals.split(',') if p.strip()]
-                    except Exception:
-                        postals = []
-                    matched = [p for p in postals if p in codes]
-                    if matched:
-                        s = float(agg[agg['postal'].isin(matched)]['patient_count'].sum())
-                        if s > 0:
-                            rows.append({"insee": insee, "patient_count": s})
-                            filtered.append(f)
-                if filtered:
-                    gj = {"type": "FeatureCollection", "features": filtered}
-                    m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
-                    data_df = pd.DataFrame(rows)
-                    folium.Choropleth(
-                        geo_data=gj,
-                        name='Recruitment (commune)',
-                        data=data_df,
-                        columns=['insee', 'patient_count'],
-                        key_on='feature.properties.code',
-                        fill_color='YlOrRd',
-                        fill_opacity=0.75,
-                        line_opacity=0.2,
-                        nan_fill_opacity=0,
-                        legend_name='Patients (commune sum)'
-                    ).add_to(m)
-                    st.caption("Top 1000 postal zones mapped to communes (aggregated) for performance.")
-                    st_folium(m, width="100%", height=540, key="national_recruitment_choropleth_commune")
-                else:
-                    st.info("No commune polygons matched the recruitment codes.")
-            else:
-                st.info("Commune boundaries unavailable.")
-        else:
-            st.info("Recruitment data not available.")
-    except Exception as e:
-        st.warning(f"Could not render national choropleth (commune): {str(e)}")
+# Filters
+colf1, colf2, colf3 = st.columns([1,1,2])
+with colf1:
+    interval = st.radio("Interval", options=["6 months", "3 months"], index=0, horizontal=True)
+with colf2:
+    proc_filter = st.multiselect("Procedure type", options=["Sleeve", "Gastric Bypass"], default=[])
+    rev_filter = st.selectbox("Primary/Revisional", options=["All", "Primary", "Revisional"], index=0)
+with colf3:
+    label_opts = st.multiselect("Labels", options=["CSO", "SOFFCO", "None"], default=["CSO","SOFFCO","None"], help="Filter hospitals by labels")
+    top10 = st.checkbox("Top 10 hospitals by procedures (2020–2024)", value=False)
+
+# Build hospital subset based on labels and top 10
+subset_ids = set()
+try:
+    est_df = st.session_state.get('establishments', None) or all_data.get('establishments')
+    ann_df = st.session_state.get('annual', None) or all_data.get('annual')
+    if est_df is None or ann_df is None:
+        est_df, ann_df = get_dataframes()
+    estN = est_df.copy()
+    estN['id'] = estN['id'].astype(str)
+    # Label filtering
+    mask_any = pd.Series([False]*len(estN))
+    parts = []
+    if 'CSO' in label_opts and 'cso' in estN.columns:
+        parts.append(estN['cso'] == 1)
+    if 'SOFFCO' in label_opts and 'LAB_SOFFCO' in estN.columns:
+        parts.append(estN['LAB_SOFFCO'] == 1)
+    if 'None' in label_opts:
+        cond_none = ((estN.get('cso', 0) != 1) & (estN.get('LAB_SOFFCO', 0) != 1))
+        parts.append(cond_none)
+    if parts:
+        mask_any = parts[0]
+        for p in parts[1:]:
+            mask_any = mask_any | p
+    est_filtered = estN[mask_any]
+    # Top 10 by total procedures across 2020–2024
+    if top10 and not ann_df.empty:
+        annN = ann_df.copy()
+        annN['id'] = annN['id'].astype(str)
+        vol = annN.groupby('id')['total_procedures_year'].sum().sort_values(ascending=False).head(10)
+        est_filtered = est_filtered[est_filtered['id'].isin(vol.index.astype(str))]
+    subset_ids = set(est_filtered['id'].astype(str)) if not est_filtered.empty else set()
+except Exception:
+    subset_ids = set()
+
+# Prepare complications cohort
+comp_df = all_data.get('complications', pd.DataFrame())
+if not comp_df.empty:
+    data = comp_df.copy()
+    data['hospital_id'] = data['hospital_id'].astype(str)
+    if subset_ids:
+        data = data[data['hospital_id'].isin(subset_ids)]
+    # Interval aggregation
+    data = data.dropna(subset=['quarter_date']).sort_values('quarter_date')
+    data['year'] = data['quarter_date'].dt.year
+    if interval.startswith('6'):
+        data['bucket'] = ((data['quarter_date'].dt.quarter - 1) // 2 + 1)
+        label_name = '6‑month interval'
+    else:
+        data['bucket'] = data['quarter_date'].dt.quarter
+        label_name = '3‑month interval (quarter)'
+    data['label'] = data['year'].astype(int).astype(str) + (data['bucket'].astype(int).astype(str).map(lambda x: ' H'+x if interval.startswith('6') else ' Q'+x))
+    agg = data.groupby(['year','bucket','label'], as_index=False).agg({'complications_count':'sum','procedures_count':'sum'}).sort_values(['year','bucket'])
+    # KM survival
+    if not agg.empty:
+        agg['hazard'] = agg.apply(lambda r: (r['complications_count']/r['procedures_count']) if r['procedures_count']>0 else 0.0, axis=1)
+        agg['survival'] = (1 - agg['hazard']).cumprod()
+        x = []; y = []; prev = 1.0
+        for _, r in agg.iterrows():
+            lbl = str(r['label'])
+            x.append(lbl); y.append(prev)
+            prev = float(r['survival'])
+            x.append(lbl); y.append(prev)
+        import plotly.graph_objects as go
+        fig_km_nat = go.Figure()
+        fig_km_nat.add_trace(go.Scatter(x=x, y=[v*100 for v in y], mode='lines', name='National KM', line=dict(shape='hv', width=3, color='#e67e22')))
+        fig_km_nat.update_layout(height=320, yaxis_title='Complication‑free probability (%)', xaxis_title=label_name, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_km_nat, use_container_width=True)
+        # Notes for procedure/revision filters
+        if proc_filter or (rev_filter != 'All'):
+            st.info("Procedure type and primary/revisional filters require event counts by procedure, which are not available in national complications data. The KM curve reflects all procedures for the selected hospital cohort.")
+    else:
+        st.info('No data to compute national KM curve with current filters.')
+else:
+    st.info('Complications dataset unavailable.')
 
 # Track page view
 try:

@@ -695,6 +695,48 @@ with tab_complications:
             return national_avg
         
         national_avg_data = calculate_national_complication_averages()
+
+        # 6‑month (semester) aggregation for hospital and national
+        def _to_semester(df: pd.DataFrame) -> pd.DataFrame:
+            if df.empty or 'quarter_date' not in df.columns:
+                return pd.DataFrame()
+            d = df.copy()
+            d = d.dropna(subset=['quarter_date']).sort_values('quarter_date')
+            d['year'] = d['quarter_date'].dt.year
+            d['half'] = ((d['quarter_date'].dt.quarter - 1) // 2 + 1)
+            sem = (
+                d.groupby(['year','half'], as_index=False)
+                  .agg({'complications_count':'sum','procedures_count':'sum'})
+            )
+            sem['rate_pct'] = sem.apply(lambda r: (r['complications_count']/r['procedures_count']*100) if r['procedures_count']>0 else 0.0, axis=1)
+            sem['label'] = sem['year'].astype(int).astype(str) + ' H' + sem['half'].astype(int).astype(str)
+            return sem.sort_values(['year','half'])
+
+        hosp_sem = _to_semester(hosp_comp)
+        nat_sem = _to_semester(complications)
+
+        # Display latest 6‑month metrics and comparison
+        if not hosp_sem.empty:
+            latest_sem = hosp_sem.iloc[-1]
+            sem_key = (int(latest_sem['year']), int(latest_sem['half']))
+            nat_row = nat_sem[(nat_sem['year']==sem_key[0]) & (nat_sem['half']==sem_key[1])]
+            nat_val = float(nat_row['rate_pct'].iloc[0]) if not nat_row.empty else 0.0
+            st.markdown("#### Latest 6‑Month Data")
+            l1, l2 = st.columns(2)
+            with l1:
+                st.metric("Hospital 6‑month rate", f"{float(latest_sem['rate_pct']):.1f}%")
+            with l2:
+                st.metric("National 6‑month rate", f"{nat_val:.1f}%")
+
+            # Bar comparison for the latest semester
+            comp_df = pd.DataFrame({
+                'Metric': ['Hospital','National'],
+                'Rate (%)': [float(latest_sem['rate_pct']), nat_val]
+            })
+            fig_bar = px.bar(comp_df, x='Metric', y='Rate (%)', title=f"6‑Month Comparison ({latest_sem['label']})",
+                             color='Metric', color_discrete_map={'Hospital':'#1f77b4','National':'#ff7f0e'})
+            fig_bar.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_bar, use_container_width=True)
         
         # Show trend with available data (rolling rate preferred, fallback to quarterly rate)
         recent = hosp_comp.tail(8).copy()
@@ -729,32 +771,8 @@ with tab_complications:
                 fig.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig, use_container_width=True)
             elif len(valid_data) == 1:
-                # Show single data point as a bar chart instead of line
-                st.markdown("#### Single Quarter Data")
-                single_point = valid_data.iloc[0]
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.metric("Hospital Rate", f"{single_point['rate_pct']:.1f}%")
-                with col2:
-                    national_val = single_point.get('national_pct', 0)
-                    if pd.isna(national_val):
-                        national_val = 0
-                    st.metric("National Average", f"{national_val:.1f}%")
-                
-                # Create a simple bar comparison
-                comparison_data = pd.DataFrame({
-                    'Metric': ['Hospital', 'National'],
-                    'Rate (%)': [single_point['rate_pct'], national_val]
-                })
-                
-                fig = px.bar(comparison_data, x='Metric', y='Rate (%)', 
-                            title=f'Single Quarter Comparison ({single_point["quarter"]})',
-                            color='Metric', color_discrete_map={'Hospital': '#1f77b4', 'National': '#ff7f0e'})
-                fig.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-                
-                st.info(f"Limited data available. Only showing data for {single_point['quarter']}.")
+                # If only one quarter, we fallback to latest 6‑month comparison above
+                st.info("Showing 6‑month metrics due to limited quarterly points.")
             else:
                 st.info("No valid rate data available to plot.")
         else:
