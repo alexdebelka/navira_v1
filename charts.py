@@ -51,15 +51,23 @@ def create_km_chart(
         y_vals = []
         
         if show_complication_rate:
-            # Show period-specific complication rates directly
-            # survival field now contains the period-specific rate directly
+            # Show complication rate with KM step-like appearance
+            # survival field contains the period-specific rate directly
+            prev_rate = 0.0  # Start at 0% complication rate
+            
             for _, row in curve_df.iterrows():
                 time_label = str(row['time'])
                 current_rate = float(row['survival']) * 100  # Convert to percentage
                 
-                # Add data point
+                # Add horizontal line at previous rate level
                 x_vals.append(time_label)
+                y_vals.append(prev_rate)
+                
+                # Add vertical jump to current rate level
+                x_vals.append(time_label)  
                 y_vals.append(current_rate)
+                
+                prev_rate = current_rate
         else:
             # Show survival probability (original behavior)
             prev_survival = 1.0
@@ -102,8 +110,9 @@ def create_km_chart(
     
     # Set y-axis range based on what we're showing
     if show_complication_rate:
-        # For complication rate, start at 0 and let it scale naturally
-        fig.update_layout(yaxis=dict(rangemode='tozero'))
+        # For complication rate, use a reasonable range (0-10% for typical rates)
+        # This will auto-scale but cap at reasonable upper bound
+        fig.update_layout(yaxis=dict(rangemode='tozero', range=[0, 10]))
     else:
         # For survival probability, fix range to 0-100%
         fig.update_layout(yaxis=dict(range=[0, 100]))
