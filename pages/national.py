@@ -1857,13 +1857,29 @@ if not complications.empty:
                 if active_filters:
                     title += f" - {', '.join(active_filters)}"
                 
+                # Create consistent color mapping for each group type
+                color_mapping = {
+                    'CSO Hospitals': '#1f77b4',      # Blue
+                    'SOFFCO Hospitals': '#e67e22',   # Orange  
+                    'No Labels': '#2ca02c',          # Green
+                    'Overall': '#d62728'             # Red
+                }
+                
+                # Sort curves to ensure consistent order: Overall first, then others
+                sorted_curves = {}
+                if 'Overall' in km_curves:
+                    sorted_curves['Overall'] = km_curves['Overall']
+                for key in ['CSO Hospitals', 'SOFFCO Hospitals', 'No Labels']:
+                    if key in km_curves:
+                        sorted_curves[key] = km_curves[key]
+                
                 fig_km_nat = create_multi_km_chart(
-                    curves_dict=km_curves,
+                    curves_dict=sorted_curves,
                     title=title,
                     yaxis_title='Complication Rate (%)',
                     xaxis_title=km_xaxis_label,
                     height=400,
-                    colors=['#e67e22', '#1f77b4', '#2ca02c', '#d62728']  # Orange, Blue, Green, Red
+                    colors=[color_mapping.get(key, '#9467bd') for key in sorted_curves.keys()]  # Consistent colors
                 )
                 
                 st.plotly_chart(fig_km_nat, use_container_width=True, key="km_national_multi")
