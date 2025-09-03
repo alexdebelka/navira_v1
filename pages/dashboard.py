@@ -761,6 +761,43 @@ with tab_complications:
             st.info("No complications data available for this hospital.")
     else:
         st.info("No complications data available for this hospital.")
+    # Kaplan–Meier style survival curve by 6‑month intervals
+    try:
+        st.markdown("#### Kaplan–Meier (approx.) — 6‑month complication‑free probability")
+        km_src = _get_hospital_complications(complications, str(selected_hospital_id)).copy()
+        if not km_src.empty and 'quarter_date' in km_src.columns:
+            km_src = km_src.sort_values('quarter_date')
+            km_src['year'] = km_src['quarter_date'].dt.year
+            km_src['half'] = ((km_src['quarter_date'].dt.quarter - 1) // 2 + 1)
+            km_src['semester'] = km_src['year'].astype(str) + ' H' + km_src['half'].astype(int).astype(str)
+            sem = km_src.groupby(['year','half','semester'], as_index=False).agg(
+                events=('complications_count','sum'),
+                total=('procedures_count','sum')
+            ).sort_values(['year','half'])
+            sem['hazard'] = sem.apply(lambda r: (r['events']/r['total']) if r['total']>0 else 0.0, axis=1)
+            sem['survival'] = (1 - sem['hazard']).cumprod()
+            if not sem.empty:
+                x = []
+                y = []
+                prev_s = 1.0
+                for _, r in sem.iterrows():
+                    label = f"{int(r['year'])} H{int(r['half'])}"
+                    x.append(label); y.append(prev_s)
+                    prev_s = float(r['survival'])
+                    x.append(label); y.append(prev_s)
+                import plotly.graph_objects as go
+                fig_km = go.Figure()
+                fig_km.add_trace(go.Scatter(x=x, y=[v*100 for v in y], mode='lines', name='KM (approx.)', line=dict(shape='hv', width=3, color='#1f77b4')))
+                fig_km.update_layout(height=300, yaxis_title='Complication‑free probability (%)', xaxis_title='6‑month interval', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_km, use_container_width=True)
+                with st.expander('Method (approximation)'):
+                    st.markdown("This curve approximates a Kaplan–Meier survival function using aggregate 6‑month intervals. For each interval, hazard = events / total procedures, and survival multiplies (1 − hazard) across intervals. It uses hospital‑level aggregates (not patient‑level times).")
+            else:
+                st.info('Not enough data to compute 6‑month Kaplan–Meier curve.')
+        else:
+            st.info('Complication data unavailable for Kaplan–Meier computation.')
+    except Exception:
+        pass
 
 with tab_geo:
     st.subheader("Recruitment Zone and Competitors (Top-5 Choropleths)")
@@ -773,6 +810,12 @@ with tab_geo:
     except Exception:
         center = [48.8566, 2.3522]
     m = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
+    # Ensure choropleths stay below markers even when toggled
+    try:
+        folium.map.Pane('choropleth', z_index=400).add_to(m)
+        folium.map.Pane('markers', z_index=650).add_to(m)
+    except Exception:
+        pass
 
     # Add recruitment layer
     # Build competitor layers
@@ -852,7 +895,7 @@ with tab_geo:
                         return {"fillOpacity": 0.0, "weight": 0.0, "color": "#00000000"}
                     color = colormap(v) if 'colormap' in globals() else '#e34a33'
                     return {"fillColor": color, "color": "#444444", "weight": 0.4, "fillOpacity": 0.5}
-                folium.GeoJson(gj, name=f"geojson_{idx}", style_function=_style_fn).add_to(grp)
+                folium.GeoJson(gj, name=f"geojson_{idx}", style_function=_style_fn, pane='choropleth').add_to(grp)
                 grp.add_to(m)
             except Exception:
                 continue
@@ -879,7 +922,8 @@ with tab_geo:
             fill=True,
             fill_color='#d62728',
             fill_opacity=0.95,
-            popup=f"<b>{selected_hospital_details['name']}</b><br><i>Selected hospital</i>"
+            popup=f"<b>{selected_hospital_details['name']}</b><br><i>Selected hospital</i>",
+            pane='markers'
         ).add_to(m)
     except Exception:
         pass
@@ -923,7 +967,8 @@ with tab_geo:
                     fill=True,
                     fill_color=color,
                     fill_opacity=0.75,
-                    popup=popup
+                    popup=popup,
+                    pane='markers'
                 ).add_to(m)
     except Exception:
         pass
