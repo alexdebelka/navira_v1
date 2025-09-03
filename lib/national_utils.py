@@ -46,7 +46,7 @@ def load_and_prepare_data() -> pd.DataFrame:
     if 'id' in est_meta.columns:
         est_meta['id'] = est_meta['id'].astype(str)
     # Keep one row per id to avoid duplicate-index issues downstream
-    keep_cols = [c for c in ['id', 'name', 'statut', 'ville', 'university', 'cso', 'LAB_SOFFCO', 'latitude', 'longitude', 'lib_reg', 'code_reg'] if c in est_meta.columns]
+    keep_cols = [c for c in ['id', 'name', 'statut', 'ville', 'university', 'cso', 'LAB_SOFFCO', 'latitude', 'longitude', 'lib_reg', 'code_reg', 'code_postal'] if c in est_meta.columns]
     est_meta = est_meta[keep_cols].drop_duplicates(subset=['id'], keep='first')
 
     # Merge metadata into annual records
