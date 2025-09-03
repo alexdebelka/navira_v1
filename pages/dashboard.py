@@ -5,6 +5,13 @@ import altair as alt
 import folium
 from folium.plugins import HeatMap
 import requests
+from navira.competitor_layers import (
+    AllocationMode,
+    build_cp_to_insee,
+    competitor_choropleth_df,
+    get_top_competitors,
+)
+from navira.geojson_loader import load_communes_geojson, detect_insee_key
 from streamlit_folium import st_folium
 import plotly.express as px
 import plotly.graph_objects as go
@@ -754,9 +761,15 @@ with tab_complications:
         st.info("No complications data available for this hospital.")
 
 with tab_geo:
-    st.subheader("Recruitment Zone and Competitors")
-    # Only commune-level choropleth per request
-    map_mode = "Choropleth – Commune (top)"
+    st.subheader("Recruitment Zone and Competitors (Top-5 Choropleths)")
+    # Controls for allocation mode
+    allocation = st.radio(
+        "Allocation mode",
+        options=["even_split", "no_split"],
+        index=0,
+        horizontal=True,
+        help="How to allocate postal codes that map to multiple communes",
+    )
     # Map
     try:
         center = [float(selected_hospital_details.get('latitude')), float(selected_hospital_details.get('longitude'))]
@@ -767,7 +780,68 @@ with tab_geo:
     m = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
 
     # Add recruitment layer
-    _add_recruitment_choropleth_commune_to_map(m, selected_hospital_id, recruitment)
+    # Build competitor layers
+    try:
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+    except Exception:
+        data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    rec_path = os.path.join(data_dir, "11_recruitement_zone.csv")
+    comp_path = os.path.join(data_dir, "13_main_competitors.csv")
+    communes_csv = os.path.join(data_dir, "COMMUNES_FRANCE_INSEE.csv")
+
+    # Competitors
+    top5 = get_top_competitors(comp_path, str(selected_hospital_id))
+    if not top5:
+        st.info("No competitors found for this hospital.")
+    # Postal → INSEE map
+    cp_map = build_cp_to_insee(communes_csv)
+    # GeoJSON
+    gj = load_communes_geojson(None)
+    insee_key = detect_insee_key(gj) if gj else None
+
+    diagnostics_rows = []
+    if gj and insee_key:
+        from folium.features import GeoJson, GeoJsonTooltip
+        for idx, comp_id in enumerate(top5):
+            df_layer, diag = competitor_choropleth_df(rec_path, comp_id, cp_map, allocation=allocation)  # type: ignore[arg-type]
+            diagnostics_rows.append((comp_id, diag))
+            if df_layer.empty:
+                continue
+            try:
+                layer = folium.Choropleth(
+                    geo_data=gj,
+                    name=f"Competitor {idx+1}: {comp_id}",
+                    data=df_layer,
+                    columns=["insee5", "value"],
+                    key_on=f"feature.properties.{insee_key}",
+                    fill_color="YlOrRd",
+                    fill_opacity=0.55,
+                    line_opacity=0.2,
+                    nan_fill_opacity=0,
+                    legend_name="Patients recruited",
+                )
+                layer.add_to(m)
+            except Exception:
+                continue
+        try:
+            folium.LayerControl(collapsed=False).add_to(m)
+        except Exception:
+            pass
+    else:
+        st.warning("Commune polygons unavailable. Configure COMMUNES_GEOJSON_PATH or secrets.")
+    # Hospital marker on top
+    try:
+        folium.CircleMarker(
+            location=[selected_hospital_details['latitude'], selected_hospital_details['longitude']],
+            radius=16,
+            color='#d62728',
+            fill=True,
+            fill_color='#d62728',
+            fill_opacity=0.95,
+            popup=f"<b>{selected_hospital_details['name']}</b><br><i>Selected hospital</i>"
+        ).add_to(m)
+    except Exception:
+        pass
 
     # Hospital marker (added AFTER layers to ensure it stays on top)
     try:
