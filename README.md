@@ -112,22 +112,57 @@ The recruitment zone feature provides interactive choropleth maps showing patien
 
 ### Configuration
 
-**Streamlit Secrets (recommended):**
+## Configuring Communes GeoJSON
+
+The application uses French commune boundaries for choropleth mapping. The GeoJSON loader follows a robust resolution order:
+
+### Configuration Methods (in priority order)
+
+**1. Streamlit Secrets (recommended):**
 ```toml
 # .streamlit/secrets.toml
-COMMUNES_GEOJSON_PATH = "/path/to/communes.geojson"
+[paths]
+communes_geojson = "/path/to/communes.geojson"
 ```
 
-**Environment Variable:**
+**2. Environment Variable:**
 ```bash
 export COMMUNES_GEOJSON_PATH="/path/to/communes.geojson"
 ```
 
-**Default Paths Searched:**
+**3. Default Paths Searched:**
 - `data/communes.geojson`
+- `data/communes.geojson.gz` (gzipped)
 - `data/communes-france.geojson`
 - `data/communes_france.geojson`
 - `../data/communes.geojson`
+
+### Supported Formats
+
+- **Standard GeoJSON:** `.geojson` files
+- **Compressed GeoJSON:** `.geojson.gz` files (automatically detected)
+- **INSEE Property Keys:** Automatically detects `code`, `INSEE_COM`, `insee`, `code_insee`, etc.
+- **Corsica Codes:** Handles `2A` and `2B` prefixes correctly
+
+### Troubleshooting GeoJSON Issues
+
+If you see "No GeoJSON data available" errors:
+
+1. **Check the diagnostic panel** - The app shows detailed error information
+2. **Verify file exists** at the resolved path shown in diagnostics
+3. **Use the cache reset button** - Click "🔄 Reset Map Cache" in the UI
+4. **Download from source:**
+   ```bash
+   curl -o data/communes.geojson https://france-geojson.gregoiredavid.fr/repo/communes.geojson
+   ```
+
+### GeoJSON Requirements
+
+The GeoJSON file must:
+- Be a valid `FeatureCollection`
+- Have commune features with INSEE code properties
+- Contain ≥90% valid INSEE codes for auto-detection
+- Support both 5-digit codes (01001-99999) and Corsica codes (2A001, 2B001)
 
 ### Known Limitations
 

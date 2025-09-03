@@ -814,9 +814,18 @@ with tab_geo:
         from navira.competitors import get_competitor_names
         from navira.geo import get_geojson_summary, load_communes_geojson
         
-        # Show GeoJSON status
-        geojson_data = load_communes_geojson()
-        st.info(get_geojson_summary(geojson_data))
+        # Show GeoJSON status and add cache controls
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            geojson_data, geo_diagnostics = load_communes_geojson()
+            st.info(get_geojson_summary(geojson_data, geo_diagnostics))
+        
+        with col2:
+            if st.button("🔄 Reset Map Cache", help="Clear cached GeoJSON and map data"):
+                st.cache_data.clear()
+                st.success("Cache cleared!")
+                st.rerun()
         
         # Prepare hospital info
         hospital_info = {

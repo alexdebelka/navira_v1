@@ -95,21 +95,62 @@ def create_recruitment_map(
         if not df.empty:
             needed_insee_codes.extend(df['insee5'].tolist())
     
-    # Load filtered GeoJSON for better performance
-    from .geo import load_communes_geojson_filtered, load_communes_geojson
-    geojson_data = load_communes_geojson_filtered(needed_insee_codes) if needed_insee_codes else load_communes_geojson()
+    # Load GeoJSON with robust error handling and diagnostics
+    from .geo import load_communes_geojson_filtered, load_communes_geojson, get_geojson_summary
+    
+    if needed_insee_codes:
+        geojson_data = load_communes_geojson_filtered(needed_insee_codes)
+        geo_diagnostics = None  # Filtered version doesn't return diagnostics
+    else:
+        geojson_data, geo_diagnostics = load_communes_geojson()
     
     diagnostics_list = []
     
+    # Show detailed diagnostics instead of generic error messages
     if not geojson_data or 'features' not in geojson_data or not geojson_data['features']:
-        st.error("❌ No GeoJSON data available")
-        st.warning("⚠️ GeoJSON data not available. Choropleth layers will not be shown.")
+        if geo_diagnostics and geo_diagnostics.get("errors"):
+            st.error(f"❌ GeoJSON Loading Failed: {geo_diagnostics['errors'][0]}")
+            
+            # Show diagnostic details in expandable section
+            with st.expander("🔧 GeoJSON Diagnostics", expanded=True):
+                st.markdown("**Attempted paths:**")
+                for path in geo_diagnostics.get("attempted_paths", []):
+                    st.text(f"  • {path}")
+                
+                if geo_diagnostics.get("resolved_path"):
+                    st.markdown(f"**Resolved path:** `{geo_diagnostics['resolved_path']}`")
+                
+                if len(geo_diagnostics.get("errors", [])) > 1:
+                    st.markdown("**All errors:**")
+                    for error in geo_diagnostics["errors"]:
+                        st.text(f"  • {error}")
+                        
+                st.markdown("**Solutions:**")
+                st.markdown("""
+                1. **Set GeoJSON path in secrets:** Add `[paths]` section with `communes_geojson = "/path/to/file"`
+                2. **Set environment variable:** `COMMUNES_GEOJSON_PATH="/path/to/communes.geojson"`
+                3. **Place file in default location:** `data/communes.geojson`
+                4. **Download from source:** [French GeoJSON Repository](https://github.com/gregoiredavid/france-geojson)
+                """)
+        else:
+            st.error("❌ No GeoJSON data available")
+            st.warning("⚠️ GeoJSON data not available. Choropleth layers will not be shown.")
+        
         _add_hospital_marker(m, hospital_finess, hospital_info)
         return m, diagnostics_list
     
     insee_key = detect_insee_key(geojson_data)
     if not insee_key:
-        st.warning("⚠️ Could not detect INSEE key in GeoJSON. Choropleth layers will not be shown.")
+        st.error("⚠️ Could not detect INSEE property key in GeoJSON")
+        
+        # Show available properties for debugging
+        if geojson_data.get('features'):
+            sample_props = list(geojson_data['features'][0].get('properties', {}).keys())
+            with st.expander("🔧 Available GeoJSON Properties"):
+                st.write("Sample properties from first feature:")
+                st.write(sample_props)
+                st.markdown("**Expected INSEE keys:** `code`, `INSEE_COM`, `insee`, `code_insee`")
+        
         _add_hospital_marker(m, hospital_finess, hospital_info)
         return m, diagnostics_list
     
