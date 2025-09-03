@@ -755,43 +755,86 @@ with tab_complications:
         # Removed Quarterly Rate vs National chart due to unreliable hospital quarterly data
     else:
         st.info("No complications data available for this hospital.")
-    # Kaplan–Meier style survival curve by 6‑month intervals
+    # Kaplan–Meier style survival curve using robust system
     try:
         st.markdown("#### Kaplan–Meier (approx.) — 6‑month complication‑free probability")
+        
+        # Import new KM system
+        from km import compute_km_from_aggregates
+        from charts import create_km_chart  
+        from utils.cache import debug_dataframe_signature, show_debug_panel
+        
+        # Debug signatures
+        debug_signatures = {}
+        
+        # Get hospital-specific complications data
         km_src = _get_hospital_complications(complications, str(selected_hospital_id)).copy()
+        debug_signatures['hospital_complications'] = debug_dataframe_signature(km_src, f"Hospital {selected_hospital_id} complications")
+        
         if not km_src.empty and 'quarter_date' in km_src.columns:
             km_src = km_src.sort_values('quarter_date')
             km_src['year'] = km_src['quarter_date'].dt.year
             km_src['half'] = ((km_src['quarter_date'].dt.quarter - 1) // 2 + 1)
             km_src['semester'] = km_src['year'].astype(str) + ' H' + km_src['half'].astype(int).astype(str)
+            
+            # Aggregate by semester
             sem = km_src.groupby(['year','half','semester'], as_index=False).agg(
                 events=('complications_count','sum'),
                 total=('procedures_count','sum')
             ).sort_values(['year','half'])
-            sem['hazard'] = sem.apply(lambda r: (r['events']/r['total']) if r['total']>0 else 0.0, axis=1)
-            sem['survival'] = (1 - sem['hazard']).cumprod()
+            
+            debug_signatures['semester_aggregated'] = debug_dataframe_signature(sem, "Aggregated by semester")
+            
             if not sem.empty:
-                x = []
-                y = []
-                prev_s = 1.0
-                for _, r in sem.iterrows():
-                    label = f"{int(r['year'])} H{int(r['half'])}"
-                    x.append(label); y.append(prev_s)
-                    prev_s = float(r['survival'])
-                    x.append(label); y.append(prev_s)
-                import plotly.graph_objects as go
-                fig_km = go.Figure()
-                fig_km.add_trace(go.Scatter(x=x, y=[v*100 for v in y], mode='lines', name='KM (approx.)', line=dict(shape='hv', width=3, color='#1f77b4')))
-                fig_km.update_layout(height=300, yaxis_title='Complication‑free probability (%)', xaxis_title='6‑month interval', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_km, use_container_width=True)
-                with st.expander('Method (approximation)'):
-                    st.markdown("This curve approximates a Kaplan–Meier survival function using aggregate 6‑month intervals. For each interval, hazard = events / total procedures, and survival multiplies (1 − hazard) across intervals. It uses hospital‑level aggregates (not patient‑level times).")
+                try:
+                    # Use robust KM computation
+                    km_curve = compute_km_from_aggregates(
+                        df=sem,
+                        time_col='semester',
+                        event_col='events',
+                        at_risk_col='total', 
+                        group_cols=None,  # Single hospital
+                        data_hash=debug_signatures['semester_aggregated']['hash'],
+                        cache_version="v1"
+                    )
+                    
+                    debug_signatures['km_curve'] = debug_dataframe_signature(km_curve, "Final KM curve")
+                    
+                    if not km_curve.empty:
+                        # Create chart with unique key for this hospital
+                        fig_km = create_km_chart(
+                            curve_df=km_curve,
+                            page_id=f"hospital_{selected_hospital_id}",
+                            title="Hospital Complication Rate Over Time (KM)",
+                            yaxis_title='Complication‑free probability (%)',
+                            xaxis_title='6‑month interval',
+                            height=300,
+                            color='#1f77b4'
+                        )
+                        
+                        st.plotly_chart(fig_km, use_container_width=True, key=f"km_hospital_{selected_hospital_id}_v2")
+                        
+                        with st.expander('Method (approximation)'):
+                            st.markdown("This curve approximates a Kaplan–Meier survival function using aggregate 6‑month intervals. For each interval, hazard = events / total procedures, and survival multiplies (1 − hazard) across intervals. It uses hospital‑level aggregates (not patient‑level times).")
+                    else:
+                        st.info('KM computation returned empty results.')
+                        
+                except Exception as e:
+                    st.error(f"Error in KM computation: {e}")
+                    debug_signatures['km_error'] = {'error': str(e)}
             else:
                 st.info('Not enough data to compute 6‑month Kaplan–Meier curve.')
+                debug_signatures['no_semester_data'] = {'message': 'No semester aggregated data'}
         else:
             st.info('Complication data unavailable for Kaplan–Meier computation.')
-    except Exception:
-        pass
+            debug_signatures['no_raw_data'] = {'message': 'No hospital complications data'}
+        
+        # Show debug panel for this hospital (collapsed by default)
+        if st.checkbox("Show KM debug info", value=False, key=f"km_debug_hospital_{selected_hospital_id}"):
+            show_debug_panel(debug_signatures, expanded=True)
+            
+    except Exception as e:
+        st.error(f"Error computing KM: {e}")
 
 with tab_geo:
     st.subheader("Recruitment Zone and Competitors (Top-5 Choropleths)")

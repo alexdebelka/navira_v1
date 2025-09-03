@@ -8,6 +8,7 @@ Navira is a comprehensive analytics platform for bariatric surgery centers in Fr
 ### Key Features
 
 - **Hospital Performance Analytics**: Volume trends, robotic surgery rates, complication analysis
+- **Kaplan-Meier Survival Analysis**: Robust complication-free probability curves with proper caching
 - **Recruitment Zone Mapping**: Interactive choropleth visualization of patient recruitment by postal code/commune
 - **Competitor Analysis**: Top 5 competitor identification and comparison
 - **National Benchmarking**: Performance comparison against national averages
@@ -45,6 +46,33 @@ The app loads only Parquet files for visualization. If they are missing, the UI 
 ## National overview note
 
 National means are computed across hospitals (2020–2024). Only hospitals with ≥25 interventions/year are considered for that analysis.
+
+## Kaplan-Meier Analysis
+
+### How KM Curves are Computed
+
+The application uses a robust Kaplan-Meier computation system that eliminates common issues with identical curves across different filters:
+
+1. **Pure Functions**: All KM computations use pure functions without global state
+2. **Proper Caching**: Cache keys include data content hashes to ensure different inputs produce different results
+3. **Unique Chart Keys**: Each page uses unique Plotly chart keys to prevent figure reuse
+4. **Debug Mode**: Enable "Show KM debug info" to trace data flow and verify inputs differ between pages
+
+### KM Implementation
+
+- **National Level**: Aggregates complications across all filtered hospitals by time interval
+- **Hospital Level**: Uses hospital-specific complication data for individual curves
+- **Time Intervals**: Supports both 6-month (semester) and 3-month (quarterly) intervals
+- **Filtering**: Applies hospital label filters (CSO, SOFFCO) and top-N volume filters
+
+### Troubleshooting KM Issues
+
+If KM curves appear identical across different pages/filters:
+
+1. **Check Debug Info**: Enable the debug panel to see data signatures and hashes
+2. **Clear Caches**: Use the "Clear All Caches" button in debug mode
+3. **Verify Filters**: Ensure filters are actually changing the underlying data
+4. **Check Data**: Confirm different pages are using different datasets
 
 ## Troubleshooting
 

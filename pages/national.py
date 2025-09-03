@@ -1723,41 +1723,95 @@ if not complications.empty:
     except Exception:
         km_subset_ids = set()
 
-    # Prepare complications cohort and compute step function survival
+    # Compute KM curve using new robust system
+    from km import compute_km_from_aggregates, debug_signature
+    from charts import create_km_chart
+    from utils.cache import debug_dataframe_signature, show_debug_panel
+    
+    # Debug signatures for tracing
+    debug_signatures = {}
+    
     km_comp_df = all_data.get('complications', pd.DataFrame())
+    debug_signatures['raw_complications'] = debug_dataframe_signature(km_comp_df, "Raw complications data")
+    
     if not km_comp_df.empty:
+        # Apply filters
         km_data = km_comp_df.copy()
         km_data['hospital_id'] = km_data['hospital_id'].astype(str)
+        debug_signatures['after_id_conversion'] = debug_dataframe_signature(km_data, "After ID conversion")
+        
         if km_subset_ids:
             km_data = km_data[km_data['hospital_id'].isin(km_subset_ids)]
+            debug_signatures['after_hospital_filter'] = debug_dataframe_signature(km_data, f"After hospital filter ({len(km_subset_ids)} hospitals)")
+        
         km_data = km_data.dropna(subset=['quarter_date']).sort_values('quarter_date')
+        debug_signatures['after_date_filter'] = debug_dataframe_signature(km_data, "After date filter")
+        
+        # Create time intervals
         km_data['year'] = km_data['quarter_date'].dt.year
         if km_interval.startswith('6'):
             km_data['bucket'] = ((km_data['quarter_date'].dt.quarter - 1) // 2 + 1)
             km_xaxis_label = '6‑month interval'
+            time_suffix = 'H'
         else:
             km_data['bucket'] = km_data['quarter_date'].dt.quarter
             km_xaxis_label = '3‑month interval (quarter)'
-        km_data['label'] = km_data['year'].astype(int).astype(str) + (km_data['bucket'].astype(int).astype(str).map(lambda x: ' H'+x if km_interval.startswith('6') else ' Q'+x))
-        km_agg = km_data.groupby(['year','bucket','label'], as_index=False).agg({'complications_count':'sum','procedures_count':'sum'}).sort_values(['year','bucket'])
+            time_suffix = 'Q'
+        
+        km_data['time_label'] = km_data['year'].astype(int).astype(str) + ' ' + time_suffix + km_data['bucket'].astype(int).astype(str)
+        
+        # Aggregate by time intervals
+        km_agg = km_data.groupby(['year', 'bucket', 'time_label'], as_index=False).agg({
+            'complications_count': 'sum',
+            'procedures_count': 'sum'
+        }).sort_values(['year', 'bucket'])
+        
+        debug_signatures['aggregated_data'] = debug_dataframe_signature(km_agg, "Aggregated by time intervals")
+        
         if not km_agg.empty:
-            km_agg['hazard'] = km_agg.apply(lambda r: (r['complications_count']/r['procedures_count']) if r['procedures_count']>0 else 0.0, axis=1)
-            km_agg['survival'] = (1 - km_agg['hazard']).cumprod()
-            x = []; y = []; prev = 1.0
-            for _, r in km_agg.iterrows():
-                lbl = str(r['label'])
-                x.append(lbl); y.append(prev)
-                prev = float(r['survival'])
-                x.append(lbl); y.append(prev)
-            import plotly.graph_objects as go
-            fig_km_nat = go.Figure()
-            fig_km_nat.add_trace(go.Scatter(x=x, y=[v*100 for v in y], mode='lines', name='National KM', line=dict(shape='hv', width=3, color='#e67e22')))
-            fig_km_nat.update_layout(title="National Complication Rate Over Time (KM)", height=320, yaxis_title='Complication‑free probability (%)', xaxis_title=km_xaxis_label, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_km_nat, use_container_width=True)
+            try:
+                # Use the robust KM computation
+                km_curve = compute_km_from_aggregates(
+                    df=km_agg,
+                    time_col='time_label',
+                    event_col='complications_count', 
+                    at_risk_col='procedures_count',
+                    group_cols=None,  # National level
+                    data_hash=debug_signatures['aggregated_data']['hash'],
+                    cache_version="v1"
+                )
+                
+                debug_signatures['km_curve'] = debug_dataframe_signature(km_curve, "Final KM curve")
+                
+                if not km_curve.empty:
+                    # Create chart using new system
+                    fig_km_nat = create_km_chart(
+                        curve_df=km_curve,
+                        page_id="national",
+                        title="National Complication Rate Over Time (KM)",
+                        yaxis_title='Complication‑free probability (%)',
+                        xaxis_title=km_xaxis_label,
+                        height=320,
+                        color='#e67e22'
+                    )
+                    
+                    st.plotly_chart(fig_km_nat, use_container_width=True, key="km_national_v2")
+                else:
+                    st.info('KM computation returned empty results.')
+                    
+            except Exception as e:
+                st.error(f"Error computing KM curve: {e}")
+                debug_signatures['km_error'] = {'error': str(e)}
         else:
             st.info('No data to compute national KM curve with current filters.')
+            debug_signatures['no_data'] = {'message': 'Empty aggregated data'}
     else:
         st.info('Complications dataset unavailable.')
+        debug_signatures['no_raw_data'] = {'message': 'No complications data'}
+    
+    # Show debug panel (collapsed by default)
+    if st.checkbox("Show KM debug info", value=False, key="km_debug_national"):
+        show_debug_panel(debug_signatures, expanded=True)
 
     # Hospital performance trends ("spaghetti" plot)
     st.markdown("#### Hospital Performance Over Time")
