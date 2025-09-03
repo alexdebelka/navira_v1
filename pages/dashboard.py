@@ -851,12 +851,7 @@ with tab_geo:
         
         # Render the map
         st.markdown("### 🗺️ Interactive Recruitment Zone Map")
-        st.markdown("""
-        <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin: 10px 0;">
-            <p><strong>Map Controls:</strong> Toggle choropleth layers using the control in the top-right corner. 
-            Hover over communes to see patient counts. Red marker = selected hospital, blue markers = competitors.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.info("**Map Controls:** Toggle choropleth layers using the control in the top-right corner. Hover over communes to see patient counts. Red marker = selected hospital, colored circles = competitors (larger = higher rank).")
         
         try:
             map_data = st_folium(

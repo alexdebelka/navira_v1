@@ -310,13 +310,17 @@ def _add_competitor_markers(
     competitors: List[str], 
     establishments_df: Optional[pd.DataFrame]
 ) -> None:
-    """Add competitor hospital markers to map."""
+    """Add competitor hospital markers as circles with size gradation."""
     if establishments_df is None or establishments_df.empty:
         return
     
     required_cols = ['id', 'name', 'latitude', 'longitude']
     if not all(col in establishments_df.columns for col in required_cols):
         return
+    
+    # Define circle sizes and colors for competitors (largest to smallest)
+    base_radius = 20
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f']
     
     try:
         # Format FINESS codes for matching
@@ -333,11 +337,23 @@ def _add_competitor_markers(
                     location = [float(row['latitude']), float(row['longitude'])]
                     name = str(row['name'])
                     
-                    folium.Marker(
+                    # Calculate radius based on rank (1st largest, 2nd smaller, etc.)
+                    radius = base_radius - (i * 3)  # Decrease by 3 pixels per rank
+                    radius = max(radius, 8)  # Minimum size of 8 pixels
+                    
+                    # Get color for this competitor
+                    color = colors[i % len(colors)]
+                    
+                    # Add circle marker
+                    folium.CircleMarker(
                         location=location,
+                        radius=radius,
                         popup=f"<b>{name}</b><br/>FINESS: {competitor_finess}<br/>Rank: #{i+1}",
                         tooltip=f"Competitor #{i+1}: {name}",
-                        icon=folium.Icon(color='blue', icon='hospital', prefix='fa')
+                        color='white',
+                        weight=2,
+                        fillColor=color,
+                        fillOpacity=0.8
                     ).add_to(m)
                     
                 except (ValueError, TypeError):
