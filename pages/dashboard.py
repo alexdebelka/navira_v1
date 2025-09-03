@@ -797,7 +797,23 @@ with tab_geo:
     # Postal → INSEE map
     cp_map = build_cp_to_insee(communes_csv)
     # GeoJSON
-    gj = load_communes_geojson(None)
+    # Try to filter GeoJSON to only needed INSEE codes to reduce payload
+    needed_insee = []
+    try:
+        prelim = []
+        for comp_id in top5:
+            df_layer, _ = competitor_choropleth_df(rec_path, comp_id, cp_map, allocation=allocation)
+            prelim.append(df_layer)
+        if prelim:
+            import pandas as _pd
+            needed_insee = _pd.concat(prelim)["insee5"].dropna().astype(str).unique().tolist()
+    except Exception:
+        needed_insee = []
+    try:
+        from navira.geojson_loader import load_communes_geojson_filtered
+        gj = load_communes_geojson_filtered(needed_insee or [])
+    except Exception:
+        gj = load_communes_geojson(None)
     insee_key = detect_insee_key(gj) if gj else None
 
     diagnostics_rows = []
