@@ -230,6 +230,20 @@ with metric_col2:
     
 # --- New Tabbed Layout: Activity, Complications, Geography ---
 st.markdown("---")
+st.markdown(
+    """
+    <style>
+      /* Enlarge the top navigation tabs for better visibility */
+      div[data-testid="stTabs"] div[role="tablist"] { gap: 14px; }
+      div[data-testid="stTabs"] button[role="tab"] {
+        font-size: 1.10rem;
+        padding: 12px 20px;
+      }
+      div[data-testid="stTabs"] button[role="tab"] p { font-size: 1.10rem; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 tab_activity, tab_complications, tab_geo = st.tabs(["📈 Activity", "🧪 Complications", "🗺️ Geography"])
 
 def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, cities_df):
@@ -738,45 +752,7 @@ with tab_complications:
             fig_bar.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig_bar, use_container_width=True)
         
-        # Show trend with available data (rolling rate preferred, fallback to quarterly rate)
-        recent = hosp_comp.tail(8).copy()
-        if not recent.empty:
-            # Try rolling rate first, fallback to quarterly rate
-            if 'rolling_rate' in recent.columns and recent['rolling_rate'].notna().any():
-                recent['rate_pct'] = pd.to_numeric(recent['rolling_rate'], errors='coerce') * 100
-                rate_type = '12‑month Rolling Rate'
-            elif 'complication_rate' in recent.columns:
-                recent['rate_pct'] = pd.to_numeric(recent['complication_rate'], errors='coerce') * 100
-                rate_type = 'Quarterly Rate'
-            else:
-                # Calculate rate manually if columns don't exist
-                recent['rate_pct'] = (recent['complications_count'] / recent['procedures_count'] * 100)
-                rate_type = 'Quarterly Rate'
-            
-            # Merge with national averages
-            if not national_avg_data.empty:
-                recent = recent.merge(national_avg_data[['quarter_date', 'national_rate']], 
-                                    on='quarter_date', how='left')
-                recent['national_pct'] = recent['national_rate']
-            else:
-                recent['national_pct'] = 0  # Fallback if no national data
-            
-            # Only plot if we have valid data with at least 2 data points
-            valid_data = recent[recent['rate_pct'].notna()]
-            if len(valid_data) >= 2:
-                fig = px.line(valid_data, x='quarter', y='rate_pct', markers=True, 
-                             title=f'{rate_type} vs National (2020-2024)', labels={'rate_pct':'Rate (%)'})
-                fig.add_scatter(x=valid_data['quarter'], y=valid_data['national_pct'], 
-                               mode='lines+markers', name='National', line=dict(dash='dash'))
-                fig.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-            # elif len(valid_data) == 1:
-            #     # If only one quarter, we fallback to latest 6‑month comparison above
-            #     st.info("Showing 6‑month metrics due to limited quarterly points.")
-            else:
-                st.info("No valid rate data available to plot.")
-        else:
-            st.info("No complications data available for this hospital.")
+        # Removed Quarterly Rate vs National chart due to unreliable hospital quarterly data
     else:
         st.info("No complications data available for this hospital.")
     # Kaplan–Meier style survival curve by 6‑month intervals
