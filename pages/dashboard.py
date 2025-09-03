@@ -808,7 +808,7 @@ with tab_complications:
                             title="Hospital Complication Rate Over Time (KM)",
                             yaxis_title='Complication Rate (%)',
                             xaxis_title='6‑month interval',
-                            height=300,
+                            height=400,
                             color='#1f77b4',
                             show_complication_rate=True
                         )
