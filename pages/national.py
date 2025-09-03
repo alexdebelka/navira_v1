@@ -1725,7 +1725,7 @@ if not complications.empty:
 
     # Compute KM curve using new robust system
     from km import compute_complication_rates_from_aggregates, debug_signature
-    from charts import create_km_chart
+    from charts import create_km_chart, create_multi_km_chart
     from utils.cache import debug_dataframe_signature, show_debug_panel
     
     # Debug signatures for tracing
