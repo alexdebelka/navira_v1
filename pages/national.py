@@ -112,12 +112,8 @@ national_averages = calculate_national_averages(df)
 st.title("🇫🇷 National Overview")
 # 
 
-
-
-
-
 # Surgery-to-Population Ratio Choropleth
-st.markdown("### 🔥 Surgery Density by Department")
+st.markdown("### Surgery Density by Department")
 st.markdown("*Ratio of total bariatric surgeries to department population (surgeries per 100,000 inhabitants)*")
 
 try:
@@ -129,7 +125,7 @@ try:
             pop_df = pd.read_csv("data/DS_ESTIMATION_POPULATION (1).csv", sep=';')
             # Clean and process the data
             pop_df = pop_df[pop_df['GEO_OBJECT'] == 'DEP'].copy()  # Only departments
-            pop_df = pop_df[pop_df['TIME_PERIOD'] == 2020].copy()  # Use 2020 data
+            pop_df = pop_df[pop_df['TIME_PERIOD'] == 2024].copy()  # Use 2020 data
             pop_df['dept_code'] = pop_df['GEO'].str.strip().str.replace('"', '')
             pop_df['population'] = pop_df['OBS_VALUE'].astype(int)
             return pop_df[['dept_code', 'population']]
@@ -294,16 +290,16 @@ try:
             col1, col2 = st.columns(2)
             
             with col1:
-                st.markdown("**🔥 Highest Surgery Density**")
+                st.markdown("**Highest Surgery Density (per 100K inhabitants)**")
                 top_5 = ratio_data.nlargest(5, 'surgery_ratio')[['dept_code', 'surgery_ratio', 'total_surgeries']]
                 for _, row in top_5.iterrows():
-                    st.write(f"**Dep. {row['dept_code']}**: {row['surgery_ratio']:.1f} per 100K ({row['total_surgeries']} surgeries)")
+                    st.write(f"**Dep. {row['dept_code']}**: {row['surgery_ratio']:.1f} ({row['total_surgeries']} surgeries)")
             
             with col2:
                 st.markdown("**📉 Lowest Surgery Density**")
                 bottom_5 = ratio_data.nsmallest(5, 'surgery_ratio')[['dept_code', 'surgery_ratio', 'total_surgeries']]
                 for _, row in bottom_5.iterrows():
-                    st.write(f"**Dep. {row['dept_code']}**: {row['surgery_ratio']:.1f} per 100K ({row['total_surgeries']} surgeries)")
+                    st.write(f"**Dep. {row['dept_code']}**: {row['surgery_ratio']:.1f} ({row['total_surgeries']} surgeries)")
         else:
             st.error("Could not load department GeoJSON for surgery ratio map.")
     else:
