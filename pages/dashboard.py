@@ -755,17 +755,8 @@ with tab_complications:
 
 with tab_geo:
     st.subheader("Recruitment Zone and Competitors")
-    map_mode = st.radio(
-        "Map mode",
-        options=[
-            "Heatmap",
-            "Choropleth – Department",
-            "Choropleth – Region",
-            "Choropleth – Commune (top)"
-        ],
-        horizontal=True,
-        index=0
-    )
+    # Only commune-level choropleth per request
+    map_mode = "Choropleth – Commune (top)"
     # Map
     try:
         center = [float(selected_hospital_details.get('latitude')), float(selected_hospital_details.get('longitude'))]
@@ -776,14 +767,7 @@ with tab_geo:
     m = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
 
     # Add recruitment layer
-    if map_mode.startswith("Heatmap"):
-        _add_recruitment_zones_to_map(m, selected_hospital_id, recruitment, cities)
-    elif "Department" in map_mode:
-        _add_recruitment_choropleth_to_map(m, selected_hospital_id, recruitment)
-    elif "Region" in map_mode:
-        _add_recruitment_choropleth_region_to_map(m, selected_hospital_id, recruitment)
-    else:
-        _add_recruitment_choropleth_commune_to_map(m, selected_hospital_id, recruitment)
+    _add_recruitment_choropleth_commune_to_map(m, selected_hospital_id, recruitment)
 
     # Hospital marker (added AFTER layers to ensure it stays on top)
     try:
