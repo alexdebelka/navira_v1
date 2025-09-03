@@ -232,6 +232,20 @@ for hospital_id in hospitals_with_data:
 
 hospital_names.sort()
 
+# Set default hospitals
+default_hospital_a = "CHU PARIS SITE AVICENNE APHP (BOBIGNY)"
+default_hospital_b = "CH GENERAL DELAFONTAINE (SAINT-DENIS)"
+
+# Find indices for default hospitals
+default_index_a = 0
+default_index_b = 1 if len(hospital_names) > 1 else 0
+
+for i, name in enumerate(hospital_names):
+    if "AVICENNE" in name.upper() and "BOBIGNY" in name.upper():
+        default_index_a = i
+    elif "DELAFONTAINE" in name.upper() and "SAINT-DENIS" in name.upper():
+        default_index_b = i
+
 col1, col2 = st.columns(2)
 
 with col1:
@@ -240,7 +254,7 @@ with col1:
         "Select first hospital:",
         options=hospital_names,
         key="hospital_a",
-        index=0 if hospital_names else None
+        index=default_index_a if hospital_names else None
     )
 
 with col2:
@@ -249,7 +263,7 @@ with col2:
         "Select second hospital:",
         options=hospital_names,
         key="hospital_b", 
-        index=1 if len(hospital_names) > 1 else 0
+        index=default_index_b if hospital_names else None
     )
 
 if not hospital_a_name or not hospital_b_name:
@@ -267,12 +281,16 @@ if hospital_a_id == hospital_b_id:
 @st.cache_data
 def get_hospital_data(hospital_id):
     # Get establishment info
-    est_info = establishments[establishments['id'] == hospital_id].iloc[0]
+    est_info = establishments[establishments['id'] == hospital_id].iloc[0].copy()
+    
+    # Ensure academic_affiliation is properly mapped from university field
+    if 'university' in est_info.index and 'academic_affiliation' not in est_info.index:
+        est_info['academic_affiliation'] = est_info['university']
+    elif 'academic_affiliation' not in est_info.index:
+        est_info['academic_affiliation'] = 0  # Default to non-academic if field missing
     
     # Get annual data for this hospital
     hospital_annual = annual[annual['id'] == hospital_id].copy()
-    
-
     
     return est_info, hospital_annual
 
