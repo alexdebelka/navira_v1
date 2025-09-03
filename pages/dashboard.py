@@ -818,8 +818,13 @@ with tab_geo:
         col1, col2 = st.columns([3, 1])
         
         with col1:
-            geojson_data, geo_diagnostics = load_communes_geojson()
-            st.info(get_geojson_summary(geojson_data, geo_diagnostics))
+            from navira.geo import load_communes_geojson_simple
+            geojson_data = load_communes_geojson_simple()
+            if geojson_data:
+                feature_count = len(geojson_data.get('features', []))
+                st.info(f"✅ {feature_count:,} communes loaded | INSEE key: code")
+            else:
+                st.error("❌ Failed to load communes GeoJSON")
         
         with col2:
             if st.button("🔄 Reset Map Cache", help="Clear cached GeoJSON and map data"):

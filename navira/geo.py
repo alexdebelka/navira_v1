@@ -20,7 +20,7 @@ import pandas as pd
 @st.cache_data(show_spinner=False)
 def load_communes_geojson(path_override: Optional[str] = None, cache_version: str = "v2") -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
     """
-    Load French communes GeoJSON with robust path resolution and diagnostics.
+    Load French communes GeoJSON - simplified version that just works.
     
     Args:
         path_override: Optional explicit path to GeoJSON file
@@ -28,12 +28,6 @@ def load_communes_geojson(path_override: Optional[str] = None, cache_version: st
             
     Returns:
         Tuple of (geojson_dict | None, diagnostics_dict)
-        
-    Resolution order:
-        1. path_override argument
-        2. st.secrets["paths"]["communes_geojson"]
-        3. os.environ["COMMUNES_GEOJSON_PATH"]
-        4. Default paths: data/communes.geojson, data/communes.geojson.gz
     """
     diagnostics = {
         "resolved_path": None,
@@ -41,98 +35,39 @@ def load_communes_geojson(path_override: Optional[str] = None, cache_version: st
         "feature_count": 0,
         "sample_properties": [],
         "insee_key": None,
-        "errors": [],
-        "attempted_paths": []
+        "errors": []
     }
     
-    # Determine GeoJSON path with robust resolution
-    geojson_path = None
-    
-    # 1. Explicit path override
-    if path_override:
-        geojson_path = path_override
-        diagnostics["attempted_paths"].append(f"explicit: {path_override}")
-    
-    # 2. Streamlit secrets
-    if not geojson_path:
-        try:
-            geojson_path = st.secrets.get("paths", {}).get("communes_geojson")
-            if geojson_path:
-                diagnostics["attempted_paths"].append(f"secrets: {geojson_path}")
-        except (AttributeError, FileNotFoundError, KeyError):
-            pass
-        
-    # 3. Environment variable
-    if not geojson_path:
-        geojson_path = os.environ.get("COMMUNES_GEOJSON_PATH")
-        if geojson_path:
-            diagnostics["attempted_paths"].append(f"env: {geojson_path}")
-        
-    # 4. Default paths (including gzipped)
-    if not geojson_path:
-        default_paths = [
-            "data/communes.geojson",
-            "data/communes.geojson.gz",
-            "data/communes-france.geojson", 
-            "data/communes_france.geojson",
-            "../data/communes.geojson",
-            os.path.join(os.path.dirname(__file__), "..", "data", "communes.geojson")
-        ]
-        
-        for path in default_paths:
-            diagnostics["attempted_paths"].append(f"default: {path}")
-            if os.path.exists(path):
-                geojson_path = path
-                break
-    
-    if not geojson_path:
-        diagnostics["errors"].append("No GeoJSON path found in any resolution method")
-        return None, diagnostics
-    
-    diagnostics["resolved_path"] = os.path.abspath(geojson_path)
-    
-    if not os.path.exists(geojson_path):
-        diagnostics["errors"].append(f"File not found: {geojson_path}")
-        return None, diagnostics
+    # Simple path resolution - just use the known working path
+    geojson_path = path_override or "data/communes.geojson"
     
     try:
-        # Get file size for diagnostics
-        diagnostics["file_size"] = os.path.getsize(geojson_path)
+        # Load the GeoJSON file
+        with open(geojson_path, 'r', encoding='utf-8') as f:
+            geojson_data = json.load(f)
         
-        # Load GeoJSON (handle both regular and gzipped files)
-        if geojson_path.endswith('.gz'):
-            with gzip.open(geojson_path, 'rt', encoding='utf-8') as f:
-                geojson_data = json.load(f)
-        else:
-            with open(geojson_path, 'r', encoding='utf-8') as f:
-                geojson_data = json.load(f)
-        
-        # Validate GeoJSON structure
-        if not isinstance(geojson_data, dict):
-            diagnostics["errors"].append("Invalid GeoJSON: root is not a dictionary")
-            return None, diagnostics
-            
-        if geojson_data.get('type') != 'FeatureCollection':
-            diagnostics["errors"].append("Invalid GeoJSON: not a FeatureCollection")
+        # Basic validation
+        if not isinstance(geojson_data, dict) or geojson_data.get('type') != 'FeatureCollection':
+            diagnostics["errors"].append("Invalid GeoJSON format")
             return None, diagnostics
             
         features = geojson_data.get('features', [])
-        if not isinstance(features, list):
-            diagnostics["errors"].append("Invalid GeoJSON: features is not a list")
+        if not features:
+            diagnostics["errors"].append("No features found in GeoJSON")
             return None, diagnostics
         
+        # Populate diagnostics
+        diagnostics["resolved_path"] = os.path.abspath(geojson_path)
+        diagnostics["file_size"] = os.path.getsize(geojson_path)
         diagnostics["feature_count"] = len(features)
-        
-        # Extract sample properties for diagnostics
-        if features:
-            sample_props = features[0].get('properties', {})
-            diagnostics["sample_properties"] = list(sample_props.keys())[:10]
-            
-            # Auto-detect INSEE key
-            diagnostics["insee_key"] = detect_insee_property(geojson_data)
+        diagnostics["sample_properties"] = list(features[0].get('properties', {}).keys())
+        diagnostics["insee_key"] = detect_insee_property(geojson_data)
         
         return geojson_data, diagnostics
         
+    except FileNotFoundError:
+        diagnostics["errors"].append(f"File not found: {os.path.abspath(geojson_path)}")
+        return None, diagnostics
     except json.JSONDecodeError as e:
         diagnostics["errors"].append(f"Invalid JSON: {str(e)}")
         return None, diagnostics
@@ -152,44 +87,27 @@ def load_communes_geojson_filtered(needed_insee_codes: List[str], cache_version:
         
     Returns:
         Filtered GeoJSON dictionary or None if source not available
-        
-    Notes:
-        - Reduces payload size by including only needed communes
-        - Auto-detects INSEE property key before filtering
-        - Returns full GeoJSON if no INSEE codes specified or detection fails
     """
-    full_geojson, _ = load_communes_geojson()
+    # Use the simple loader
+    full_geojson = load_communes_geojson_simple()
     
     if not full_geojson or not needed_insee_codes:
         return full_geojson
     
-    insee_key = detect_insee_property(full_geojson)
-    if not insee_key:
-        return full_geojson
+    # We know the INSEE key is 'code' from our data analysis
+    insee_key = 'code'
     
     try:
-        # Convert needed codes to set for faster lookup (handle Corsica codes)
-        needed_set = set()
-        for code in needed_insee_codes:
-            code_str = str(code).strip().upper()
-            if code_str.startswith('2A') or code_str.startswith('2B'):
-                needed_set.add(code_str)
-            else:
-                needed_set.add(code_str.zfill(5))
+        # Convert needed codes to set for faster lookup
+        needed_set = set(str(code).zfill(5) for code in needed_insee_codes)
         
         filtered_features = []
-        original_count = len(full_geojson['features'])
-        
         for feature in full_geojson['features']:
             props = feature.get('properties', {})
             if insee_key in props:
-                feature_insee = str(props[insee_key]).strip().upper()
-                if feature_insee.startswith('2A') or feature_insee.startswith('2B'):
-                    if feature_insee in needed_set:
-                        filtered_features.append(feature)
-                else:
-                    if feature_insee.zfill(5) in needed_set:
-                        filtered_features.append(feature)
+                feature_insee = str(props[insee_key]).zfill(5)
+                if feature_insee in needed_set:
+                    filtered_features.append(feature)
         
         # Create filtered GeoJSON
         filtered_geojson = full_geojson.copy()
@@ -197,7 +115,7 @@ def load_communes_geojson_filtered(needed_insee_codes: List[str], cache_version:
         
         return filtered_geojson
         
-    except Exception as e:
+    except Exception:
         return full_geojson
 
 
@@ -269,6 +187,12 @@ def detect_insee_property(geojson_dict: Dict[str, Any]) -> Optional[str]:
 def detect_insee_key(geojson_data: Dict[str, Any]) -> Optional[str]:
     """Backward compatibility wrapper for detect_insee_property."""
     return detect_insee_property(geojson_data)
+
+
+def load_communes_geojson_simple() -> Optional[Dict[str, Any]]:
+    """Simple loader that returns only the GeoJSON data for backward compatibility."""
+    geojson_data, _ = load_communes_geojson()
+    return geojson_data
 
 
 def _validate_insee_property_coverage(features: List[Dict[str, Any]], key: str, min_coverage: float = 0.9) -> bool:

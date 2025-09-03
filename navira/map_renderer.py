@@ -95,64 +95,55 @@ def create_recruitment_map(
         if not df.empty:
             needed_insee_codes.extend(df['insee5'].tolist())
     
-    # Load GeoJSON with robust error handling and diagnostics
-    from .geo import load_communes_geojson_filtered, load_communes_geojson, get_geojson_summary
+    # Load GeoJSON - simple and direct approach
+    from .geo import load_communes_geojson_filtered, load_communes_geojson_simple, detect_insee_key
     
+    # Try to load GeoJSON data
     if needed_insee_codes:
         geojson_data = load_communes_geojson_filtered(needed_insee_codes)
-        geo_diagnostics = None  # Filtered version doesn't return diagnostics
     else:
-        geojson_data, geo_diagnostics = load_communes_geojson()
+        geojson_data = load_communes_geojson_simple()
     
     diagnostics_list = []
     
-    # Show detailed diagnostics instead of generic error messages
+    # Check if GeoJSON loaded successfully
     if not geojson_data or 'features' not in geojson_data or not geojson_data['features']:
-        if geo_diagnostics and geo_diagnostics.get("errors"):
-            st.error(f"❌ GeoJSON Loading Failed: {geo_diagnostics['errors'][0]}")
-            
-            # Show diagnostic details in expandable section
-            with st.expander("🔧 GeoJSON Diagnostics", expanded=True):
-                st.markdown("**Attempted paths:**")
-                for path in geo_diagnostics.get("attempted_paths", []):
-                    st.text(f"  • {path}")
-                
-                if geo_diagnostics.get("resolved_path"):
-                    st.markdown(f"**Resolved path:** `{geo_diagnostics['resolved_path']}`")
-                
-                if len(geo_diagnostics.get("errors", [])) > 1:
-                    st.markdown("**All errors:**")
-                    for error in geo_diagnostics["errors"]:
-                        st.text(f"  • {error}")
-                        
-                st.markdown("**Solutions:**")
-                st.markdown("""
-                1. **Set GeoJSON path in secrets:** Add `[paths]` section with `communes_geojson = "/path/to/file"`
-                2. **Set environment variable:** `COMMUNES_GEOJSON_PATH="/path/to/communes.geojson"`
-                3. **Place file in default location:** `data/communes.geojson`
-                4. **Download from source:** [French GeoJSON Repository](https://github.com/gregoiredavid/france-geojson)
-                """)
-        else:
-            st.error("❌ No GeoJSON data available")
-            st.warning("⚠️ GeoJSON data not available. Choropleth layers will not be shown.")
+        # Add cache reset button
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.error("❌ Could not load communes GeoJSON data")
+        with col2:
+            if st.button("🔄 Clear Cache & Retry", key="clear_geo_cache"):
+                st.cache_data.clear()
+                st.rerun()
+        
+        st.warning("⚠️ Choropleth layers will not be shown. The base map will still work.")
+        
+        # Show some debugging info
+        with st.expander("🔧 Debug Information"):
+            st.text(f"Attempted to load: {os.path.abspath('data/communes.geojson')}")
+            st.text(f"File exists: {os.path.exists('data/communes.geojson')}")
+            if os.path.exists('data/communes.geojson'):
+                st.text(f"File size: {os.path.getsize('data/communes.geojson')} bytes")
         
         _add_hospital_marker(m, hospital_finess, hospital_info)
         return m, diagnostics_list
     
+    # Detect INSEE key
     insee_key = detect_insee_key(geojson_data)
     if not insee_key:
-        st.error("⚠️ Could not detect INSEE property key in GeoJSON")
+        st.warning("⚠️ Could not detect INSEE property key in GeoJSON")
         
         # Show available properties for debugging
         if geojson_data.get('features'):
             sample_props = list(geojson_data['features'][0].get('properties', {}).keys())
-            with st.expander("🔧 Available GeoJSON Properties"):
-                st.write("Sample properties from first feature:")
-                st.write(sample_props)
-                st.markdown("**Expected INSEE keys:** `code`, `INSEE_COM`, `insee`, `code_insee`")
+            st.info(f"Available properties: {sample_props}")
+            st.info("Will try to use 'code' as default INSEE key")
+            insee_key = 'code'  # Use the known key from our data
         
-        _add_hospital_marker(m, hospital_finess, hospital_info)
-        return m, diagnostics_list
+        if not insee_key:
+            _add_hospital_marker(m, hospital_finess, hospital_info)
+            return m, diagnostics_list
     
     # Get competitor names for display
     competitor_names = get_competitor_names(competitors, establishments_df if establishments_df is not None else pd.DataFrame())
