@@ -110,9 +110,9 @@ def create_km_chart(
     
     # Set y-axis range based on what we're showing
     if show_complication_rate:
-        # For complication rate, use a reasonable range (0-15% to accommodate hospital variations)
+        # For complication rate, use a reasonable range (0-20% to accommodate hospital variations)
         # This will auto-scale but cap at reasonable upper bound
-        fig.update_layout(yaxis=dict(rangemode='tozero', range=[0, 15]))
+        fig.update_layout(yaxis=dict(rangemode='tozero', range=[0, 20]))
     else:
         # For survival probability, fix range to 0-100%
         fig.update_layout(yaxis=dict(range=[0, 100]))
