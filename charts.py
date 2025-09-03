@@ -12,10 +12,11 @@ def create_km_chart(
     curve_df: pd.DataFrame,
     page_id: str,
     title: str = "Kaplan-Meier Survival Curve",
-    yaxis_title: str = "Complication-free probability (%)",
+    yaxis_title: str = "Complication rate (%)",
     xaxis_title: str = "Time interval",
     height: int = 320,
-    color: str = '#1f77b4'
+    color: str = '#1f77b4',
+    show_complication_rate: bool = True
 ) -> go.Figure:
     """
     Create a fresh KM chart for a specific page.
@@ -45,26 +46,45 @@ def create_km_chart(
             font=dict(size=16, color="gray")
         )
     else:
-        # Create step-like survival curve
+        # Create step-like curve
         x_vals = []
         y_vals = []
         
-        # Start at 100% survival
-        prev_survival = 1.0
-        
-        for _, row in curve_df.iterrows():
-            time_label = str(row['time'])
-            current_survival = float(row['survival'])
+        if show_complication_rate:
+            # Show complication rate (1 - survival) as cumulative rate
+            prev_rate = 0.0  # Start at 0% complication rate
             
-            # Add horizontal line at previous survival level
-            x_vals.append(time_label)
-            y_vals.append(prev_survival * 100)
+            for _, row in curve_df.iterrows():
+                time_label = str(row['time'])
+                current_survival = float(row['survival'])
+                current_rate = (1.0 - current_survival) * 100  # Convert to complication rate
+                
+                # Add horizontal line at previous rate level
+                x_vals.append(time_label)
+                y_vals.append(prev_rate)
+                
+                # Add vertical jump to current rate level
+                x_vals.append(time_label)  
+                y_vals.append(current_rate)
+                
+                prev_rate = current_rate
+        else:
+            # Show survival probability (original behavior)
+            prev_survival = 1.0
             
-            # Add vertical drop to current survival level
-            x_vals.append(time_label)  
-            y_vals.append(current_survival * 100)
-            
-            prev_survival = current_survival
+            for _, row in curve_df.iterrows():
+                time_label = str(row['time'])
+                current_survival = float(row['survival'])
+                
+                # Add horizontal line at previous survival level
+                x_vals.append(time_label)
+                y_vals.append(prev_survival * 100)
+                
+                # Add vertical drop to current survival level
+                x_vals.append(time_label)  
+                y_vals.append(current_survival * 100)
+                
+                prev_survival = current_survival
         
         # Add the trace
         fig.add_trace(go.Scatter(
@@ -73,7 +93,7 @@ def create_km_chart(
             mode='lines',
             name=f'KM Curve ({page_id})',
             line=dict(shape='linear', width=3, color=color),
-            hovertemplate=f"Time: %{{x}}<br>Survival: %{{y:.1f}}%<extra></extra>"
+            hovertemplate=f"Time: %{{x}}<br>{'Complication Rate' if show_complication_rate else 'Survival'}: %{{y:.1f}}%<extra></extra>"
         ))
     
     # Configure layout
@@ -88,8 +108,13 @@ def create_km_chart(
         showlegend=False  # Single curve doesn't need legend
     )
     
-    # Set y-axis range to 0-100%
-    fig.update_layout(yaxis=dict(range=[0, 100]))
+    # Set y-axis range based on what we're showing
+    if show_complication_rate:
+        # For complication rate, start at 0 and let it scale naturally
+        fig.update_layout(yaxis=dict(rangemode='tozero'))
+    else:
+        # For survival probability, fix range to 0-100%
+        fig.update_layout(yaxis=dict(range=[0, 100]))
     
     return fig
 

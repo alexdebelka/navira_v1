@@ -757,7 +757,7 @@ with tab_complications:
         st.info("No complications data available for this hospital.")
     # Kaplan–Meier style survival curve using robust system
     try:
-        st.markdown("#### Kaplan–Meier (approx.) — 6‑month complication‑free probability")
+        st.markdown("#### Kaplan–Meier (approx.) — 6‑month complication rate")
         
         # Import new KM system
         from km import compute_km_from_aggregates
@@ -801,15 +801,16 @@ with tab_complications:
                     debug_signatures['km_curve'] = debug_dataframe_signature(km_curve, "Final KM curve")
                     
                     if not km_curve.empty:
-                        # Create chart with unique key for this hospital
+                        # Create chart with unique key for this hospital - showing complication rate
                         fig_km = create_km_chart(
                             curve_df=km_curve,
                             page_id=f"hospital_{selected_hospital_id}",
                             title="Hospital Complication Rate Over Time (KM)",
-                            yaxis_title='Complication‑free probability (%)',
+                            yaxis_title='Complication Rate (%)',
                             xaxis_title='6‑month interval',
                             height=300,
-                            color='#1f77b4'
+                            color='#1f77b4',
+                            show_complication_rate=True
                         )
                         
                         st.plotly_chart(fig_km, use_container_width=True, key=f"km_hospital_{selected_hospital_id}_v2")

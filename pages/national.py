@@ -1784,15 +1784,16 @@ if not complications.empty:
                 debug_signatures['km_curve'] = debug_dataframe_signature(km_curve, "Final KM curve")
                 
                 if not km_curve.empty:
-                    # Create chart using new system
+                    # Create chart using new system - showing complication rate
                     fig_km_nat = create_km_chart(
                         curve_df=km_curve,
                         page_id="national",
                         title="National Complication Rate Over Time (KM)",
-                        yaxis_title='Complication‑free probability (%)',
+                        yaxis_title='Complication Rate (%)',
                         xaxis_title=km_xaxis_label,
                         height=320,
-                        color='#e67e22'
+                        color='#e67e22',
+                        show_complication_rate=True
                     )
                     
                     st.plotly_chart(fig_km_nat, use_container_width=True, key="km_national_v2")
