@@ -795,14 +795,21 @@ with tab_complications:
 
 with tab_geo:
     st.subheader("Recruitment Zone and Competitors (Top-5 Choropleths)")
+    
+    # Debug info
+    st.info("🗺️ Loading interactive map with recruitment zones and competitor analysis...")
+    
     allocation = "even_split"
     # Map
     try:
         center = [float(selected_hospital_details.get('latitude')), float(selected_hospital_details.get('longitude'))]
         if any(pd.isna(center)):
             raise ValueError
+        st.success(f"Hospital coordinates found: {center[0]:.4f}, {center[1]:.4f}")
     except Exception:
         center = [48.8566, 2.3522]
+        st.warning("Using default coordinates (Paris) - hospital coordinates not available")
+    
     m = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
     # Ensure choropleths stay below markers even when toggled
     try:
@@ -968,7 +975,27 @@ with tab_geo:
         pass
 
     # Ensure the interactive map is prominently visible
-    st_folium(m, width="100%", height=560, key="geo_map_dashboard")
+    try:
+        st.success("✅ Map ready - rendering interactive visualization...")
+        st_folium(m, width="100%", height=560, key="geo_map_dashboard")
+        st.success("✅ Map successfully loaded!")
+    except Exception as e:
+        st.error(f"❌ Error rendering map: {e}")
+        # Fallback: simple map without complex layers
+        simple_map = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
+        try:
+            folium.CircleMarker(
+                location=center,
+                radius=12,
+                color='#d62728',
+                fill=True,
+                fill_color='#d62728',
+                popup="Selected Hospital"
+            ).add_to(simple_map)
+            st.info("Showing simplified map due to data loading issues")
+            st_folium(simple_map, width="100%", height=560, key="simple_geo_map")
+        except Exception as e2:
+            st.error(f"❌ Fallback map also failed: {e2}")
 
     # Competitors list
     st.markdown("#### Nearby/Competitor Hospitals")
