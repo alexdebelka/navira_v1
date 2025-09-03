@@ -118,7 +118,7 @@ def load_communes_data(file_path: str = "data/COMMUNES_FRANCE_INSEE.csv") -> pd.
         - nomCommune: Commune name (string)
     """
     try:
-        df = pd.read_csv(file_path)
+        df = pd.read_csv(file_path, sep=';')  # French CSV files often use semicolon separators
         
         # Clean INSEE codes - pad to 5 digits
         if 'codeInsee' in df.columns:
@@ -128,7 +128,7 @@ def load_communes_data(file_path: str = "data/COMMUNES_FRANCE_INSEE.csv") -> pd.
         if 'codePostal' in df.columns:
             df['codePostal'] = df['codePostal'].astype(str).str.zfill(5)
         
-        # Convert coordinates to numeric
+        # Convert coordinates to numeric (French files often use comma as decimal separator)
         coord_cols = ['longitude', 'latitude']
         for col in coord_cols:
             if col in df.columns:
