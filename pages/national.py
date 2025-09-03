@@ -158,6 +158,170 @@ try:
 except Exception as e:
     st.warning(f'Could not render national choropleth (department): {e}')
 
+# Surgery-to-Population Ratio Choropleth
+st.markdown("### 🔥 Surgery Density by Department")
+st.markdown("*Ratio of total bariatric surgeries to department population (surgeries per 100,000 inhabitants)*")
+
+try:
+    # Load population data
+    @st.cache_data(show_spinner=False)
+    def load_population_data():
+        """Load and process the population data by department."""
+        try:
+            pop_df = pd.read_csv("data/DS_ESTIMATION_POPULATION (1).csv", sep=';')
+            # Clean and process the data
+            pop_df = pop_df[pop_df['GEO_OBJECT'] == 'DEP'].copy()  # Only departments
+            pop_df = pop_df[pop_df['TIME_PERIOD'] == 2020].copy()  # Use 2020 data
+            pop_df['dept_code'] = pop_df['GEO'].str.strip().str.replace('"', '')
+            pop_df['population'] = pop_df['OBS_VALUE'].astype(int)
+            return pop_df[['dept_code', 'population']]
+        except Exception as e:
+            st.error(f"Error loading population data: {e}")
+            return pd.DataFrame()
+
+    # Calculate surgery totals by department
+    @st.cache_data(show_spinner=False)
+    def calculate_surgery_by_department(_df):
+        """Calculate total surgeries by department from hospital data."""
+        try:
+            # Get department from hospital data
+            df_copy = _df.copy()
+            df_copy['dept_code'] = df_copy['code_postal'].astype(str).str[:2]
+            
+            # Handle special cases (Corsica, overseas)
+            def standardize_dept_code(postal_code):
+                postal_str = str(postal_code)
+                if postal_str.startswith('97') or postal_str.startswith('98'):
+                    return postal_str[:3]
+                elif postal_str.startswith('201'):
+                    return '2A'
+                elif postal_str.startswith('202'):
+                    return '2B'
+                else:
+                    return postal_str[:2]
+            
+            df_copy['dept_code'] = df_copy['code_postal'].astype(str).apply(standardize_dept_code)
+            
+            # Sum total procedures by department
+            dept_surgeries = df_copy.groupby('dept_code')['total_procedures_year'].sum().reset_index()
+            dept_surgeries.columns = ['dept_code', 'total_surgeries']
+            
+            return dept_surgeries
+        except Exception as e:
+            st.error(f"Error calculating surgery totals: {e}")
+            return pd.DataFrame()
+
+    # Load the data
+    population_data = load_population_data()
+    surgery_data = calculate_surgery_by_department(df)
+    
+    if not population_data.empty and not surgery_data.empty:
+        # Merge population and surgery data
+        ratio_data = pd.merge(surgery_data, population_data, on='dept_code', how='inner')
+        
+        # Calculate ratio (surgeries per 100,000 inhabitants)
+        ratio_data['surgery_ratio'] = (ratio_data['total_surgeries'] / ratio_data['population']) * 100000
+        ratio_data['surgery_ratio'] = ratio_data['surgery_ratio'].round(1)
+        
+        # Display summary stats
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Departments with Data", len(ratio_data))
+        with col2:
+            avg_ratio = ratio_data['surgery_ratio'].mean()
+            st.metric("Average Ratio", f"{avg_ratio:.1f}")
+        with col3:
+            max_dept = ratio_data.loc[ratio_data['surgery_ratio'].idxmax()]
+            st.metric("Highest Ratio", f"{max_dept['dept_code']}: {max_dept['surgery_ratio']:.1f}")
+        with col4:
+            total_surgeries = ratio_data['total_surgeries'].sum()
+            st.metric("Total Surgeries", f"{total_surgeries:,}")
+        
+        # Create the choropleth map
+        gj = _get_fr_departments_geojson()
+        if gj and not ratio_data.empty:
+            m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
+            
+            # Create value mapping and colormap
+            vmin = float(ratio_data['surgery_ratio'].min())
+            vmax = float(ratio_data['surgery_ratio'].max())
+            colormap = cm.linear.YlOrRd_09.scale(vmin, vmax)
+            colormap.caption = 'Surgeries per 100K inhabitants'
+            colormap.add_to(m)
+            
+            val_map = dict(zip(ratio_data['dept_code'].astype(str), ratio_data['surgery_ratio'].astype(float)))
+            
+            def _style_fn(feat):
+                code = str(feat.get('properties', {}).get('code', ''))
+                v = val_map.get(code, 0.0)
+                opacity = 0.25 if v == 0 else 0.7
+                return {"fillColor": colormap(v), "color": "#555555", "weight": 0.8, "fillOpacity": opacity}
+            
+            # Add GeoJSON with tooltips
+            def _tooltip_fn(feat):
+                code = str(feat.get('properties', {}).get('code', ''))
+                name = str(feat.get('properties', {}).get('nom', code))
+                ratio_val = val_map.get(code, 0.0)
+                
+                # Get additional data for tooltip
+                dept_row = ratio_data[ratio_data['dept_code'] == code]
+                if not dept_row.empty:
+                    surgeries = int(dept_row.iloc[0]['total_surgeries'])
+                    population = int(dept_row.iloc[0]['population'])
+                    return f"{name} ({code})<br/>Ratio: {ratio_val:.1f} per 100K<br/>Surgeries: {surgeries:,}<br/>Population: {population:,}"
+                else:
+                    return f"{name} ({code})<br/>No surgery data"
+            
+            folium.GeoJson(
+                gj, 
+                style_function=_style_fn,
+                tooltip=folium.GeoJsonTooltip(
+                    fields=[],
+                    aliases=[],
+                    labels=False,
+                    sticky=True,
+                    opacity=0.9
+                ),
+                popup=folium.GeoJsonPopup(
+                    fields=[],
+                    aliases=[],
+                    labels=False
+                )
+            ).add_to(m)
+            
+            # Fit bounds to France
+            try:
+                m.fit_bounds([[41.0, -5.3], [51.5, 9.6]])
+            except Exception:
+                pass
+            
+            # Display the map
+            st_folium(m, width="100%", height=540, key="surgery_population_ratio_choropleth")
+            
+            # Show top/bottom departments
+            st.markdown("#### 📊 Department Rankings")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**🔥 Highest Surgery Density**")
+                top_5 = ratio_data.nlargest(5, 'surgery_ratio')[['dept_code', 'surgery_ratio', 'total_surgeries']]
+                for _, row in top_5.iterrows():
+                    st.write(f"**{row['dept_code']}**: {row['surgery_ratio']:.1f} per 100K ({row['total_surgeries']} surgeries)")
+            
+            with col2:
+                st.markdown("**📉 Lowest Surgery Density**")
+                bottom_5 = ratio_data.nsmallest(5, 'surgery_ratio')[['dept_code', 'surgery_ratio', 'total_surgeries']]
+                for _, row in bottom_5.iterrows():
+                    st.write(f"**{row['dept_code']}**: {row['surgery_ratio']:.1f} per 100K ({row['total_surgeries']} surgeries)")
+        else:
+            st.error("Could not load department GeoJSON for surgery ratio map.")
+    else:
+        st.error("Could not load population or surgery data for ratio calculation.")
+        
+except Exception as e:
+    st.error(f"Error creating surgery-to-population ratio map: {e}")
+    st.exception(e)
+
 ## Moved: Kaplan–Meier national complication rate section now lives under the "National Complication Rate Trends" subsection below.
 
 # Track page view
