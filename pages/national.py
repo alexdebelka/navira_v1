@@ -1760,6 +1760,14 @@ if not complications.empty:
         
         km_data['time_label'] = km_data['year'].astype(int).astype(str) + ' ' + time_suffix + km_data['bucket'].astype(int).astype(str)
         
+        # First compute overall national curve to get the base hash
+        km_agg = km_data.groupby(['year', 'bucket', 'time_label'], as_index=False).agg({
+            'complications_count': 'sum',
+            'procedures_count': 'sum'
+        }).sort_values(['year', 'bucket'])
+        
+        debug_signatures['aggregated_data'] = debug_dataframe_signature(km_agg, "Aggregated by time intervals")
+        
         # Create multiple KM curves based on selected labels
         km_curves = {}
         
@@ -1814,14 +1822,6 @@ if not complications.empty:
                         except Exception as e:
                             st.error(f"Error computing KM curve for {label}: {e}")
                             debug_signatures[f'km_error_{label}'] = {'error': str(e)}
-        
-        # Also compute overall national curve
-        km_agg = km_data.groupby(['year', 'bucket', 'time_label'], as_index=False).agg({
-            'complications_count': 'sum',
-            'procedures_count': 'sum'
-        }).sort_values(['year', 'bucket'])
-        
-        debug_signatures['aggregated_data'] = debug_dataframe_signature(km_agg, "Aggregated by time intervals")
         
         if not km_agg.empty:
             try:
