@@ -967,7 +967,8 @@ with tab_geo:
     except Exception:
         pass
 
-    st_folium(m, width="100%", height=460, key="folium_map_dashboard")
+    # Ensure the interactive map is prominently visible
+    st_folium(m, width="100%", height=560, key="geo_map_dashboard")
 
     # Competitors list
     st.markdown("#### Nearby/Competitor Hospitals")
