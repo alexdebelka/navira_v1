@@ -1760,7 +1760,62 @@ if not complications.empty:
         
         km_data['time_label'] = km_data['year'].astype(int).astype(str) + ' ' + time_suffix + km_data['bucket'].astype(int).astype(str)
         
-        # Aggregate by time intervals
+        # Create multiple KM curves based on selected labels
+        km_curves = {}
+        
+        # Get hospital label information for grouping
+        est_df = st.session_state.get('establishments', None) or all_data.get('establishments')
+        if est_df is not None and not est_df.empty:
+            est_labels = est_df[['id', 'cso', 'LAB_SOFFCO']].copy()
+            est_labels['id'] = est_labels['id'].astype(str)
+            
+            # Merge label info with KM data
+            km_data_with_labels = km_data.merge(est_labels, left_on='hospital_id', right_on='id', how='left')
+            
+            # Create groups based on selected labels
+            for label in km_label_opts:
+                if label == 'CSO':
+                    mask = km_data_with_labels['cso'] == 1
+                    group_name = 'CSO Hospitals'
+                elif label == 'SOFFCO':
+                    mask = km_data_with_labels['LAB_SOFFCO'] == 1
+                    group_name = 'SOFFCO Hospitals'
+                elif label == 'None':
+                    mask = ((km_data_with_labels['cso'] != 1) & (km_data_with_labels['LAB_SOFFCO'] != 1))
+                    group_name = 'No Labels'
+                else:
+                    continue
+                
+                # Filter data for this label group
+                label_data = km_data_with_labels[mask].copy()
+                if not label_data.empty:
+                    # Aggregate by time intervals for this group
+                    label_agg = label_data.groupby(['year', 'bucket', 'time_label'], as_index=False).agg({
+                        'complications_count': 'sum',
+                        'procedures_count': 'sum'
+                    }).sort_values(['year', 'bucket'])
+                    
+                    if not label_agg.empty:
+                        try:
+                            # Compute KM curve for this label group
+                            label_curve = compute_complication_rates_from_aggregates(
+                                df=label_agg,
+                                time_col='time_label',
+                                event_col='complications_count', 
+                                at_risk_col='procedures_count',
+                                group_cols=None,
+                                data_hash=f"{debug_signatures['aggregated_data']['hash']}_{label}",
+                                cache_version="v1"
+                            )
+                            
+                            if not label_curve.empty:
+                                km_curves[group_name] = label_curve
+                                
+                        except Exception as e:
+                            st.error(f"Error computing KM curve for {label}: {e}")
+                            debug_signatures[f'km_error_{label}'] = {'error': str(e)}
+        
+        # Also compute overall national curve
         km_agg = km_data.groupby(['year', 'bucket', 'time_label'], as_index=False).agg({
             'complications_count': 'sum',
             'procedures_count': 'sum'
@@ -1770,42 +1825,75 @@ if not complications.empty:
         
         if not km_agg.empty:
             try:
-                # Use the robust complication rate computation
-                km_curve = compute_complication_rates_from_aggregates(
+                # Overall national curve
+                overall_curve = compute_complication_rates_from_aggregates(
                     df=km_agg,
                     time_col='time_label',
                     event_col='complications_count', 
                     at_risk_col='procedures_count',
-                    group_cols=None,  # National level
+                    group_cols=None,
                     data_hash=debug_signatures['aggregated_data']['hash'],
                     cache_version="v1"
                 )
                 
-                debug_signatures['km_curve'] = debug_dataframe_signature(km_curve, "Final KM curve")
-                
-                if not km_curve.empty:
-                    # Create chart using new system - showing complication rate
-                    fig_km_nat = create_km_chart(
-                        curve_df=km_curve,
-                        page_id="national",
-                        title="National Complication Rate Over Time (KM)",
-                        yaxis_title='Complication Rate (%)',
-                        xaxis_title=km_xaxis_label,
-                        height=320,
-                        color='#e67e22',
-                        show_complication_rate=True
-                    )
-                    
-                    st.plotly_chart(fig_km_nat, use_container_width=True, key="km_national_v2")
-                else:
-                    st.info('KM computation returned empty results.')
+                if not overall_curve.empty:
+                    km_curves['Overall'] = overall_curve
                     
             except Exception as e:
-                st.error(f"Error computing KM curve: {e}")
-                debug_signatures['km_error'] = {'error': str(e)}
+                st.error(f"Error computing overall KM curve: {e}")
+                debug_signatures['km_error_overall'] = {'error': str(e)}
+        
+        # Create multi-line chart if we have multiple curves
+        if len(km_curves) > 1:
+            try:
+                # Create dynamic title based on active filters
+                active_filters = []
+                if km_top10:
+                    active_filters.append("Top 10 hospitals")
+                if km_label_opts:
+                    active_filters.append(f"Labels: {', '.join(km_label_opts)}")
+                
+                title = "National Complication Rate Over Time (KM)"
+                if active_filters:
+                    title += f" - {', '.join(active_filters)}"
+                
+                fig_km_nat = create_multi_km_chart(
+                    curves_dict=km_curves,
+                    title=title,
+                    yaxis_title='Complication Rate (%)',
+                    xaxis_title=km_xaxis_label,
+                    height=400,
+                    colors=['#e67e22', '#1f77b4', '#2ca02c', '#d62728']  # Orange, Blue, Green, Red
+                )
+                
+                st.plotly_chart(fig_km_nat, use_container_width=True, key="km_national_multi")
+                
+                # Show legend info
+                st.info(f"📊 **Multiple KM curves shown:** {', '.join(km_curves.keys())}")
+                
+            except Exception as e:
+                st.error(f"Error creating multi-line KM chart: {e}")
+                debug_signatures['multi_chart_error'] = {'error': str(e)}
+                
+        elif len(km_curves) == 1:
+            # Single curve
+            curve_name, curve_data = list(km_curves.items())[0]
+            fig_km_nat = create_km_chart(
+                curve_df=curve_data,
+                page_id="national",
+                title=f"National Complication Rate Over Time (KM) - {curve_name}",
+                yaxis_title='Complication Rate (%)',
+                xaxis_title=km_xaxis_label,
+                height=320,
+                color='#e67e22',
+                show_complication_rate=True
+            )
+            
+            st.plotly_chart(fig_km_nat, use_container_width=True, key="km_national_single")
+            
         else:
-            st.info('No data to compute national KM curve with current filters.')
-            debug_signatures['no_data'] = {'message': 'Empty aggregated data'}
+            st.info('No data to compute KM curves with current filters.')
+            debug_signatures['no_data'] = {'message': 'No KM curves computed'}
     else:
         st.info('Complications dataset unavailable.')
         debug_signatures['no_raw_data'] = {'message': 'No complications data'}

@@ -123,7 +123,7 @@ def create_km_chart(
 def create_multi_km_chart(
     curves_dict: dict,
     title: str = "Kaplan-Meier Comparison",
-    yaxis_title: str = "Complication-free probability (%)", 
+    yaxis_title: str = "Complication Rate (%)", 
     xaxis_title: str = "Time interval",
     height: int = 400,
     colors: Optional[List[str]] = None
@@ -165,19 +165,24 @@ def create_multi_km_chart(
             if curve_df.empty:
                 continue
                 
-            # Create step-like curve
+            # Create step-like curve for complication rates
             x_vals = []
             y_vals = []
-            prev_survival = 1.0
+            prev_rate = 0.0  # Start at 0% complication rate
             
             for _, row in curve_df.iterrows():
                 time_label = str(row['time'])
-                current_survival = float(row['survival'])
+                current_rate = float(row['survival']) * 100  # Convert to percentage
                 
-                x_vals.extend([time_label, time_label])
-                y_vals.extend([prev_survival * 100, current_survival * 100])
+                # Add horizontal line at previous rate level
+                x_vals.append(time_label)
+                y_vals.append(prev_rate)
                 
-                prev_survival = current_survival
+                # Add vertical jump to current rate level
+                x_vals.append(time_label)  
+                y_vals.append(current_rate)
+                
+                prev_rate = current_rate
             
             # Add trace
             color = colors[color_idx % len(colors)]
@@ -187,7 +192,7 @@ def create_multi_km_chart(
                 mode='lines',
                 name=str(group_name),
                 line=dict(shape='linear', width=3, color=color),
-                hovertemplate=f"{group_name}<br>Time: %{{x}}<br>Survival: %{{y:.1f}}%<extra></extra>"
+                hovertemplate=f"{group_name}<br>Time: %{{x}}<br>Complication Rate: %{{y:.1f}}%<extra></extra>"
             ))
             
             color_idx += 1
@@ -210,7 +215,7 @@ def create_multi_km_chart(
         )
     )
     
-    # Set y-axis range
-    fig.update_layout(yaxis=dict(range=[0, 100]))
+    # Set y-axis range for complication rates (0-20% to accommodate variations)
+    fig.update_layout(yaxis=dict(rangemode='tozero', range=[0, 20]))
     
     return fig
