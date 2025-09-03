@@ -1724,7 +1724,7 @@ if not complications.empty:
         km_subset_ids = set()
 
     # Compute KM curve using new robust system
-    from km import compute_km_from_aggregates, debug_signature
+    from km import compute_complication_rates_from_aggregates, debug_signature
     from charts import create_km_chart
     from utils.cache import debug_dataframe_signature, show_debug_panel
     
@@ -1770,8 +1770,8 @@ if not complications.empty:
         
         if not km_agg.empty:
             try:
-                # Use the robust KM computation
-                km_curve = compute_km_from_aggregates(
+                # Use the robust complication rate computation
+                km_curve = compute_complication_rates_from_aggregates(
                     df=km_agg,
                     time_col='time_label',
                     event_col='complications_count', 

@@ -1,6 +1,6 @@
 """
-Pure Kaplan-Meier computation module.
-Eliminates global state reuse and provides consistent, debuggable KM curves.
+Period-specific complication rate computation module.
+Eliminates global state reuse and provides consistent, debuggable rate curves.
 """
 
 import pandas as pd
@@ -49,7 +49,7 @@ def debug_signature(df: pd.DataFrame, *args, **kwargs) -> Dict[str, Any]:
 
 
 @st.cache_data(show_spinner=False)
-def compute_km_from_aggregates(
+def compute_complication_rates_from_aggregates(
     df: pd.DataFrame,
     time_col: str,           # e.g., "semester_label" or "quarter"
     event_col: str,          # e.g., "comp" (events in interval)
@@ -60,11 +60,11 @@ def compute_km_from_aggregates(
     cache_version: str = "v1"
 ) -> pd.DataFrame:
     """
-    Pure KM computation from aggregate data.
+    Period-specific complication rate computation from aggregate data.
     
     Returns tidy DataFrame with columns:
       group (or 'ALL'), time, at_risk, events, hazard, survival
-    Uses product-limit estimator: S_t = Π (1 - d_i / n_i) in time order.
+    For complication rates: survival = period-specific rate (not cumulative)
     """
     # Always work on a deep copy to avoid mutation
     df_work = df.copy(deep=True)
@@ -147,9 +147,13 @@ def _compute_single_group_km(
     agg_df['_order'] = agg_df[time_col].map(time_to_order)
     agg_df = agg_df.sort_values('_order').drop('_order', axis=1)
     
-    # Compute hazard and survival
+    # For complication rates, we want PERIOD-SPECIFIC rates, not cumulative
+    # Compute period-specific complication rate (hazard)
     agg_df['hazard'] = agg_df[event_col] / agg_df[at_risk_col]
-    agg_df['survival'] = (1 - agg_df['hazard']).cumprod()
+    
+    # For complication rates, survival should represent the period-specific rate
+    # NOT cumulative survival (which keeps increasing)
+    agg_df['survival'] = agg_df['hazard']  # Direct period rate
     
     # Add group identifier
     agg_df['group'] = group_name

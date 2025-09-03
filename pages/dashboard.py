@@ -760,7 +760,7 @@ with tab_complications:
         st.markdown("#### Kaplan–Meier (approx.) — 6‑month complication rate")
         
         # Import new KM system
-        from km import compute_km_from_aggregates
+        from km import compute_complication_rates_from_aggregates
         from charts import create_km_chart  
         from utils.cache import debug_dataframe_signature, show_debug_panel
         
@@ -788,7 +788,7 @@ with tab_complications:
             if not sem.empty:
                 try:
                     # Use robust KM computation
-                    km_curve = compute_km_from_aggregates(
+                    km_curve = compute_complication_rates_from_aggregates(
                         df=sem,
                         time_col='semester',
                         event_col='events',
