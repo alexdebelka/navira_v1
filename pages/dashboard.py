@@ -6,6 +6,7 @@ import folium
 from folium.plugins import HeatMap
 import os
 import requests
+import branca.colormap as cm
 from navira.competitor_layers import (
     AllocationMode,
     build_cp_to_insee,
@@ -796,6 +797,15 @@ with tab_geo:
         st.info("No competitors found for this hospital.")
     # Postal → INSEE map
     cp_map = build_cp_to_insee(communes_csv)
+    # Competitor name mapping from establishments
+    comp_name_map = {}
+    try:
+        if not establishments.empty and {'id','name'}.issubset(establishments.columns):
+            em = establishments[['id','name']].drop_duplicates().copy()
+            em['id'] = em['id'].astype(str)
+            comp_name_map = dict(zip(em['id'], em['name']))
+    except Exception:
+        comp_name_map = {}
     # GeoJSON
     # Try to filter GeoJSON to only needed INSEE codes to reduce payload
     needed_insee = []
@@ -819,15 +829,28 @@ with tab_geo:
     diagnostics_rows = []
     if gj and insee_key:
         from folium.features import GeoJson, GeoJsonTooltip
+        glb_min = None
+        glb_max = None
         for idx, comp_id in enumerate(top5):
             df_layer, diag = competitor_choropleth_df(rec_path, comp_id, cp_map, allocation=allocation)  # type: ignore[arg-type]
             diagnostics_rows.append((comp_id, diag))
             if df_layer.empty:
                 continue
             try:
+                vmin = float(df_layer["value"].min())
+                vmax = float(df_layer["value"].max())
+                glb_min = vmin if glb_min is None else min(glb_min, vmin)
+                glb_max = vmax if glb_max is None else max(glb_max, vmax)
+            except Exception:
+                pass
+            try:
+                label_name = comp_name_map.get(str(comp_id), str(comp_id))
+                # keep label concise
+                if isinstance(label_name, str) and len(label_name) > 28:
+                    label_name = label_name[:27] + '…'
                 layer = folium.Choropleth(
                     geo_data=gj,
-                    name=f"C{idx+1} {comp_id}",
+                    name=f"C{idx+1} {label_name}",
                     data=df_layer,
                     columns=["insee5", "value"],
                     key_on=f"feature.properties.{insee_key}",
@@ -845,6 +868,14 @@ with tab_geo:
                 continue
         try:
             folium.LayerControl(collapsed=True).add_to(m)
+        except Exception:
+            pass
+        # Add single shared legend
+        try:
+            if glb_min is not None and glb_max is not None and glb_max > glb_min:
+                colormap = cm.linear.YlOrRd_09.scale(glb_min, glb_max)
+                colormap.caption = "Patients recruited"
+                colormap.add_to(m)
         except Exception:
             pass
     else:
