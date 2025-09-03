@@ -4,6 +4,7 @@ import pandas as pd
 import altair as alt
 import folium
 from folium.plugins import HeatMap
+import os
 import requests
 from navira.competitor_layers import (
     AllocationMode,
