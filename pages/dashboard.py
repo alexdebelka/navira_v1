@@ -796,19 +796,14 @@ with tab_complications:
 with tab_geo:
     st.subheader("Recruitment Zone and Competitors (Top-5 Choropleths)")
     
-    # Debug info
-    st.info("🗺️ Loading interactive map with recruitment zones and competitor analysis...")
-    
     allocation = "even_split"
     # Map
     try:
         center = [float(selected_hospital_details.get('latitude')), float(selected_hospital_details.get('longitude'))]
         if any(pd.isna(center)):
             raise ValueError
-        st.success(f"Hospital coordinates found: {center[0]:.4f}, {center[1]:.4f}")
     except Exception:
         center = [48.8566, 2.3522]
-        st.warning("Using default coordinates (Paris) - hospital coordinates not available")
     
     m = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
     # Ensure choropleths stay below markers even when toggled
@@ -975,13 +970,32 @@ with tab_geo:
         pass
 
     # Ensure the interactive map is prominently visible
+    st.markdown("---")  # Add separator
+    st.markdown("### 🗺️ Interactive Map")
+    
+    # Add some spacing and container styling
+    st.markdown("""
+    <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin: 10px 0;">
+        <p><strong>Map Controls:</strong> Use mouse to pan and zoom. Toggle layers using the control in the top-right corner.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
     try:
-        st.success("✅ Map ready - rendering interactive visualization...")
-        st_folium(m, width="100%", height=560, key="geo_map_dashboard")
-        st.success("✅ Map successfully loaded!")
+        # Try with explicit container and different parameters
+        map_data = st_folium(
+            m, 
+            width=1200, 
+            height=600, 
+            key="geo_map_v2",
+            returned_objects=["last_object_clicked_tooltip", "last_object_clicked", "last_clicked"],
+            use_container_width=True
+        )
+        # Map rendered successfully
+            
     except Exception as e:
         st.error(f"❌ Error rendering map: {e}")
         # Fallback: simple map without complex layers
+        st.warning("Trying simplified map...")
         simple_map = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
         try:
             folium.CircleMarker(
@@ -992,10 +1006,11 @@ with tab_geo:
                 fill_color='#d62728',
                 popup="Selected Hospital"
             ).add_to(simple_map)
-            st.info("Showing simplified map due to data loading issues")
-            st_folium(simple_map, width="100%", height=560, key="simple_geo_map")
+            st_folium(simple_map, width=1200, height=600, key="simple_geo_map_v2", use_container_width=True)
         except Exception as e2:
             st.error(f"❌ Fallback map also failed: {e2}")
+            # Ultimate fallback - show coordinates
+            st.info(f"Map rendering failed. Hospital location: {center[0]:.4f}, {center[1]:.4f}")
 
     # Competitors list
     st.markdown("#### Nearby/Competitor Hospitals")
