@@ -350,10 +350,10 @@ def _add_competitor_markers(
                         radius=radius,
                         popup=f"<b>{name}</b><br/>FINESS: {competitor_finess}<br/>Rank: #{i+1}",
                         tooltip=f"Competitor #{i+1}: {name}",
-                        color='white',
-                        weight=2,
+                        color=color,  # Use the same color but darker for border
+                        weight=3,     # Slightly thicker border
                         fillColor=color,
-                        fillOpacity=0.8
+                        fillOpacity=0.6  # Lighter center fill
                     ).add_to(m)
                     
                 except (ValueError, TypeError):
