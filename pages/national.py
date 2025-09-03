@@ -178,7 +178,7 @@ try:
         ratio_data['surgery_ratio'] = ratio_data['surgery_ratio'].round(1)
         
         # Display summary stats
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4 = st.columns([1, 1, 1.5, 1])
         with col1:
             st.metric("Departments with Data", len(ratio_data))
         with col2:
