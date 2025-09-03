@@ -96,12 +96,13 @@ def create_recruitment_map(
             needed_insee_codes.extend(df['insee5'].tolist())
     
     # Load filtered GeoJSON for better performance
-    from .geo import load_communes_geojson_filtered
+    from .geo import load_communes_geojson_filtered, load_communes_geojson
     geojson_data = load_communes_geojson_filtered(needed_insee_codes) if needed_insee_codes else load_communes_geojson()
     
     diagnostics_list = []
     
-    if not geojson_data:
+    if not geojson_data or 'features' not in geojson_data or not geojson_data['features']:
+        st.error("❌ No GeoJSON data available")
         st.warning("⚠️ GeoJSON data not available. Choropleth layers will not be shown.")
         _add_hospital_marker(m, hospital_finess, hospital_info)
         return m, diagnostics_list
@@ -212,11 +213,11 @@ def _add_choropleth_layer(
                 }
             else:
                 return {
-                    'fillColor': 'transparent',
-                    'color': 'transparent',
-                    'weight': 0,
-                    'fillOpacity': 0,
-                    'opacity': 0
+                    'fillColor': '#f0f0f0',
+                    'color': '#cccccc',
+                    'weight': 0.5,
+                    'fillOpacity': 0.1,
+                    'opacity': 0.2
                 }
         
         # Tooltip function

@@ -7,13 +7,13 @@ from folium.plugins import HeatMap
 import os
 import requests
 import branca.colormap as cm
-from navira.competitor_layers import (
-    AllocationMode,
-    build_cp_to_insee,
-    competitor_choropleth_df,
+from navira.competitors import (
     get_top_competitors,
+    get_competitor_names,
+    build_postal_to_insee_mapping,
+    competitor_choropleth_df
 )
-from navira.geojson_loader import load_communes_geojson, detect_insee_key
+from navira.geo import load_communes_geojson, detect_insee_key
 from streamlit_folium import st_folium
 import plotly.express as px
 import plotly.graph_objects as go
