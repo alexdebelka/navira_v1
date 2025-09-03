@@ -770,9 +770,9 @@ with tab_complications:
                                mode='lines+markers', name='National', line=dict(dash='dash'))
                 fig.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig, use_container_width=True)
-            elif len(valid_data) == 1:
-                # If only one quarter, we fallback to latest 6‑month comparison above
-                st.info("Showing 6‑month metrics due to limited quarterly points.")
+            # elif len(valid_data) == 1:
+            #     # If only one quarter, we fallback to latest 6‑month comparison above
+            #     st.info("Showing 6‑month metrics due to limited quarterly points.")
             else:
                 st.info("No valid rate data available to plot.")
         else:
