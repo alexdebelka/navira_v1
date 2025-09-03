@@ -33,15 +33,18 @@ def load_recruitment_data(file_path: str = "data/11_recruitement_zone.csv") -> p
         - PCT_CUM: Cumulative percentage (float)
     """
     try:
-        df = pd.read_csv(file_path)
+        df = pd.read_csv(file_path, sep=';', quotechar='"', index_col=0)  # Handle quoted semicolon format
         
-        # Clean FINESS codes - pad to 9 digits
+        # Clean column names by removing quotes
+        df.columns = df.columns.str.strip('"')
+        
+        # Clean FINESS codes - pad to 9 digits and remove quotes
         if 'finessGeoDP' in df.columns:
-            df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.zfill(9)
+            df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip('"').str.zfill(9)
         
-        # Clean postal codes - pad to 5 digits
+        # Clean postal codes - pad to 5 digits and remove quotes
         if 'codeGeo' in df.columns:
-            df['codeGeo'] = df['codeGeo'].astype(str).str.zfill(5)
+            df['codeGeo'] = df['codeGeo'].astype(str).str.strip('"').str.zfill(5)
         
         # Convert comma decimal strings to float
         numeric_cols = ['nb', 'TOT', 'PCT', 'PCT_CUM']
@@ -76,13 +79,16 @@ def load_competitors_data(file_path: str = "data/13_main_competitors.csv") -> pd
         - TOT_conc: Total for competitor (float)
     """
     try:
-        df = pd.read_csv(file_path)
+        df = pd.read_csv(file_path, sep=';', quotechar='"', index_col=0)  # Handle quoted semicolon format
         
-        # Clean FINESS codes - pad to 9 digits
+        # Clean column names by removing quotes
+        df.columns = df.columns.str.strip('"')
+        
+        # Clean FINESS codes - pad to 9 digits and remove quotes
         finess_cols = ['finessGeoDP', 'finessGeoDP_conc']
         for col in finess_cols:
             if col in df.columns:
-                df[col] = df[col].astype(str).str.zfill(9)
+                df[col] = df[col].astype(str).str.strip('"').str.zfill(9)
         
         # Convert numeric columns
         numeric_cols = ['TOT_etb', 'TOT_conc']

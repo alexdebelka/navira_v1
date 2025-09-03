@@ -78,9 +78,26 @@ def create_recruitment_map(
     )
     
     # Load required data
-    geojson_data = load_communes_geojson()
     communes_df = load_communes_data()
     cp_to_insee = build_postal_to_insee_mapping(communes_df)
+    
+    # Get top competitors first
+    competitors = get_top_competitors(hospital_finess, max_competitors)
+    if not competitors:
+        st.info("ℹ️ No competitors found for this hospital.")
+        _add_hospital_marker(m, hospital_finess, hospital_info)
+        return m, []
+    
+    # Get needed INSEE codes to filter GeoJSON for performance
+    needed_insee_codes = []
+    for competitor in competitors[:max_competitors]:
+        df, _ = competitor_choropleth_df(competitor, cp_to_insee, allocation)
+        if not df.empty:
+            needed_insee_codes.extend(df['insee5'].tolist())
+    
+    # Load filtered GeoJSON for better performance
+    from .geo import load_communes_geojson_filtered
+    geojson_data = load_communes_geojson_filtered(needed_insee_codes) if needed_insee_codes else load_communes_geojson()
     
     diagnostics_list = []
     
@@ -95,15 +112,8 @@ def create_recruitment_map(
         _add_hospital_marker(m, hospital_finess, hospital_info)
         return m, diagnostics_list
     
-    # Get top competitors
-    competitors = get_top_competitors(hospital_finess, max_competitors)
-    if not competitors:
-        st.info("ℹ️ No competitors found for this hospital.")
-        _add_hospital_marker(m, hospital_finess, hospital_info)
-        return m, diagnostics_list
-    
     # Get competitor names for display
-    competitor_names = get_competitor_names(competitors, establishments_df or pd.DataFrame())
+    competitor_names = get_competitor_names(competitors, establishments_df if establishments_df is not None else pd.DataFrame())
     
     # Create choropleth layers
     global_min_value = float('inf')
@@ -135,6 +145,7 @@ def create_recruitment_map(
     for i, competitor_finess in enumerate(competitors):
         if competitor_finess in choropleth_data:
             competitor_name = competitor_names.get(competitor_finess, f"Competitor {i+1}")
+
             _add_choropleth_layer(
                 m, 
                 geojson_data, 
@@ -229,12 +240,6 @@ def _add_choropleth_layer(
                 labels=False,
                 sticky=True,
                 opacity=0.9
-            ),
-            popup=folium.GeoJsonPopup(
-                fields=[],
-                aliases=[],
-                labels=False,
-                max_width=200
             )
         ).add_to(feature_group)
         
