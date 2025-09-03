@@ -764,14 +764,7 @@ with tab_complications:
 
 with tab_geo:
     st.subheader("Recruitment Zone and Competitors (Top-5 Choropleths)")
-    # Controls for allocation mode
-    allocation = st.radio(
-        "Allocation mode",
-        options=["even_split", "no_split"],
-        index=0,
-        horizontal=True,
-        help="How to allocate postal codes that map to multiple communes",
-    )
+    allocation = "even_split"
     # Map
     try:
         center = [float(selected_hospital_details.get('latitude')), float(selected_hospital_details.get('longitude'))]
@@ -845,25 +838,22 @@ with tab_geo:
                 pass
             try:
                 label_name = comp_name_map.get(str(comp_id), str(comp_id))
-                # keep label concise
                 if isinstance(label_name, str) and len(label_name) > 28:
                     label_name = label_name[:27] + '…'
-                layer = folium.Choropleth(
-                    geo_data=gj,
-                    name=f"C{idx+1} {label_name}",
-                    data=df_layer,
-                    columns=["insee5", "value"],
-                    key_on=f"feature.properties.{insee_key}",
-                    fill_color="YlOrRd",
-                    fill_opacity=0.5,
-                    line_opacity=0.1,
-                    line_weight=0.4,
-                    nan_fill_opacity=0,
-                    overlay=True,
-                    control=True,
-                    show=True if idx == 0 else False,
-                )
-                layer.add_to(m)
+                # Build value lookup for styling
+                val_map = dict(zip(df_layer['insee5'].astype(str), df_layer['value'].astype(float)))
+                # Create FeatureGroup per competitor
+                grp = folium.FeatureGroup(name=f"C{idx+1} {label_name}", show=True if idx == 0 else False)
+                # Define style function using global colormap set below
+                def _style_fn(feat):
+                    code = str(feat.get('properties', {}).get(insee_key, '')).zfill(5)
+                    v = val_map.get(code)
+                    if v is None:
+                        return {"fillOpacity": 0.0, "weight": 0.0, "color": "#00000000"}
+                    color = colormap(v) if 'colormap' in globals() else '#e34a33'
+                    return {"fillColor": color, "color": "#444444", "weight": 0.4, "fillOpacity": 0.5}
+                folium.GeoJson(gj, name=f"geojson_{idx}", style_function=_style_fn).add_to(grp)
+                grp.add_to(m)
             except Exception:
                 continue
         try:
