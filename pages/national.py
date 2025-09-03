@@ -196,90 +196,7 @@ try:
 except Exception as e:
     st.warning(f'Could not render national choropleth (department): {e}')
 
-# --- National Complication Rate Over Time (Kaplan–Meier style) ---
-st.header("National Complication Rate Over Time (Kaplan–Meier)")
-
-# Filters
-colf1, colf2, colf3 = st.columns([1,1,2])
-with colf1:
-    interval = st.radio("Interval", options=["6 months", "3 months"], index=0, horizontal=True)
-with colf2:
-    proc_filter = st.multiselect("Procedure type", options=["Sleeve", "Gastric Bypass"], default=[])
-with colf3:
-    label_opts = st.multiselect("Labels", options=["CSO", "SOFFCO", "None"], default=["CSO","SOFFCO","None"], help="Filter hospitals by labels")
-    top10 = st.checkbox("Top 10 hospitals by procedures (2020–2024)", value=False)
-
-# Build hospital subset based on labels and top 10
-subset_ids = set()
-try:
-    est_df = st.session_state.get('establishments', None) or all_data.get('establishments')
-    ann_df = st.session_state.get('annual', None) or all_data.get('annual')
-    if est_df is None or ann_df is None:
-        est_df, ann_df = get_dataframes()
-    estN = est_df.copy()
-    estN['id'] = estN['id'].astype(str)
-    # Label filtering
-    mask_any = pd.Series([False]*len(estN))
-    parts = []
-    if 'CSO' in label_opts and 'cso' in estN.columns:
-        parts.append(estN['cso'] == 1)
-    if 'SOFFCO' in label_opts and 'LAB_SOFFCO' in estN.columns:
-        parts.append(estN['LAB_SOFFCO'] == 1)
-    if 'None' in label_opts:
-        cond_none = ((estN.get('cso', 0) != 1) & (estN.get('LAB_SOFFCO', 0) != 1))
-        parts.append(cond_none)
-    if parts:
-        mask_any = parts[0]
-        for p in parts[1:]:
-            mask_any = mask_any | p
-    est_filtered = estN[mask_any]
-    # Top 10 by total procedures across 2020–2024
-    if top10 and not ann_df.empty:
-        annN = ann_df.copy()
-        annN['id'] = annN['id'].astype(str)
-        vol = annN.groupby('id')['total_procedures_year'].sum().sort_values(ascending=False).head(10)
-        est_filtered = est_filtered[est_filtered['id'].isin(vol.index.astype(str))]
-    subset_ids = set(est_filtered['id'].astype(str)) if not est_filtered.empty else set()
-except Exception:
-    subset_ids = set()
-
-# Prepare complications cohort
-comp_df = all_data.get('complications', pd.DataFrame())
-if not comp_df.empty:
-    data = comp_df.copy()
-    data['hospital_id'] = data['hospital_id'].astype(str)
-    if subset_ids:
-        data = data[data['hospital_id'].isin(subset_ids)]
-    # Interval aggregation
-    data = data.dropna(subset=['quarter_date']).sort_values('quarter_date')
-    data['year'] = data['quarter_date'].dt.year
-    if interval.startswith('6'):
-        data['bucket'] = ((data['quarter_date'].dt.quarter - 1) // 2 + 1)
-        label_name = '6‑month interval'
-    else:
-        data['bucket'] = data['quarter_date'].dt.quarter
-        label_name = '3‑month interval (quarter)'
-    data['label'] = data['year'].astype(int).astype(str) + (data['bucket'].astype(int).astype(str).map(lambda x: ' H'+x if interval.startswith('6') else ' Q'+x))
-    agg = data.groupby(['year','bucket','label'], as_index=False).agg({'complications_count':'sum','procedures_count':'sum'}).sort_values(['year','bucket'])
-    # KM survival
-    if not agg.empty:
-        agg['hazard'] = agg.apply(lambda r: (r['complications_count']/r['procedures_count']) if r['procedures_count']>0 else 0.0, axis=1)
-        agg['survival'] = (1 - agg['hazard']).cumprod()
-        x = []; y = []; prev = 1.0
-        for _, r in agg.iterrows():
-            lbl = str(r['label'])
-            x.append(lbl); y.append(prev)
-            prev = float(r['survival'])
-            x.append(lbl); y.append(prev)
-        import plotly.graph_objects as go
-        fig_km_nat = go.Figure()
-        fig_km_nat.add_trace(go.Scatter(x=x, y=[v*100 for v in y], mode='lines', name='National KM', line=dict(shape='hv', width=3, color='#e67e22')))
-        fig_km_nat.update_layout(title="National Complication Rate Over Time (KM)", height=320, yaxis_title='Complication‑free probability (%)', xaxis_title=label_name, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_km_nat, use_container_width=True)
-    else:
-        st.info('No data to compute national KM curve with current filters.')
-else:
-    st.info('Complications dataset unavailable.')
+## Moved: Kaplan–Meier national complication rate section now lives under the "National Complication Rate Trends" subsection below.
 
 # Track page view
 try:
@@ -1652,6 +1569,83 @@ if not complications.empty:
         
         st.plotly_chart(fig, use_container_width=True)
     
+    # Kaplan–Meier representation, moved into the Trends subsection
+    st.markdown("##### National Complication Rate Over Time (Kaplan–Meier)")
+    col_km1, col_km2 = st.columns([1,2])
+    with col_km1:
+        km_interval = st.radio("Interval", options=["6 months", "3 months"], index=0, horizontal=True, key="km_interval")
+    with col_km2:
+        km_label_opts = st.multiselect("Labels", options=["CSO", "SOFFCO", "None"], default=["CSO", "SOFFCO", "None"], help="Filter hospitals by labels", key="km_labels")
+        km_top10 = st.checkbox("Top 10 hospitals by procedures (2020–2024)", value=False, key="km_top10")
+
+    # Build hospital subset based on labels and top 10
+    km_subset_ids = set()
+    try:
+        est_df = st.session_state.get('establishments', None) or all_data.get('establishments')
+        ann_df = st.session_state.get('annual', None) or all_data.get('annual')
+        if est_df is None or ann_df is None:
+            est_df, ann_df = get_dataframes()
+        estN = est_df.copy()
+        estN['id'] = estN['id'].astype(str)
+        mask_any = pd.Series([False]*len(estN))
+        label_parts = []
+        if 'CSO' in km_label_opts and 'cso' in estN.columns:
+            label_parts.append(estN['cso'] == 1)
+        if 'SOFFCO' in km_label_opts and 'LAB_SOFFCO' in estN.columns:
+            label_parts.append(estN['LAB_SOFFCO'] == 1)
+        if 'None' in km_label_opts:
+            cond_none = ((estN.get('cso', 0) != 1) & (estN.get('LAB_SOFFCO', 0) != 1))
+            label_parts.append(cond_none)
+        if label_parts:
+            mask_any = label_parts[0]
+            for p in label_parts[1:]:
+                mask_any = mask_any | p
+        est_filtered = estN[mask_any]
+        if km_top10 and ann_df is not None and not ann_df.empty:
+            annN = ann_df.copy()
+            annN['id'] = annN['id'].astype(str)
+            vol = annN.groupby('id')['total_procedures_year'].sum().sort_values(ascending=False).head(10)
+            est_filtered = est_filtered[est_filtered['id'].isin(vol.index.astype(str))]
+        km_subset_ids = set(est_filtered['id'].astype(str)) if not est_filtered.empty else set()
+    except Exception:
+        km_subset_ids = set()
+
+    # Prepare complications cohort and compute step function survival
+    km_comp_df = all_data.get('complications', pd.DataFrame())
+    if not km_comp_df.empty:
+        km_data = km_comp_df.copy()
+        km_data['hospital_id'] = km_data['hospital_id'].astype(str)
+        if km_subset_ids:
+            km_data = km_data[km_data['hospital_id'].isin(km_subset_ids)]
+        km_data = km_data.dropna(subset=['quarter_date']).sort_values('quarter_date')
+        km_data['year'] = km_data['quarter_date'].dt.year
+        if km_interval.startswith('6'):
+            km_data['bucket'] = ((km_data['quarter_date'].dt.quarter - 1) // 2 + 1)
+            km_xaxis_label = '6‑month interval'
+        else:
+            km_data['bucket'] = km_data['quarter_date'].dt.quarter
+            km_xaxis_label = '3‑month interval (quarter)'
+        km_data['label'] = km_data['year'].astype(int).astype(str) + (km_data['bucket'].astype(int).astype(str).map(lambda x: ' H'+x if km_interval.startswith('6') else ' Q'+x))
+        km_agg = km_data.groupby(['year','bucket','label'], as_index=False).agg({'complications_count':'sum','procedures_count':'sum'}).sort_values(['year','bucket'])
+        if not km_agg.empty:
+            km_agg['hazard'] = km_agg.apply(lambda r: (r['complications_count']/r['procedures_count']) if r['procedures_count']>0 else 0.0, axis=1)
+            km_agg['survival'] = (1 - km_agg['hazard']).cumprod()
+            x = []; y = []; prev = 1.0
+            for _, r in km_agg.iterrows():
+                lbl = str(r['label'])
+                x.append(lbl); y.append(prev)
+                prev = float(r['survival'])
+                x.append(lbl); y.append(prev)
+            import plotly.graph_objects as go
+            fig_km_nat = go.Figure()
+            fig_km_nat.add_trace(go.Scatter(x=x, y=[v*100 for v in y], mode='lines', name='National KM', line=dict(shape='hv', width=3, color='#e67e22')))
+            fig_km_nat.update_layout(title="National Complication Rate Over Time (KM)", height=320, yaxis_title='Complication‑free probability (%)', xaxis_title=km_xaxis_label, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_km_nat, use_container_width=True)
+        else:
+            st.info('No data to compute national KM curve with current filters.')
+    else:
+        st.info('Complications dataset unavailable.')
+
     # Hospital performance trends ("spaghetti" plot)
     st.markdown("#### Hospital Performance Over Time")
     
