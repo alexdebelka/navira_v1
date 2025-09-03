@@ -827,21 +827,24 @@ with tab_geo:
             try:
                 layer = folium.Choropleth(
                     geo_data=gj,
-                    name=f"Competitor {idx+1}: {comp_id}",
+                    name=f"C{idx+1} {comp_id}",
                     data=df_layer,
                     columns=["insee5", "value"],
                     key_on=f"feature.properties.{insee_key}",
                     fill_color="YlOrRd",
-                    fill_opacity=0.55,
-                    line_opacity=0.2,
+                    fill_opacity=0.5,
+                    line_opacity=0.1,
+                    line_weight=0.4,
                     nan_fill_opacity=0,
-                    legend_name="Patients recruited",
+                    overlay=True,
+                    control=True,
+                    show=True if idx == 0 else False,
                 )
                 layer.add_to(m)
             except Exception:
                 continue
         try:
-            folium.LayerControl(collapsed=False).add_to(m)
+            folium.LayerControl(collapsed=True).add_to(m)
         except Exception:
             pass
     else:
@@ -884,8 +887,8 @@ with tab_geo:
             )
             comp_named = comp_named.dropna(subset=['latitude','longitude'])
             comp_named = comp_named.sort_values('competitor_patients', ascending=False).head(5).reset_index(drop=True)
-            # Size by rank (1 largest)
-            size_by_rank = {0:14, 1:12, 2:10, 3:9, 4:8}
+            # Size by rank (smaller to reduce clutter)
+            size_by_rank = {0:12, 1:10, 2:8, 3:7, 4:6}
             color = '#1f77b4'
             for idx, r in comp_named.iterrows():
                 radius = size_by_rank.get(idx, 8)
