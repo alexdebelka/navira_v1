@@ -165,7 +165,8 @@ try:
         exploded = cp_tot.explode('insee_list').dropna(subset=['insee_list']).copy()
         exploded['insee'] = exploded['insee_list'].astype(str).str.zfill(5)
         agg = exploded.groupby('insee', as_index=False)['patient_count'].sum()
-        gj = load_communes_geojson_filtered(agg['insee']) or load_communes_geojson(None)
+        # Use full communes GeoJSON so the entire map is colored
+        gj = load_communes_geojson(None)
         key = detect_insee_key(gj) if gj else None
         if gj and key and not agg.empty:
             m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
@@ -176,11 +177,15 @@ try:
             val_map = dict(zip(agg['insee'].astype(str), agg['patient_count'].astype(float)))
             def _style_fn(feat):
                 code = str(feat.get('properties', {}).get(key, '')).zfill(5)
-                v = val_map.get(code)
-                if v is None:
-                    return {"fillOpacity": 0.0, "weight": 0.0, "color": "#00000000"}
-                return {"fillColor": colormap(v), "color": "#444444", "weight": 0.4, "fillOpacity": 0.6}
+                v = val_map.get(code, 0.0)
+                # Lightly shade communes with zero to show full coverage
+                opacity = 0.20 if v == 0 else 0.6
+                return {"fillColor": colormap(v), "color": "#555555", "weight": 0.2, "fillOpacity": opacity}
             folium.GeoJson(gj, style_function=_style_fn).add_to(m)
+            try:
+                m.fit_bounds([[41.0, -5.3], [51.5, 9.6]])
+            except Exception:
+                pass
             st_folium(m, width="100%", height=540, key="national_recruitment_choropleth_commune_v2")
         else:
             st.info('Commune polygons unavailable or no data.')
