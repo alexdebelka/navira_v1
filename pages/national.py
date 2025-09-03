@@ -114,49 +114,7 @@ st.title("🇫🇷 National Overview")
 
 
 
-# Choropleth alternative
-st.markdown("### National Recruitment Choropleth – Department")
-try:
-    if not recruitment.empty:
-        rec = recruitment.copy()
-        rec['city_code'] = rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
-        # Derive department code from postal code (handles Corsica + overseas)
-        def _dept_from_postal(cp: str) -> str:
-            cp = str(cp)
-            if cp.startswith('97') or cp.startswith('98'):
-                return cp[:3]
-            if cp.startswith('201'):
-                return '2A'
-            if cp.startswith('202'):
-                return '2B'
-            return cp[:2]
-        rec['dept_code'] = rec['city_code'].map(_dept_from_postal)
-        dep = rec.groupby('dept_code', as_index=False)['patient_count'].sum()
-        gj = _get_fr_departments_geojson()
-        if gj is not None and not dep.empty:
-            m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
-            vmin = float(dep['patient_count'].min()); vmax = float(dep['patient_count'].max())
-            colormap = cm.linear.YlOrRd_09.scale(vmin, vmax)
-            colormap.caption = 'Patients recruited'
-            colormap.add_to(m)
-            val_map = dict(zip(dep['dept_code'].astype(str), dep['patient_count'].astype(float)))
-            def _style_fn(feat):
-                code = str(feat.get('properties', {}).get('code', ''))
-                v = val_map.get(code, 0.0)
-                opacity = 0.25 if v == 0 else 0.65
-                return {"fillColor": colormap(v), "color": "#555555", "weight": 0.5, "fillOpacity": opacity}
-            folium.GeoJson(gj, style_function=_style_fn).add_to(m)
-            try:
-                m.fit_bounds([[41.0, -5.3], [51.5, 9.6]])
-            except Exception:
-                pass
-            st_folium(m, width="100%", height=540, key="national_recruitment_choropleth_department_v2")
-        else:
-            st.info('Commune polygons unavailable or no data.')
-    else:
-        st.info('Recruitment data not available.')
-except Exception as e:
-    st.warning(f'Could not render national choropleth (department): {e}')
+
 
 # Surgery-to-Population Ratio Choropleth
 st.markdown("### 🔥 Surgery Density by Department")
@@ -232,7 +190,7 @@ try:
             st.metric("Average Ratio", f"{avg_ratio:.1f}")
         with col3:
             max_dept = ratio_data.loc[ratio_data['surgery_ratio'].idxmax()]
-            st.metric("Highest Ratio", f"{max_dept['dept_code']}: {max_dept['surgery_ratio']:.1f}")
+            st.metric("Highest Ratio", f"Dep. {max_dept['dept_code']}: {max_dept['surgery_ratio']:.1f}")
         with col4:
             total_surgeries = ratio_data['total_surgeries'].sum()
             st.metric("Total Surgeries", f"{total_surgeries:,}")
@@ -257,37 +215,70 @@ try:
                 opacity = 0.25 if v == 0 else 0.7
                 return {"fillColor": colormap(v), "color": "#555555", "weight": 0.8, "fillOpacity": opacity}
             
-            # Add GeoJSON with tooltips
-            def _tooltip_fn(feat):
-                code = str(feat.get('properties', {}).get('code', ''))
-                name = str(feat.get('properties', {}).get('nom', code))
+            # Add GeoJSON with proper tooltips and popups
+            def create_feature_popup(feature):
+                """Create popup content for each department."""
+                props = feature.get('properties', {})
+                code = str(props.get('code', ''))
+                name = str(props.get('nom', code))
                 ratio_val = val_map.get(code, 0.0)
                 
-                # Get additional data for tooltip
+                # Get additional data for popup
                 dept_row = ratio_data[ratio_data['dept_code'] == code]
                 if not dept_row.empty:
                     surgeries = int(dept_row.iloc[0]['total_surgeries'])
                     population = int(dept_row.iloc[0]['population'])
-                    return f"{name} ({code})<br/>Ratio: {ratio_val:.1f} per 100K<br/>Surgeries: {surgeries:,}<br/>Population: {population:,}"
+                    
+                    popup_html = f"""
+                    <div style="font-family: Arial, sans-serif; min-width: 200px;">
+                        <h4 style="margin: 0 0 8px 0; color: #d62728; font-size: 16px;">{name}</h4>
+                        <div style="font-size: 12px; color: #666;">Department {code}</div>
+                        <hr style="margin: 8px 0; border: none; border-top: 1px solid #ddd;">
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <div><strong>Surgery Density:</strong> {ratio_val:.1f} per 100K inhabitants</div>
+                            <div><strong>Total Surgeries:</strong> {surgeries:,}</div>
+                            <div><strong>Population (2020):</strong> {population:,}</div>
+                        </div>
+                    </div>
+                    """
+                    return popup_html
                 else:
-                    return f"{name} ({code})<br/>No surgery data"
+                    return f"""
+                    <div style="font-family: Arial, sans-serif; min-width: 200px;">
+                        <h4 style="margin: 0 0 8px 0; color: #666; font-size: 16px;">{name}</h4>
+                        <div style="font-size: 12px; color: #666;">Department {code}</div>
+                        <hr style="margin: 8px 0; border: none; border-top: 1px solid #ddd;">
+                        <div style="color: #888;">No surgery data available</div>
+                    </div>
+                    """
             
-            folium.GeoJson(
-                gj, 
+            # Create GeoJSON layer with proper popups
+            geojson_layer = folium.GeoJson(
+                gj,
                 style_function=_style_fn,
-                tooltip=folium.GeoJsonTooltip(
-                    fields=[],
-                    aliases=[],
-                    labels=False,
-                    sticky=True,
-                    opacity=0.9
-                ),
-                popup=folium.GeoJsonPopup(
-                    fields=[],
-                    aliases=[],
-                    labels=False
-                )
-            ).add_to(m)
+                tooltip=folium.Tooltip("Click for details"),
+                popup=None  # We'll add custom popups below
+            )
+            
+            # Add custom popups to each feature
+            for feature in gj['features']:
+                code = str(feature.get('properties', {}).get('code', ''))
+                name = str(feature.get('properties', {}).get('nom', code))
+                ratio_val = val_map.get(code, 0.0)
+                
+                # Create tooltip text
+                tooltip_text = f"{name}: {ratio_val:.1f} per 100K"
+                
+                # Create popup content
+                popup_content = create_feature_popup(feature)
+                
+                # Add to the layer
+                folium.GeoJson(
+                    feature,
+                    style_function=_style_fn,
+                    tooltip=tooltip_text,
+                    popup=folium.Popup(popup_content, max_width=300)
+                ).add_to(m)
             
             # Fit bounds to France
             try:
@@ -306,13 +297,13 @@ try:
                 st.markdown("**🔥 Highest Surgery Density**")
                 top_5 = ratio_data.nlargest(5, 'surgery_ratio')[['dept_code', 'surgery_ratio', 'total_surgeries']]
                 for _, row in top_5.iterrows():
-                    st.write(f"**{row['dept_code']}**: {row['surgery_ratio']:.1f} per 100K ({row['total_surgeries']} surgeries)")
+                    st.write(f"**Dep. {row['dept_code']}**: {row['surgery_ratio']:.1f} per 100K ({row['total_surgeries']} surgeries)")
             
             with col2:
                 st.markdown("**📉 Lowest Surgery Density**")
                 bottom_5 = ratio_data.nsmallest(5, 'surgery_ratio')[['dept_code', 'surgery_ratio', 'total_surgeries']]
                 for _, row in bottom_5.iterrows():
-                    st.write(f"**{row['dept_code']}**: {row['surgery_ratio']:.1f} per 100K ({row['total_surgeries']} surgeries)")
+                    st.write(f"**Dep. {row['dept_code']}**: {row['surgery_ratio']:.1f} per 100K ({row['total_surgeries']} surgeries)")
         else:
             st.error("Could not load department GeoJSON for surgery ratio map.")
     else:
