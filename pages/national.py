@@ -198,7 +198,6 @@ with colf1:
     interval = st.radio("Interval", options=["6 months", "3 months"], index=0, horizontal=True)
 with colf2:
     proc_filter = st.multiselect("Procedure type", options=["Sleeve", "Gastric Bypass"], default=[])
-    rev_filter = st.selectbox("Primary/Revisional", options=["All", "Primary", "Revisional"], index=0)
 with colf3:
     label_opts = st.multiselect("Labels", options=["CSO", "SOFFCO", "None"], default=["CSO","SOFFCO","None"], help="Filter hospitals by labels")
     top10 = st.checkbox("Top 10 hospitals by procedures (2020–2024)", value=False)
@@ -268,11 +267,8 @@ if not comp_df.empty:
         import plotly.graph_objects as go
         fig_km_nat = go.Figure()
         fig_km_nat.add_trace(go.Scatter(x=x, y=[v*100 for v in y], mode='lines', name='National KM', line=dict(shape='hv', width=3, color='#e67e22')))
-        fig_km_nat.update_layout(height=320, yaxis_title='Complication‑free probability (%)', xaxis_title=label_name, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+        fig_km_nat.update_layout(title="National Complication Rate Over Time (KM)", height=320, yaxis_title='Complication‑free probability (%)', xaxis_title=label_name, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_km_nat, use_container_width=True)
-        # Notes for procedure/revision filters
-        if proc_filter or (rev_filter != 'All'):
-            st.info("Procedure type and primary/revisional filters require event counts by procedure, which are not available in national complications data. The KM curve reflects all procedures for the selected hospital cohort.")
     else:
         st.info('No data to compute national KM curve with current filters.')
 else:
