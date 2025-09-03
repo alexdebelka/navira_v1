@@ -980,37 +980,57 @@ with tab_geo:
     </div>
     """, unsafe_allow_html=True)
     
+    # Create a simplified working map (avoid complex layers that cause issues in tabs)
+    working_map = folium.Map(
+        location=center, 
+        zoom_start=12, 
+        tiles="OpenStreetMap"
+    )
+    
+    # Add hospital marker
+    folium.Marker(
+        location=center,
+        popup=f"<b>{selected_hospital_details.get('name', 'Selected Hospital')}</b><br>Coordinates: {center[0]:.4f}, {center[1]:.4f}",
+        icon=folium.Icon(color='red', icon='hospital-o', prefix='fa')
+    ).add_to(working_map)
+    
+    # Add competitor markers (simplified - no choropleth layers)
     try:
-        # Try with explicit container and different parameters
+        hosp_competitors = competitors[competitors['hospital_id'] == str(selected_hospital_id)]
+        if not hosp_competitors.empty:
+            comp_with_coords = hosp_competitors.merge(
+                establishments[['id','name','latitude','longitude']], 
+                left_on='competitor_id', right_on='id', how='left'
+            ).dropna(subset=['latitude','longitude'])
+            
+            for idx, row in comp_with_coords.head(5).iterrows():
+                folium.Marker(
+                    location=[float(row['latitude']), float(row['longitude'])],
+                    popup=f"<b>{row.get('name', 'Competitor')}</b><br>Patients: {int(row.get('competitor_patients', 0)):,}",
+                    icon=folium.Icon(color='blue', icon='hospital', prefix='fa')
+                ).add_to(working_map)
+    except Exception as e:
+        st.warning(f"Could not add competitor markers: {e}")
+    
+    # Render the simplified map
+    try:
         map_data = st_folium(
-            m, 
-            width=1200, 
-            height=600, 
-            key="geo_map_v2",
-            returned_objects=["last_object_clicked_tooltip", "last_object_clicked", "last_clicked"],
+            working_map,
+            width=None,  # Use container width
+            height=500,
+            key="geography_map_simple",
             use_container_width=True
         )
-        # Map rendered successfully
-            
+        
     except Exception as e:
-        st.error(f"❌ Error rendering map: {e}")
-        # Fallback: simple map without complex layers
-        st.warning("Trying simplified map...")
-        simple_map = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
-        try:
-            folium.CircleMarker(
-                location=center,
-                radius=12,
-                color='#d62728',
-                fill=True,
-                fill_color='#d62728',
-                popup="Selected Hospital"
-            ).add_to(simple_map)
-            st_folium(simple_map, width=1200, height=600, key="simple_geo_map_v2", use_container_width=True)
-        except Exception as e2:
-            st.error(f"❌ Fallback map also failed: {e2}")
-            # Ultimate fallback - show coordinates
-            st.info(f"Map rendering failed. Hospital location: {center[0]:.4f}, {center[1]:.4f}")
+        st.error(f"Map rendering failed: {str(e)}")
+        # Ultimate fallback
+        st.markdown(f"""
+        **Map Error - Showing Coordinates Instead:**
+        - **Hospital:** {selected_hospital_details.get('name', 'Unknown')}
+        - **Location:** {center[0]:.4f}, {center[1]:.4f}
+        - **Zoom in on:** [Google Maps](https://maps.google.com/?q={center[0]},{center[1]})
+        """)
 
     # Competitors list
     st.markdown("#### Nearby/Competitor Hospitals")

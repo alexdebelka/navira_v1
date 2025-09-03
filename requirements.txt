@@ -1,6 +1,6 @@
 streamlit
 pandas
-folium
+folium==0.14.0
 geopy
 streamlit-folium
 haversine>=2.8
