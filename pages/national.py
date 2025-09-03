@@ -189,6 +189,91 @@ try:
 except Exception as e:
     st.warning(f'Could not render national choropleth (commune): {e}')
 
+# --- National Complication Survival (Kaplan–Meier style) ---
+st.header("National Complication Survival (Kaplan–Meier)")
+
+# Filters
+colf1, colf2, colf3 = st.columns([1,1,2])
+with colf1:
+    interval = st.radio("Interval", options=["6 months", "3 months"], index=0, horizontal=True)
+with colf2:
+    proc_filter = st.multiselect("Procedure type", options=["Sleeve", "Gastric Bypass"], default=[])
+with colf3:
+    label_opts = st.multiselect("Labels", options=["CSO", "SOFFCO", "None"], default=["CSO","SOFFCO","None"], help="Filter hospitals by labels")
+    top10 = st.checkbox("Top 10 hospitals by procedures (2020–2024)", value=False)
+
+# Build hospital subset based on labels and top 10
+subset_ids = set()
+try:
+    est_df = st.session_state.get('establishments', None) or all_data.get('establishments')
+    ann_df = st.session_state.get('annual', None) or all_data.get('annual')
+    if est_df is None or ann_df is None:
+        est_df, ann_df = get_dataframes()
+    estN = est_df.copy()
+    estN['id'] = estN['id'].astype(str)
+    # Label filtering
+    mask_any = pd.Series([False]*len(estN))
+    parts = []
+    if 'CSO' in label_opts and 'cso' in estN.columns:
+        parts.append(estN['cso'] == 1)
+    if 'SOFFCO' in label_opts and 'LAB_SOFFCO' in estN.columns:
+        parts.append(estN['LAB_SOFFCO'] == 1)
+    if 'None' in label_opts:
+        cond_none = ((estN.get('cso', 0) != 1) & (estN.get('LAB_SOFFCO', 0) != 1))
+        parts.append(cond_none)
+    if parts:
+        mask_any = parts[0]
+        for p in parts[1:]:
+            mask_any = mask_any | p
+    est_filtered = estN[mask_any]
+    # Top 10 by total procedures across 2020–2024
+    if top10 and not ann_df.empty:
+        annN = ann_df.copy()
+        annN['id'] = annN['id'].astype(str)
+        vol = annN.groupby('id')['total_procedures_year'].sum().sort_values(ascending=False).head(10)
+        est_filtered = est_filtered[est_filtered['id'].isin(vol.index.astype(str))]
+    subset_ids = set(est_filtered['id'].astype(str)) if not est_filtered.empty else set()
+except Exception:
+    subset_ids = set()
+
+# Prepare complications cohort
+comp_df = all_data.get('complications', pd.DataFrame())
+if not comp_df.empty:
+    data = comp_df.copy()
+    data['hospital_id'] = data['hospital_id'].astype(str)
+    if subset_ids:
+        data = data[data['hospital_id'].isin(subset_ids)]
+    # Interval aggregation
+    data = data.dropna(subset=['quarter_date']).sort_values('quarter_date')
+    data['year'] = data['quarter_date'].dt.year
+    if interval.startswith('6'):
+        data['bucket'] = ((data['quarter_date'].dt.quarter - 1) // 2 + 1)
+        label_name = '6‑month interval'
+    else:
+        data['bucket'] = data['quarter_date'].dt.quarter
+        label_name = '3‑month interval (quarter)'
+    data['label'] = data['year'].astype(int).astype(str) + (data['bucket'].astype(int).astype(str).map(lambda x: ' H'+x if interval.startswith('6') else ' Q'+x))
+    agg = data.groupby(['year','bucket','label'], as_index=False).agg({'complications_count':'sum','procedures_count':'sum'}).sort_values(['year','bucket'])
+    # KM survival
+    if not agg.empty:
+        agg['hazard'] = agg.apply(lambda r: (r['complications_count']/r['procedures_count']) if r['procedures_count']>0 else 0.0, axis=1)
+        agg['survival'] = (1 - agg['hazard']).cumprod()
+        x = []; y = []; prev = 1.0
+        for _, r in agg.iterrows():
+            lbl = str(r['label'])
+            x.append(lbl); y.append(prev)
+            prev = float(r['survival'])
+            x.append(lbl); y.append(prev)
+        import plotly.graph_objects as go
+        fig_km_nat = go.Figure()
+        fig_km_nat.add_trace(go.Scatter(x=x, y=[v*100 for v in y], mode='lines', name='National KM', line=dict(shape='hv', width=3, color='#e67e22')))
+        fig_km_nat.update_layout(title="National Complication Rate Over Time (KM)", height=320, yaxis_title='Complication‑free probability (%)', xaxis_title=label_name, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_km_nat, use_container_width=True)
+    else:
+        st.info('No data to compute national KM curve with current filters.')
+else:
+    st.info('Complications dataset unavailable.')
+
 # Track page view
 try:
     from analytics_integration import track_page_view
@@ -1030,6 +1115,10 @@ approach_trends = compute_approach_trends(df)
 approach_mix_2024 = compute_2024_approach_mix(df)
 
 
+
+
+
+
 st.markdown(
     """
     <div class=\"nv-info-wrap\">
@@ -1479,47 +1568,7 @@ with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Ado
 # --- COMPLICATIONS ANALYSIS ---
 st.header("Complications Analysis")
 
-if not complications.empty:
-    st.markdown(
-        """
-        <div class=\"nv-info-wrap\">
-          <div class=\"nv-h3\">National Complications Overview</div>
-          <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
-            <div class=\"nv-tooltiptext\">
-              <b>Understanding this analysis:</b><br/>
-              This section analyzes complication rates across all hospitals from 2020-2024. It shows trends in patient safety outcomes and compares hospital performance against national benchmarks.<br/><br/>
-              <b>Key Metrics:</b><br/>
-              • Rolling Rate: 12-month moving average of complication rates<br/>
-              • National Average: Benchmark rate across all eligible hospitals<br/>
-              • Confidence Intervals: Statistical range of expected performance
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    
-    # Calculate overall statistics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        total_procedures = complications['procedures_count'].sum()
-        st.metric("Total Procedures Analyzed", f"{int(total_procedures):,}")
-    
-    with col2:
-        total_complications = complications['complications_count'].sum()
-        st.metric("Total Complications", f"{int(total_complications):,}")
-    
-    with col3:
-        if total_procedures > 0:
-            overall_rate = (total_complications / total_procedures) * 100
-            st.metric("Overall Complication Rate", f"{overall_rate:.2f}%")
-    
-    
-    # Temporal trend of national complication rates
-    st.markdown("#### National Complication Rate Trends")
-
-    # --- National Complication Survival (Kaplan–Meier style) ---
+# --- National Complication Survival (Kaplan–Meier style) ---
 st.header("National Complication Survival (Kaplan–Meier)")
 
 # Filters
@@ -1604,6 +1653,46 @@ if not comp_df.empty:
 else:
     st.info('Complications dataset unavailable.')
 
+
+if not complications.empty:
+    st.markdown(
+        """
+        <div class=\"nv-info-wrap\">
+          <div class=\"nv-h3\">National Complications Overview</div>
+          <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+            <div class=\"nv-tooltiptext\">
+              <b>Understanding this analysis:</b><br/>
+              This section analyzes complication rates across all hospitals from 2020-2024. It shows trends in patient safety outcomes and compares hospital performance against national benchmarks.<br/><br/>
+              <b>Key Metrics:</b><br/>
+              • Rolling Rate: 12-month moving average of complication rates<br/>
+              • National Average: Benchmark rate across all eligible hospitals<br/>
+              • Confidence Intervals: Statistical range of expected performance
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    # Calculate overall statistics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        total_procedures = complications['procedures_count'].sum()
+        st.metric("Total Procedures Analyzed", f"{int(total_procedures):,}")
+    
+    with col2:
+        total_complications = complications['complications_count'].sum()
+        st.metric("Total Complications", f"{int(total_complications):,}")
+    
+    with col3:
+        if total_procedures > 0:
+            overall_rate = (total_complications / total_procedures) * 100
+            st.metric("Overall Complication Rate", f"{overall_rate:.2f}%")
+    
+    
+    # Temporal trend of national complication rates
+    st.markdown("#### National Complication Rate Trends")
     
     # Calculate quarterly national averages
     quarterly_stats = complications.groupby('quarter_date').agg({
