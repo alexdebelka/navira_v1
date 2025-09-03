@@ -89,7 +89,7 @@ def create_km_chart(
     )
     
     # Set y-axis range to 0-100%
-    fig.update_yaxis(range=[0, 100])
+    fig.update_layout(yaxis=dict(range=[0, 100]))
     
     return fig
 
@@ -185,6 +185,6 @@ def create_multi_km_chart(
     )
     
     # Set y-axis range
-    fig.update_yaxis(range=[0, 100])
+    fig.update_layout(yaxis=dict(range=[0, 100]))
     
     return fig
