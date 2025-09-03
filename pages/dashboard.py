@@ -796,241 +796,101 @@ with tab_complications:
 with tab_geo:
     st.subheader("Recruitment Zone and Competitors (Top-5 Choropleths)")
     
-    allocation = "even_split"
-    # Map
-    try:
-        center = [float(selected_hospital_details.get('latitude')), float(selected_hospital_details.get('longitude'))]
-        if any(pd.isna(center)):
-            raise ValueError
-    except Exception:
-        center = [48.8566, 2.3522]
-    
-    m = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
-    # Ensure choropleths stay below markers even when toggled
-    try:
-        folium.map.Pane('choropleth', z_index=400).add_to(m)
-        folium.map.Pane('markers', z_index=650).add_to(m)
-    except Exception:
-        pass
-
-    # Add recruitment layer
-    # Build competitor layers
-    try:
-        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-    except Exception:
-        data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
-    rec_path = os.path.join(data_dir, "11_recruitement_zone.csv")
-    comp_path = os.path.join(data_dir, "13_main_competitors.csv")
-    communes_csv = os.path.join(data_dir, "COMMUNES_FRANCE_INSEE.csv")
-
-    # Competitors
-    top5 = get_top_competitors(comp_path, str(selected_hospital_id))
-    if not top5:
-        st.info("No competitors found for this hospital.")
-    # Postal → INSEE map
-    cp_map = build_cp_to_insee(communes_csv)
-    # Competitor name mapping from establishments
-    comp_name_map = {}
-    try:
-        if not establishments.empty and {'id','name'}.issubset(establishments.columns):
-            em = establishments[['id','name']].drop_duplicates().copy()
-            em['id'] = em['id'].astype(str)
-            comp_name_map = dict(zip(em['id'], em['name']))
-    except Exception:
-        comp_name_map = {}
-    # GeoJSON
-    # Try to filter GeoJSON to only needed INSEE codes to reduce payload
-    needed_insee = []
-    try:
-        prelim = []
-        for comp_id in top5:
-            df_layer, _ = competitor_choropleth_df(rec_path, comp_id, cp_map, allocation=allocation)
-            prelim.append(df_layer)
-        if prelim:
-            import pandas as _pd
-            needed_insee = _pd.concat(prelim)["insee5"].dropna().astype(str).unique().tolist()
-    except Exception:
-        needed_insee = []
-    try:
-        from navira.geojson_loader import load_communes_geojson_filtered
-        gj = load_communes_geojson_filtered(needed_insee or [])
-    except Exception:
-        gj = load_communes_geojson(None)
-    insee_key = detect_insee_key(gj) if gj else None
-
-    diagnostics_rows = []
-    if gj and insee_key:
-        from folium.features import GeoJson, GeoJsonTooltip
-        glb_min = None
-        glb_max = None
-        for idx, comp_id in enumerate(top5):
-            df_layer, diag = competitor_choropleth_df(rec_path, comp_id, cp_map, allocation=allocation)  # type: ignore[arg-type]
-            diagnostics_rows.append((comp_id, diag))
-            if df_layer.empty:
-                continue
-            try:
-                vmin = float(df_layer["value"].min())
-                vmax = float(df_layer["value"].max())
-                glb_min = vmin if glb_min is None else min(glb_min, vmin)
-                glb_max = vmax if glb_max is None else max(glb_max, vmax)
-            except Exception:
-                pass
-            try:
-                label_name = comp_name_map.get(str(comp_id), str(comp_id))
-                if isinstance(label_name, str) and len(label_name) > 28:
-                    label_name = label_name[:27] + '…'
-                # Build value lookup for styling
-                val_map = dict(zip(df_layer['insee5'].astype(str), df_layer['value'].astype(float)))
-                # Create FeatureGroup per competitor
-                grp = folium.FeatureGroup(name=f"C{idx+1} {label_name}", show=True if idx == 0 else False)
-                # Define style function using global colormap set below
-                def _style_fn(feat):
-                    code = str(feat.get('properties', {}).get(insee_key, '')).zfill(5)
-                    v = val_map.get(code)
-                    if v is None:
-                        return {"fillOpacity": 0.0, "weight": 0.0, "color": "#00000000"}
-                    color = colormap(v) if 'colormap' in globals() else '#e34a33'
-                    return {"fillColor": color, "color": "#444444", "weight": 0.4, "fillOpacity": 0.5}
-                folium.GeoJson(gj, name=f"geojson_{idx}", style_function=_style_fn, pane='choropleth').add_to(grp)
-                grp.add_to(m)
-            except Exception:
-                continue
-        try:
-            folium.LayerControl(collapsed=True).add_to(m)
-        except Exception:
-            pass
-        # Add single shared legend
-        try:
-            if glb_min is not None and glb_max is not None and glb_max > glb_min:
-                colormap = cm.linear.YlOrRd_09.scale(glb_min, glb_max)
-                colormap.caption = "Patients recruited"
-                colormap.add_to(m)
-        except Exception:
-            pass
-    else:
-        st.warning("Commune polygons unavailable. Configure COMMUNES_GEOJSON_PATH or secrets.")
-    # Hospital marker on top
-    try:
-        folium.CircleMarker(
-            location=[selected_hospital_details['latitude'], selected_hospital_details['longitude']],
-            radius=16,
-            color='#d62728',
-            fill=True,
-            fill_color='#d62728',
-            fill_opacity=0.95,
-            popup=f"<b>{selected_hospital_details['name']}</b><br><i>Selected hospital</i>",
-            pane='markers'
-        ).add_to(m)
-    except Exception:
-        pass
-
-    # Hospital marker (added AFTER layers to ensure it stays on top)
-    try:
-        folium.CircleMarker(
-            location=[selected_hospital_details['latitude'], selected_hospital_details['longitude']],
-            radius=16,
-            color='#d62728',
-            fill=True,
-            fill_color='#d62728',
-            fill_opacity=0.95,
-            popup=f"<b>{selected_hospital_details['name']}</b><br><i>Selected hospital</i>"
-        ).add_to(m)
-    except Exception:
-        pass
-
-    # Add top-5 competitors as ranked markers
-    try:
-        hosp_competitors = competitors[competitors['hospital_id'] == str(selected_hospital_id)]
-        if not hosp_competitors.empty:
-            comp_named = hosp_competitors.merge(
-                establishments[['id','name','ville','statut','latitude','longitude']].copy(),
-                left_on='competitor_id', right_on='id', how='left'
-            )
-            comp_named = comp_named.dropna(subset=['latitude','longitude'])
-            comp_named = comp_named.sort_values('competitor_patients', ascending=False).head(5).reset_index(drop=True)
-            # Size by rank (smaller to reduce clutter)
-            size_by_rank = {0:12, 1:10, 2:8, 3:7, 4:6}
-            color = '#1f77b4'
-            for idx, r in comp_named.iterrows():
-                radius = size_by_rank.get(idx, 8)
-                name = r.get('name', 'Competitor')
-                pts = int(r.get('competitor_patients', 0) or 0)
-                popup = f"<b>{name}</b><br>Rank: {idx+1}<br>Patients: {pts:,}"
-                folium.CircleMarker(
-                    location=[float(r['latitude']), float(r['longitude'])],
-                    radius=radius,
-                    color=color,
-                    fill=True,
-                    fill_color=color,
-                    fill_opacity=0.75,
-                    popup=popup,
-                    pane='markers'
-                ).add_to(m)
-    except Exception:
-        pass
-
-    # Ensure the interactive map is prominently visible
-    st.markdown("---")  # Add separator
-    st.markdown("### 🗺️ Interactive Map")
-    
-    # Add some spacing and container styling
-    st.markdown("""
-    <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin: 10px 0;">
-        <p><strong>Map Controls:</strong> Use mouse to pan and zoom. Toggle layers using the control in the top-right corner.</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Create a simplified working map (avoid complex layers that cause issues in tabs)
-    working_map = folium.Map(
-        location=center, 
-        zoom_start=12, 
-        tiles="OpenStreetMap"
-    )
-    
-    # Add hospital marker
-    folium.Marker(
-        location=center,
-        popup=f"<b>{selected_hospital_details.get('name', 'Selected Hospital')}</b><br>Coordinates: {center[0]:.4f}, {center[1]:.4f}",
-        icon=folium.Icon(color='red', icon='hospital-o', prefix='fa')
-    ).add_to(working_map)
-    
-    # Add competitor markers (simplified - no choropleth layers)
-    try:
-        hosp_competitors = competitors[competitors['hospital_id'] == str(selected_hospital_id)]
-        if not hosp_competitors.empty:
-            comp_with_coords = hosp_competitors.merge(
-                establishments[['id','name','latitude','longitude']], 
-                left_on='competitor_id', right_on='id', how='left'
-            ).dropna(subset=['latitude','longitude'])
-            
-            for idx, row in comp_with_coords.head(5).iterrows():
-                folium.Marker(
-                    location=[float(row['latitude']), float(row['longitude'])],
-                    popup=f"<b>{row.get('name', 'Competitor')}</b><br>Patients: {int(row.get('competitor_patients', 0)):,}",
-                    icon=folium.Icon(color='blue', icon='hospital', prefix='fa')
-                ).add_to(working_map)
-    except Exception as e:
-        st.warning(f"Could not add competitor markers: {e}")
-    
-    # Render the simplified map
-    try:
-        map_data = st_folium(
-            working_map,
-            width=None,  # Use container width
-            height=500,
-            key="geography_map_simple",
-            use_container_width=True
+    # UI Controls
+    col1, col2 = st.columns(2)
+    with col1:
+        allocation = st.radio(
+            "Allocation Strategy", 
+            options=["even_split", "no_split"],
+            index=0,
+            help="even_split: divide patients among INSEE codes per postal code | no_split: assign full count to all (for validation)"
         )
+    with col2:
+        max_competitors = st.slider("Max Competitors", 1, 5, 5, help="Number of competitor layers to show")
+    
+    # Import the new functionality
+    try:
+        from navira.map_renderer import create_recruitment_map, render_map_diagnostics
+        from navira.competitors import get_competitor_names
+        from navira.geo import get_geojson_summary, load_communes_geojson
         
-    except Exception as e:
-        st.error(f"Map rendering failed: {str(e)}")
-        # Ultimate fallback
-        st.markdown(f"""
-        **Map Error - Showing Coordinates Instead:**
-        - **Hospital:** {selected_hospital_details.get('name', 'Unknown')}
-        - **Location:** {center[0]:.4f}, {center[1]:.4f}
-        - **Zoom in on:** [Google Maps](https://maps.google.com/?q={center[0]},{center[1]})
-        """)
+        # Show GeoJSON status
+        geojson_data = load_communes_geojson()
+        st.info(get_geojson_summary(geojson_data))
+        
+        # Prepare hospital info
+        hospital_info = {
+            'name': selected_hospital_details.get('name', 'Unknown Hospital'),
+            'latitude': selected_hospital_details.get('latitude'),
+            'longitude': selected_hospital_details.get('longitude')
+        }
+        
+        # Create the recruitment map
+        with st.spinner("🗺️ Generating recruitment zone choropleths..."):
+            recruitment_map, diagnostics = create_recruitment_map(
+                hospital_finess=str(selected_hospital_id),
+                hospital_info=hospital_info,
+                establishments_df=establishments,
+                allocation=allocation,
+                max_competitors=max_competitors
+            )
+        
+        # Render the map
+        st.markdown("### 🗺️ Interactive Recruitment Zone Map")
+        st.markdown("""
+        <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin: 10px 0;">
+            <p><strong>Map Controls:</strong> Toggle choropleth layers using the control in the top-right corner. 
+            Hover over communes to see patient counts. Red marker = selected hospital, blue markers = competitors.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        try:
+            map_data = st_folium(
+                recruitment_map,
+                width=None,
+                height=600,
+                key="recruitment_choropleth_map",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"Error rendering choropleth map: {e}")
+            st.info("Falling back to coordinate display...")
+            st.markdown(f"""
+            **Hospital Location:**
+            - **Name:** {hospital_info['name']}
+            - **Coordinates:** {hospital_info.get('latitude', 'N/A')}, {hospital_info.get('longitude', 'N/A')}
+            """)
+        
+        # Show diagnostics
+        if diagnostics:
+            from navira.competitors import get_top_competitors
+            competitors_list = get_top_competitors(str(selected_hospital_id), max_competitors)
+            competitor_names = get_competitor_names(competitors_list, establishments)
+            render_map_diagnostics(diagnostics, competitor_names)
+            
+    except ImportError as e:
+        st.error(f"Import error: {e}")
+        st.info("Using fallback simple map...")
+        
+        # Fallback to simple map if new modules not available
+        try:
+            center = [float(selected_hospital_details.get('latitude')), float(selected_hospital_details.get('longitude'))]
+            if any(pd.isna(center)):
+                raise ValueError
+        except Exception:
+            center = [48.8566, 2.3522]
+        
+        simple_map = folium.Map(location=center, zoom_start=10, tiles="OpenStreetMap")
+        folium.Marker(
+            location=center,
+            popup=f"<b>{selected_hospital_details.get('name', 'Selected Hospital')}</b>",
+            icon=folium.Icon(color='red', icon='hospital-o', prefix='fa')
+        ).add_to(simple_map)
+        
+        try:
+            st_folium(simple_map, width=None, height=500, key="fallback_simple_map", use_container_width=True)
+        except Exception as e:
+            st.error(f"Fallback map also failed: {e}")
 
     # Competitors list
     st.markdown("#### Nearby/Competitor Hospitals")
