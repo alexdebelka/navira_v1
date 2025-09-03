@@ -10,9 +10,9 @@ import requests
 import folium
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
-import folium
-from folium.plugins import HeatMap
-from streamlit_folium import st_folium
+import branca.colormap as cm
+from navira.competitor_layers import build_cp_to_insee
+from navira.geojson_loader import load_communes_geojson_filtered, load_communes_geojson, detect_insee_key
 
 # Add the parent directory to the Python path to import lib
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
