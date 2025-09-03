@@ -153,49 +153,51 @@ with st.expander("🗺️ National Recruitment Heatmap (All Hospitals)", expande
         st.warning(f"Could not render national recruitment heatmap: {str(e)}")
 
 # Choropleth alternative
-st.markdown("### National Recruitment Choropleth – Commune")
+st.markdown("### National Recruitment Choropleth – Department")
 try:
     if not recruitment.empty:
         rec = recruitment.copy()
         rec['city_code'] = rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
-        cp_tot = rec.groupby('city_code', as_index=False)['patient_count'].sum()
-        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
-        cp_map = build_cp_to_insee(os.path.join(data_dir, 'COMMUNES_FRANCE_INSEE.csv'))
-        cp_tot['insee_list'] = cp_tot['city_code'].map(lambda c: cp_map.get(c, []))
-        exploded = cp_tot.explode('insee_list').dropna(subset=['insee_list']).copy()
-        exploded['insee'] = exploded['insee_list'].astype(str).str.zfill(5)
-        agg = exploded.groupby('insee', as_index=False)['patient_count'].sum()
-        # Use full communes GeoJSON so the entire map is colored
-        gj = load_communes_geojson(None)
-        key = detect_insee_key(gj) if gj else None
-        if gj and key and not agg.empty:
+        # Derive department code from postal code (handles Corsica + overseas)
+        def _dept_from_postal(cp: str) -> str:
+            cp = str(cp)
+            if cp.startswith('97') or cp.startswith('98'):
+                return cp[:3]
+            if cp.startswith('201'):
+                return '2A'
+            if cp.startswith('202'):
+                return '2B'
+            return cp[:2]
+        rec['dept_code'] = rec['city_code'].map(_dept_from_postal)
+        dep = rec.groupby('dept_code', as_index=False)['patient_count'].sum()
+        gj = _get_fr_departments_geojson()
+        if gj is not None and not dep.empty:
             m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
-            vmin = float(agg['patient_count'].min()); vmax = float(agg['patient_count'].max())
+            vmin = float(dep['patient_count'].min()); vmax = float(dep['patient_count'].max())
             colormap = cm.linear.YlOrRd_09.scale(vmin, vmax)
             colormap.caption = 'Patients recruited'
             colormap.add_to(m)
-            val_map = dict(zip(agg['insee'].astype(str), agg['patient_count'].astype(float)))
+            val_map = dict(zip(dep['dept_code'].astype(str), dep['patient_count'].astype(float)))
             def _style_fn(feat):
-                code = str(feat.get('properties', {}).get(key, '')).zfill(5)
+                code = str(feat.get('properties', {}).get('code', ''))
                 v = val_map.get(code, 0.0)
-                # Lightly shade communes with zero to show full coverage
-                opacity = 0.20 if v == 0 else 0.6
-                return {"fillColor": colormap(v), "color": "#555555", "weight": 0.2, "fillOpacity": opacity}
+                opacity = 0.25 if v == 0 else 0.65
+                return {"fillColor": colormap(v), "color": "#555555", "weight": 0.5, "fillOpacity": opacity}
             folium.GeoJson(gj, style_function=_style_fn).add_to(m)
             try:
                 m.fit_bounds([[41.0, -5.3], [51.5, 9.6]])
             except Exception:
                 pass
-            st_folium(m, width="100%", height=540, key="national_recruitment_choropleth_commune_v2")
+            st_folium(m, width="100%", height=540, key="national_recruitment_choropleth_department_v2")
         else:
             st.info('Commune polygons unavailable or no data.')
     else:
         st.info('Recruitment data not available.')
 except Exception as e:
-    st.warning(f'Could not render national choropleth (commune): {e}')
+    st.warning(f'Could not render national choropleth (department): {e}')
 
-# --- National Complication Survival (Kaplan–Meier style) ---
-st.header("National Complication Survival (Kaplan–Meier)")
+# --- National Complication Rate Over Time (Kaplan–Meier style) ---
+st.header("National Complication Rate Over Time (Kaplan–Meier)")
 
 # Filters
 colf1, colf2, colf3 = st.columns([1,1,2])
