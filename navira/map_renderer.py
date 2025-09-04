@@ -95,6 +95,10 @@ def create_recruitment_map(
     focal_df, _ = competitor_choropleth_df(hospital_finess, cp_to_insee, allocation)
     if not focal_df.empty:
         needed_insee_codes.extend(focal_df['insee5'].tolist())
+        # Debug: show Paris data if present
+        paris_data = focal_df[focal_df['insee5'].str.startswith('751')]
+        if not paris_data.empty:
+            st.info(f"🔍 Selected hospital has {len(paris_data)} Paris arrondissement records: {paris_data['insee5'].tolist()}")
     for competitor in competitors[:max_competitors]:
         df, _ = competitor_choropleth_df(competitor, cp_to_insee, allocation)
         if not df.empty:
@@ -266,6 +270,8 @@ def _add_choropleth_layer(
                         total += float(vm.pop(k))
                 if total > 0:
                     vm['75056'] = vm.get('75056', 0.0) + total
+                    # Debug logging
+                    st.info(f"🔍 Paris aggregation: {total:.1f} patients from arrondissements → 75056")
             # Marseille: arr 13201..13216 -> 13055
             if ('13055' in feature_codes) and not any(code.startswith('132') for code in feature_codes):
                 total = 0.0
