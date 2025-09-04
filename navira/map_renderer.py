@@ -387,7 +387,6 @@ def _add_choropleth_layer(
         # Add GeoJSON layer
         folium.GeoJson(
             geojson_data,
-            pane="choropleths",
             style_function=style_function,
             tooltip=folium.GeoJsonTooltip(
                 fields=[],
@@ -420,8 +419,7 @@ def _add_hospital_marker(
                 location=location,
                 popup=f"<b>{name}</b><br/>FINESS: {hospital_finess}",
                 tooltip=f"Selected Hospital: {name}",
-                icon=folium.Icon(color='red', icon='hospital-o', prefix='fa'),
-                pane="markers"
+                icon=folium.Icon(color='red', icon='hospital-o', prefix='fa')
             ).add_to(m)
             
     except (ValueError, TypeError) as e:
@@ -476,8 +474,7 @@ def _add_competitor_markers(
                         color=color,  # Use the same color but darker for border
                         weight=3,     # Slightly thicker border
                         fillColor=color,
-                        fillOpacity=0.6,  # Lighter center fill
-                        pane="markers"
+                        fillOpacity=0.6  # Lighter center fill
                     ).add_to(m)
                     
                 except (ValueError, TypeError):
