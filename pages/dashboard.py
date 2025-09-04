@@ -849,27 +849,12 @@ with tab_geo:
     
     # Import the new functionality
     try:
-        from navira.map_renderer import create_recruitment_map, render_map_diagnostics
-        from navira.competitors import get_competitor_names
-        from navira.geo import get_geojson_summary, load_communes_geojson
+        from navira.map_renderer import create_recruitment_map
         
-        # Show GeoJSON status and add cache controls
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            from navira.geo import load_communes_geojson_simple
-            geojson_data = load_communes_geojson_simple()
-            if geojson_data:
-                feature_count = len(geojson_data.get('features', []))
-                st.info(f"✅ {feature_count:,} communes loaded | INSEE key: code")
-            else:
-                st.error("❌ Failed to load communes GeoJSON")
-        
-        with col2:
-            if st.button("🔄 Reset Map Cache", help="Clear cached GeoJSON and map data"):
-                st.cache_data.clear()
-                st.success("Cache cleared!")
-                st.rerun()
+        # Optional: Reset map cache button (no status banner)
+        if st.button("🔄 Reset Map Cache", help="Clear cached GeoJSON and map data"):
+            st.cache_data.clear()
+            st.rerun()
         
         # Prepare hospital info
         hospital_info = {
@@ -909,12 +894,7 @@ with tab_geo:
             - **Coordinates:** {hospital_info.get('latitude', 'N/A')}, {hospital_info.get('longitude', 'N/A')}
             """)
         
-        # Show diagnostics
-        if diagnostics:
-            from navira.competitors import get_top_competitors
-            competitors_list = get_top_competitors(str(selected_hospital_id), max_competitors)
-            competitor_names = get_competitor_names(competitors_list, establishments)
-            render_map_diagnostics(diagnostics, competitor_names)
+        # Diagnostics panel removed per request
             
     except ImportError as e:
         st.error(f"Import error: {e}")

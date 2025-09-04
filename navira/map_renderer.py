@@ -260,8 +260,8 @@ def create_recruitment_map(
     markers_fg_selected.add_to(m)
     markers_fg_comp.add_to(m)
     
-    # Add layer control
-    folium.LayerControl(collapsed=False, position='topright').add_to(m)
+    # Add layer control (collapsed and moved to bottom-right to avoid obstructing the map)
+    folium.LayerControl(collapsed=True, position='bottomright').add_to(m)
     
     return m, diagnostics_list
 
