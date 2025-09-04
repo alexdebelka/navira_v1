@@ -9,6 +9,7 @@ This module provides functionality for:
 """
 
 import folium
+import os
 from folium import plugins
 import pandas as pd
 import streamlit as st
@@ -90,6 +91,10 @@ def create_recruitment_map(
     
     # Get needed INSEE codes to filter GeoJSON for performance
     needed_insee_codes = []
+    # Include selected hospital first so we can build its own layer distinctly
+    focal_df, _ = competitor_choropleth_df(hospital_finess, cp_to_insee, allocation)
+    if not focal_df.empty:
+        needed_insee_codes.extend(focal_df['insee5'].tolist())
     for competitor in competitors[:max_competitors]:
         df, _ = competitor_choropleth_df(competitor, cp_to_insee, allocation)
         if not df.empty:
@@ -170,11 +175,26 @@ def create_recruitment_map(
         global_min_value = 0
         global_max_value = 1
     
-    # Create shared colormap
-    colormap = cm.linear.YlOrRd_06.scale(global_min_value, global_max_value)
-    colormap.caption = 'Patients recruited'
+    # Create colormaps: blue scale for selected hospital, orange-red for competitors
+    comp_colormap = cm.linear.YlOrRd_06.scale(global_min_value, global_max_value)
+    comp_colormap.caption = 'Patients recruited (competitors)'
+    focal_colormap = cm.linear.Blues_06.scale(global_min_value, global_max_value)
+    focal_colormap.caption = 'Patients recruited (selected)'
     
-    # Add choropleth layers
+    # Add focal hospital choropleth layer first (distinct color)
+    if not focal_df.empty:
+        _add_choropleth_layer(
+            m,
+            geojson_data,
+            focal_df,
+            insee_key,
+            layer_name=f"Selected hospital",
+            colormap=focal_colormap,
+            show=True,
+            communes_df=communes_df
+        )
+
+    # Add competitor choropleth layers
     for i, competitor_finess in enumerate(competitors):
         if competitor_finess in choropleth_data:
             competitor_name = competitor_names.get(competitor_finess, f"Competitor {i+1}")
@@ -185,17 +205,24 @@ def create_recruitment_map(
                 choropleth_data[competitor_finess], 
                 insee_key,
                 competitor_name,
-                colormap,
-                show=(i == 0),  # Show first layer by default
+                comp_colormap,
+                show=False,
                 communes_df=communes_df
             )
     
-    # Add colormap legend to map
-    colormap.add_to(m)
+    # Add colormap legends to map
+    focal_colormap.add_to(m)
+    comp_colormap.add_to(m)
     
-    # Add markers
-    _add_hospital_marker(m, hospital_finess, hospital_info)
-    _add_competitor_markers(m, competitors, establishments_df)
+    # Add markers in separate toggleable layers
+    markers_fg_selected = folium.FeatureGroup(name='Selected hospital marker', show=True)
+    markers_fg_comp = folium.FeatureGroup(name='Competitor markers', show=True)
+
+    _add_hospital_marker(markers_fg_selected, hospital_finess, hospital_info)
+    _add_competitor_markers(markers_fg_comp, competitors, establishments_df)
+
+    markers_fg_selected.add_to(m)
+    markers_fg_comp.add_to(m)
     
     # Add layer control
     folium.LayerControl(collapsed=False, position='topright').add_to(m)

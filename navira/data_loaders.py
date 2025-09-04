@@ -168,11 +168,45 @@ def build_postal_to_insee_mapping(communes_df: pd.DataFrame) -> Dict[str, List[s
     
     # Group by postal code and collect all INSEE codes
     grouped = communes_df.groupby('codePostal')['codeInsee'].apply(list).to_dict()
-    
+
     # Ensure all values are lists and remove duplicates
     for postal, insee_list in grouped.items():
         mapping[postal] = list(set(insee_list))
-    
+
+    # Special-case overrides for cities with arrondissements where GeoJSON uses arrondissement INSEE codes
+    # Paris: postal 75001..75020 -> INSEE 75101..75120
+    for i in range(1, 21):
+        postal = f"750{str(i).zfill(2)}"
+        arrondissement_insee = f"751{str(i).zfill(2)}"
+        if postal in mapping:
+            existing = set(mapping.get(postal, []))
+            existing.add(arrondissement_insee)
+            mapping[postal] = list(existing)
+        else:
+            mapping[postal] = [arrondissement_insee]
+
+    # Marseille: postal 13001..13016 -> INSEE 13201..13216
+    for i in range(1, 17):
+        postal = f"130{str(i).zfill(2)}"
+        arrondissement_insee = f"132{str(i).zfill(2)}"
+        if postal in mapping:
+            existing = set(mapping.get(postal, []))
+            existing.add(arrondissement_insee)
+            mapping[postal] = list(existing)
+        else:
+            mapping[postal] = [arrondissement_insee]
+
+    # Lyon: postal 69001..69009 -> INSEE 69381..69389
+    for i in range(1, 10):
+        postal = f"690{str(i).zfill(2)}"
+        arrondissement_insee = f"6938{i}"
+        if postal in mapping:
+            existing = set(mapping.get(postal, []))
+            existing.add(arrondissement_insee)
+            mapping[postal] = list(existing)
+        else:
+            mapping[postal] = [arrondissement_insee]
+
     return mapping
 
 
