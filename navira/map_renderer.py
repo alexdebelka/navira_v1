@@ -128,18 +128,36 @@ def create_recruitment_map(
     has_paris_arrondissements = any(code.startswith('751') for code in needed_insee_codes)
     
     if has_paris_arrondissements:
-        # Load Paris arrondissement GeoJSON for detailed view
+        # Build a combined GeoJSON: nationwide communes + Paris arrondissements
         try:
             import json
+            # Base: all needed communes
+            base_geo = load_communes_geojson_filtered(needed_insee_codes) if needed_insee_codes else load_communes_geojson_simple()
+            base_features = list(base_geo.get('features', [])) if base_geo else []
+            # Remove single-Paris polygon if present
+            filtered_base = []
+            for feat in base_features:
+                props = feat.get('properties', {})
+                if str(props.get('code', '')).zfill(5) == '75056':
+                    continue
+                filtered_base.append(feat)
+            # Load official arrondissement shapes and normalize property key to 'code'
             with open('data/paris_arrondissements_official.geojson', 'r', encoding='utf-8') as f:
-                geojson_data = json.load(f)
-            # Loaded detailed arrondissement GeoJSON
-        except FileNotFoundError:
-            st.warning("⚠️ Official Paris arrondissement GeoJSON not found, falling back to communes")
-            if needed_insee_codes:
-                geojson_data = load_communes_geojson_filtered(needed_insee_codes)
-            else:
-                geojson_data = load_communes_geojson_simple()
+                arr_geo = json.load(f)
+            arr_features = []
+            for feat in arr_geo.get('features', []):
+                props = feat.get('properties', {})
+                insee = str(props.get('c_arinsee', '')).zfill(5)
+                if not insee:
+                    continue
+                # Duplicate under 'code' so downstream uses a single key
+                props['code'] = insee
+                feat['properties'] = props
+                arr_features.append(feat)
+            geojson_data = {"type": "FeatureCollection", "features": filtered_base + arr_features}
+        except Exception:
+            # Fallback to communes only
+            geojson_data = load_communes_geojson_filtered(needed_insee_codes) if needed_insee_codes else load_communes_geojson_simple()
     else:
         # Use regular communes GeoJSON
         if needed_insee_codes:
@@ -167,11 +185,8 @@ def create_recruitment_map(
         _add_hospital_marker(m, hospital_finess, hospital_info)
         return m, diagnostics_list
     
-    # Detect INSEE key. For official arrondissement GeoJSON, use 'c_arinsee'
-    if has_paris_arrondissements:
-        insee_key = 'c_arinsee'
-    else:
-        insee_key = detect_insee_key(geojson_data)
+    # Detect INSEE key. We standardize on 'code' even when arrondissements are merged
+    insee_key = detect_insee_key(geojson_data)
     if not insee_key:
         # Fallback to 'code' which is used by our communes GeoJSON
         insee_key = 'code'
