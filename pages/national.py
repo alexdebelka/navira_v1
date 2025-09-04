@@ -1193,12 +1193,20 @@ if approach_mix_2024:
         
         with col1:
             st.markdown("#### National: Surgical Approach Distribution")
+            # Define a consistent color mapping used across pie and bars
+            APPROACH_COLORS = {
+                'Coelioscopy': '#2E86AB',
+                'Robotic': '#F7931E',
+                'Open Surgery': '#A23B72'
+            }
+
             fig = px.pie(
                 pie_df,
                 values='Count',
                 names='Approach',
                 title="National Approach Distribution (2024)",
-                color_discrete_sequence=['#2E86AB', '#F7931E', '#A23B72', '#F18F01']
+                color='Approach',
+                color_discrete_map=APPROACH_COLORS
             )
             
             fig.update_layout(

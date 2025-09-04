@@ -653,7 +653,10 @@ with tab_activity:
                         appr_long.append({'annee':int(r['annee']),'Approach':name,'Share':r[code]/total*100})
             al = pd.DataFrame(appr_long)
             if not al.empty:
-                st.plotly_chart(px.bar(al, x='annee', y='Share', color='Approach', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+                APPROACH_COLORS = {'Coelioscopy': '#2E86AB', 'Robotic': '#F7931E', 'Open Surgery': '#A23B72'}
+                fig_bar_h = px.bar(al, x='annee', y='Share', color='Approach', barmode='stack', color_discrete_map=APPROACH_COLORS)
+                fig_bar_h.update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_bar_h, use_container_width=True)
         
         with col2:
             st.markdown("#### National: Surgical Approaches (share %)")
@@ -675,7 +678,10 @@ with tab_activity:
             
             if nat_appr_data:
                 nat_appr_df = pd.DataFrame(nat_appr_data)
-                st.plotly_chart(px.bar(nat_appr_df, x='Year', y='Share', color='Approach', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+                APPROACH_COLORS = {'Coelioscopy': '#2E86AB', 'Robotic': '#F7931E', 'Open Surgery': '#A23B72'}
+                fig_bar_n = px.bar(nat_appr_df, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=APPROACH_COLORS)
+                fig_bar_n.update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_bar_n, use_container_width=True)
     
 
 
