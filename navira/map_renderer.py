@@ -244,7 +244,51 @@ def _add_choropleth_layer(
     try:
         # Create value mapping for styling
         value_map = dict(zip(choropleth_df['insee5'].astype(str), choropleth_df['value']))
-        
+
+        # Detect which INSEE codes are present in the GeoJSON
+        feature_codes = set()
+        for f in geojson_data.get('features', []):
+            props = f.get('properties', {})
+            if insee_key in props:
+                c = str(props[insee_key]).strip().upper()
+                feature_codes.add(c if c.startswith(('2A','2B')) else c.zfill(5))
+
+        # If the GeoJSON does NOT contain arrondissement polygons for major cities,
+        # aggregate arrondissement values into the single commune code present.
+        def _collapse_arr_to_city(value_map_in: Dict[str, float]) -> Dict[str, float]:
+            vm = value_map_in.copy()
+            # Paris: arr 75101..75120 -> 75056
+            if ('75056' in feature_codes) and not any(code.startswith('751') for code in feature_codes):
+                total = 0.0
+                for i in range(1, 21):
+                    k = f"751{str(i).zfill(2)}"
+                    if k in vm:
+                        total += float(vm.pop(k))
+                if total > 0:
+                    vm['75056'] = vm.get('75056', 0.0) + total
+            # Marseille: arr 13201..13216 -> 13055
+            if ('13055' in feature_codes) and not any(code.startswith('132') for code in feature_codes):
+                total = 0.0
+                for i in range(1, 17):
+                    k = f"132{str(i).zfill(2)}"
+                    if k in vm:
+                        total += float(vm.pop(k))
+                if total > 0:
+                    vm['13055'] = vm.get('13055', 0.0) + total
+            # Lyon: arr 69381..69389 -> 69380 (or legacy 69123 if present)
+            lyon_city_code = '69380' if '69380' in feature_codes else ('69123' if '69123' in feature_codes else None)
+            if lyon_city_code and not any(code.startswith('6938') for code in feature_codes):
+                total = 0.0
+                for i in range(1, 10):
+                    k = f"6938{i}"
+                    if k in vm:
+                        total += float(vm.pop(k))
+                if total > 0:
+                    vm[lyon_city_code] = vm.get(lyon_city_code, 0.0) + total
+            return vm
+
+        value_map = _collapse_arr_to_city(value_map)
+
         # Create commune name mapping for tooltips
         name_map = {}
         if communes_df is not None and not communes_df.empty:
