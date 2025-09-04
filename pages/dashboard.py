@@ -844,7 +844,6 @@ with tab_geo:
     col1, col2 = st.columns(2)
     with col1:
         allocation = "even_split"
-        st.caption("Allocation: even_split")
     with col2:
         max_competitors = st.slider("Max Competitors", 1, 5, 5, help="Number of competitor layers to show")
     
@@ -855,22 +854,7 @@ with tab_geo:
         from navira.geo import get_geojson_summary, load_communes_geojson
         
         # Show GeoJSON status and add cache controls
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            from navira.geo import load_communes_geojson_simple
-            geojson_data = load_communes_geojson_simple()
-            if geojson_data:
-                feature_count = len(geojson_data.get('features', []))
-                st.info(f"✅ {feature_count:,} communes loaded | INSEE key: code")
-            else:
-                st.error("❌ Failed to load communes GeoJSON")
-        
-        with col2:
-            if st.button("🔄 Reset Map Cache", help="Clear cached GeoJSON and map data"):
-                st.cache_data.clear()
-                st.success("Cache cleared!")
-                st.rerun()
+        # Removed GeoJSON status and cache controls per request
         
         # Prepare hospital info
         hospital_info = {
@@ -891,7 +875,6 @@ with tab_geo:
         
         # Render the map
         st.markdown("### 🗺️ Interactive Recruitment Zone Map")
-        st.info("**Map Controls:** Toggle choropleth layers using the control in the top-right corner. Hover over communes to see patient counts. Red marker = selected hospital, colored circles = competitors (larger = higher rank).")
         
         try:
             map_data = st_folium(
@@ -910,12 +893,7 @@ with tab_geo:
             - **Coordinates:** {hospital_info.get('latitude', 'N/A')}, {hospital_info.get('longitude', 'N/A')}
             """)
         
-        # Show diagnostics
-        if diagnostics:
-            from navira.competitors import get_top_competitors
-            competitors_list = get_top_competitors(str(selected_hospital_id), max_competitors)
-            competitor_names = get_competitor_names(competitors_list, establishments)
-            render_map_diagnostics(diagnostics, competitor_names)
+        # Diagnostics panel removed per request
             
     except ImportError as e:
         st.error(f"Import error: {e}")

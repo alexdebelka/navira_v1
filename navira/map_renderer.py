@@ -169,19 +169,7 @@ def create_recruitment_map(
     
     # Check if GeoJSON loaded successfully
     if not geojson_data or 'features' not in geojson_data or not geojson_data['features']:
-        # Add cache reset button
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.error("❌ Could not load communes GeoJSON data")
-        with col2:
-            if st.button("🔄 Clear Cache & Retry", key="clear_geo_cache"):
-                st.cache_data.clear()
-                st.rerun()
-        
-        st.warning("⚠️ Choropleth layers will not be shown. The base map will still work.")
-        
-        # Fallback: still return map with hospital marker
-        
+        # Fallback: still return map with hospital marker (no extra UI)
         _add_hospital_marker(m, hospital_finess, hospital_info)
         return m, diagnostics_list
     
@@ -269,8 +257,31 @@ def create_recruitment_map(
     markers_fg_selected.add_to(m)
     markers_fg_comp.add_to(m)
     
-    # Add layer control
-    folium.LayerControl(collapsed=False, position='topright').add_to(m)
+    # Ensure marker groups always stay on top, even after toggling overlays
+    try:
+        js = folium.Element(
+            f"""
+            <script>
+            var mapRef = {m.get_name()};
+            function bringMarkersFront() {{
+              try {{
+                {markers_fg_selected.get_name()}.bringToFront();
+                {markers_fg_comp.get_name()}.bringToFront();
+              }} catch(e) {{}}
+            }}
+            mapRef.on('overlayadd', function(e) {{ bringMarkersFront(); }});
+            mapRef.on('layeradd', function(e) {{ bringMarkersFront(); }});
+            // initial
+            bringMarkersFront();
+            </script>
+            """
+        )
+        m.get_root().html.add_child(js)
+    except Exception:
+        pass
+
+    # Add layer control (collapsed for cleaner UI)
+    folium.LayerControl(collapsed=True, position='topright').add_to(m)
     
     return m, diagnostics_list
 
