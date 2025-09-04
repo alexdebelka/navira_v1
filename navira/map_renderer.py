@@ -138,11 +138,11 @@ def create_recruitment_map(
         # Load Paris arrondissement GeoJSON for detailed view
         try:
             import json
-            with open('data/paris_arrondissements_synthetic.geojson', 'r', encoding='utf-8') as f:
+            with open('data/paris_arrondissements_official.geojson', 'r', encoding='utf-8') as f:
                 geojson_data = json.load(f)
-            st.info(f"🗺️ Using Paris arrondissement GeoJSON with {len(geojson_data['features'])} arrondissements")
+            st.info(f"🗺️ Using official Paris arrondissement GeoJSON with {len(geojson_data['features'])} arrondissements")
         except FileNotFoundError:
-            st.warning("⚠️ Paris arrondissement GeoJSON not found, falling back to communes")
+            st.warning("⚠️ Official Paris arrondissement GeoJSON not found, falling back to communes")
             if needed_insee_codes:
                 geojson_data = load_communes_geojson_filtered(needed_insee_codes)
             else:
@@ -180,7 +180,12 @@ def create_recruitment_map(
         return m, diagnostics_list
     
     # Detect INSEE key
-    insee_key = detect_insee_key(geojson_data)
+    # Detect INSEE key in GeoJSON properties
+    # For official arrondissement GeoJSON, use 'c_arinsee' instead of 'code'
+    if has_paris_arrondissements:
+        insee_key = 'c_arinsee'
+    else:
+        insee_key = detect_insee_key(geojson_data)
     if not insee_key:
         st.warning("⚠️ Could not detect INSEE property key in GeoJSON")
         
