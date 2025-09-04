@@ -99,6 +99,13 @@ def create_recruitment_map(
         paris_data = focal_df[focal_df['insee5'].str.startswith('751')]
         if not paris_data.empty:
             st.info(f"🔍 Selected hospital has {len(paris_data)} Paris arrondissement records: {paris_data['insee5'].tolist()}")
+        else:
+            # Check if we have any Paris-related data at all
+            paris_related = focal_df[focal_df['insee5'].str.startswith('75')]
+            if not paris_related.empty:
+                st.warning(f"⚠️ Selected hospital has {len(paris_related)} Paris-related records but no arrondissement data: {paris_related['insee5'].tolist()}")
+            else:
+                st.info(f"ℹ️ Selected hospital has no Paris data. Total records: {len(focal_df)}")
     for competitor in competitors[:max_competitors]:
         df, _ = competitor_choropleth_df(competitor, cp_to_insee, allocation)
         if not df.empty:
@@ -256,22 +263,39 @@ def _add_choropleth_layer(
             if insee_key in props:
                 c = str(props[insee_key]).strip().upper()
                 feature_codes.add(c if c.startswith(('2A','2B')) else c.zfill(5))
+        
+        # Debug: show what Paris codes we have in GeoJSON
+        paris_geo_codes = [c for c in feature_codes if c.startswith('75')]
+        if paris_geo_codes:
+            st.info(f"🔍 GeoJSON contains Paris codes: {sorted(paris_geo_codes)}")
+        else:
+            st.warning("⚠️ No Paris codes found in GeoJSON!")
 
         # If the GeoJSON does NOT contain arrondissement polygons for major cities,
         # aggregate arrondissement values into the single commune code present.
         def _collapse_arr_to_city(value_map_in: Dict[str, float]) -> Dict[str, float]:
             vm = value_map_in.copy()
             # Paris: arr 75101..75120 -> 75056
-            if ('75056' in feature_codes) and not any(code.startswith('751') for code in feature_codes):
+            has_75056 = '75056' in feature_codes
+            has_arrondissements = any(code.startswith('751') for code in feature_codes)
+            st.info(f"🔍 Paris aggregation check: has_75056={has_75056}, has_arrondissements={has_arrondissements}")
+            
+            if has_75056 and not has_arrondissements:
                 total = 0.0
+                arrondissement_count = 0
                 for i in range(1, 21):
                     k = f"751{str(i).zfill(2)}"
                     if k in vm:
                         total += float(vm.pop(k))
+                        arrondissement_count += 1
                 if total > 0:
                     vm['75056'] = vm.get('75056', 0.0) + total
                     # Debug logging
-                    st.info(f"🔍 Paris aggregation: {total:.1f} patients from arrondissements → 75056")
+                    st.success(f"✅ Paris aggregation: {total:.1f} patients from {arrondissement_count} arrondissements → 75056")
+                else:
+                    st.warning("⚠️ No arrondissement data found to aggregate")
+            else:
+                st.info(f"ℹ️ Paris aggregation skipped: has_75056={has_75056}, has_arrondissements={has_arrondissements}")
             # Marseille: arr 13201..13216 -> 13055
             if ('13055' in feature_codes) and not any(code.startswith('132') for code in feature_codes):
                 total = 0.0
