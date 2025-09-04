@@ -842,10 +842,10 @@ with tab_geo:
     
     # UI Controls
     col1, col2 = st.columns(2)
-    with col1:
-        max_competitors = st.slider("Max Competitors", 1, 5, 5, help="Number of competitor layers to show")
+    # Remove allocation toggle; always use even_split
+    allocation = "even_split"
     with col2:
-        st.markdown("**Allocation Strategy:** even_split")
+        max_competitors = st.slider("Max Competitors", 1, 5, 5, help="Number of competitor layers to show")
     
     # Import the new functionality
     try:
@@ -859,6 +859,11 @@ with tab_geo:
         with col1:
             from navira.geo import load_communes_geojson_simple
             geojson_data = load_communes_geojson_simple()
+            if geojson_data:
+                feature_count = len(geojson_data.get('features', []))
+                st.info(f"✅ {feature_count:,} communes loaded | INSEE key: code")
+            else:
+                st.error("❌ Failed to load communes GeoJSON")
         
         with col2:
             if st.button("🔄 Reset Map Cache", help="Clear cached GeoJSON and map data"):
@@ -879,11 +884,13 @@ with tab_geo:
                 hospital_finess=str(selected_hospital_id),
                 hospital_info=hospital_info,
                 establishments_df=establishments,
+                allocation=allocation,
                 max_competitors=max_competitors
             )
         
         # Render the map
         st.markdown("### 🗺️ Interactive Recruitment Zone Map")
+        st.info("**Map Controls:** Toggle choropleth layers using the control in the top-right corner. Hover over communes to see patient counts. Red marker = selected hospital, colored circles = competitors (larger = higher rank).")
         
         try:
             map_data = st_folium(

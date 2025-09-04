@@ -35,6 +35,7 @@ def create_recruitment_map(
     hospital_finess: str,
     hospital_info: Optional[Dict[str, Any]] = None,
     establishments_df: Optional[pd.DataFrame] = None,
+    allocation: str = "even_split",
     max_competitors: int = 5
 ) -> Tuple[folium.Map, List[ChloroplethDiagnostics]]:
     """
@@ -44,6 +45,7 @@ def create_recruitment_map(
         hospital_finess: 9-digit FINESS code of focal hospital
         hospital_info: Optional dict with hospital coordinates and name
         establishments_df: DataFrame with hospital information for competitor names
+        allocation: Allocation strategy ("even_split" or "no_split")
         max_competitors: Maximum number of competitor layers to show
         
     Returns:
@@ -55,7 +57,6 @@ def create_recruitment_map(
         - Generates up to max_competitors choropleth layers
         - Includes layer control and legend
         - Returns diagnostics for each choropleth layer
-        - Uses "even_split" allocation strategy by default
     """
     # Determine map center
     if hospital_info and 'latitude' in hospital_info and 'longitude' in hospital_info:
@@ -76,6 +77,13 @@ def create_recruitment_map(
         tiles='CartoDB positron',
         max_zoom=MapConfig.MAX_ZOOM
     )
+    # Create panes so markers always stay on top of choropleths
+    try:
+        from folium.map import CustomPane
+        CustomPane("choropleths", z_index=390).add_to(m)
+        CustomPane("markers", z_index=650).add_to(m)
+    except Exception:
+        pass
     
     # Load required data
     communes_df = load_communes_data()
@@ -84,12 +92,14 @@ def create_recruitment_map(
     # Get top competitors first
     competitors = get_top_competitors(hospital_finess, max_competitors)
     if not competitors:
+        st.info("ℹ️ No competitors found for this hospital.")
         _add_hospital_marker(m, hospital_finess, hospital_info)
         return m, []
     
     # Get needed INSEE codes to filter GeoJSON for performance
     needed_insee_codes = []
     # Include selected hospital first so we can build its own layer distinctly
+    # Enforce even_split allocation
     focal_df, _ = competitor_choropleth_df(hospital_finess, cp_to_insee, "even_split")
     if not focal_df.empty:
         needed_insee_codes.extend(focal_df['insee5'].tolist())
@@ -125,6 +135,7 @@ def create_recruitment_map(
             with open('data/paris_arrondissements_official.geojson', 'r', encoding='utf-8') as f:
                 geojson_data = json.load(f)
         except FileNotFoundError:
+            # Fallback to communes
             if needed_insee_codes:
                 geojson_data = load_communes_geojson_filtered(needed_insee_codes)
             else:
@@ -169,7 +180,7 @@ def create_recruitment_map(
     else:
         insee_key = detect_insee_key(geojson_data)
     if not insee_key:
-        insee_key = 'code'  # Use the known key from our data
+        insee_key = 'code'  # Fallback
         
         if not insee_key:
             _add_hospital_marker(m, hospital_finess, hospital_info)
@@ -239,10 +250,7 @@ def create_recruitment_map(
     focal_colormap.add_to(m)
     comp_colormap.add_to(m)
     
-    # Add layer control first
-    folium.LayerControl(collapsed=False, position='topright').add_to(m)
-    
-    # Add markers in separate toggleable layers (after choropleth layers to ensure they stay on top)
+    # Add markers in separate toggleable layers
     markers_fg_selected = folium.FeatureGroup(name='Selected hospital marker', show=True)
     markers_fg_comp = folium.FeatureGroup(name='Competitor markers', show=True)
 
@@ -251,6 +259,9 @@ def create_recruitment_map(
 
     markers_fg_selected.add_to(m)
     markers_fg_comp.add_to(m)
+    
+    # Add layer control
+    folium.LayerControl(collapsed=False, position='topright').add_to(m)
     
     return m, diagnostics_list
 
@@ -278,10 +289,16 @@ def _add_choropleth_layer(
                 c = str(props[insee_key]).strip().upper()
                 feature_codes.add(c if c.startswith(('2A','2B')) else c.zfill(5))
         
+        # Debug: show what Paris codes we have in GeoJSON
+        paris_geo_codes = [c for c in feature_codes if c.startswith('75')]
+        st.info(f"🔍 Total feature codes: {len(feature_codes)}, Paris codes: {paris_geo_codes}")
+        if not paris_geo_codes:
+            st.warning("⚠️ No Paris codes found in GeoJSON!")
         
         # Check if we're using arrondissement polygons (no aggregation needed)
         has_arrondissement_polygons = any(code.startswith('751') for code in feature_codes)
         if has_arrondissement_polygons:
+            st.info(f"🗺️ Using arrondissement polygons - showing individual arrondissement data")
             # Skip aggregation - show data directly on arrondissement polygons
             skip_aggregation = True
         else:
@@ -296,6 +313,7 @@ def _add_choropleth_layer(
                 # Paris: arr 75101..75120 -> 75056
                 has_75056 = '75056' in feature_codes
                 has_arrondissements = any(code.startswith('751') for code in feature_codes)
+                st.info(f"🔍 Paris aggregation check: has_75056={has_75056}, has_arrondissements={has_arrondissements}")
                 
                 if has_75056 and not has_arrondissements:
                     total = 0.0
@@ -307,6 +325,12 @@ def _add_choropleth_layer(
                             arrondissement_count += 1
                     if total > 0:
                         vm['75056'] = vm.get('75056', 0.0) + total
+                        # Debug logging
+                        st.success(f"✅ Paris aggregation: {total:.1f} patients from {arrondissement_count} arrondissements → 75056")
+                    else:
+                        st.warning("⚠️ No arrondissement data found to aggregate")
+                else:
+                    st.info(f"ℹ️ Paris aggregation skipped: has_75056={has_75056}, has_arrondissements={has_arrondissements}")
                 # Marseille: arr 13201..13216 -> 13055
                 if ('13055' in feature_codes) and not any(code.startswith('132') for code in feature_codes):
                     total = 0.0
@@ -392,7 +416,7 @@ def _add_choropleth_layer(
         feature_group.add_to(m)
         
     except Exception as e:
-        pass  # Silently handle errors
+        st.warning(f"Error adding choropleth layer '{layer_name}': {e}")
 
 
 def _add_hospital_marker(
@@ -414,7 +438,7 @@ def _add_hospital_marker(
             ).add_to(m)
             
     except (ValueError, TypeError) as e:
-        pass  # Silently handle invalid coordinates
+        st.warning(f"Could not add hospital marker: invalid coordinates ({e})")
 
 
 def _add_competitor_markers(
@@ -472,7 +496,7 @@ def _add_competitor_markers(
                     continue  # Skip invalid coordinates
                     
     except Exception as e:
-        pass  # Silently handle errors
+        st.warning(f"Error adding competitor markers: {e}")
 
 
 def render_map_diagnostics(diagnostics_list: List[ChloroplethDiagnostics], competitor_names: Dict[str, str]) -> None:
