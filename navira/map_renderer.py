@@ -77,7 +77,7 @@ def create_recruitment_map(
         tiles='CartoDB positron',
         max_zoom=MapConfig.MAX_ZOOM
     )
-    # Create panes so markers always stay on top of choropleths
+    # Ensure markers are always above choropleths using map panes
     try:
         from folium.map import CustomPane
         CustomPane("choropleths", z_index=390).add_to(m)
@@ -99,12 +99,11 @@ def create_recruitment_map(
     # Get needed INSEE codes to filter GeoJSON for performance
     needed_insee_codes = []
     # Include selected hospital first so we can build its own layer distinctly
-    # Enforce even_split allocation
-    focal_df, _ = competitor_choropleth_df(hospital_finess, cp_to_insee, "even_split")
+    focal_df, _ = competitor_choropleth_df(hospital_finess, cp_to_insee, allocation)
     if not focal_df.empty:
         needed_insee_codes.extend(focal_df['insee5'].tolist())
     for competitor in competitors[:max_competitors]:
-        df, _ = competitor_choropleth_df(competitor, cp_to_insee, "even_split")
+        df, _ = competitor_choropleth_df(competitor, cp_to_insee, allocation)
         if not df.empty:
             needed_insee_codes.extend(df['insee5'].tolist())
     
@@ -134,8 +133,9 @@ def create_recruitment_map(
             import json
             with open('data/paris_arrondissements_official.geojson', 'r', encoding='utf-8') as f:
                 geojson_data = json.load(f)
+            # Loaded detailed arrondissement GeoJSON
         except FileNotFoundError:
-            # Fallback to communes
+            st.warning("⚠️ Official Paris arrondissement GeoJSON not found, falling back to communes")
             if needed_insee_codes:
                 geojson_data = load_communes_geojson_filtered(needed_insee_codes)
             else:
@@ -160,27 +160,21 @@ def create_recruitment_map(
                 st.cache_data.clear()
                 st.rerun()
         
-        st.warning("Choropleth layers will not be shown. The base map will still work.")
+        st.warning("⚠️ Choropleth layers will not be shown. The base map will still work.")
         
-        # Show some debugging info
-        with st.expander("🔧 Debug Information"):
-            st.text(f"Attempted to load: {os.path.abspath('data/communes.geojson')}")
-            st.text(f"File exists: {os.path.exists('data/communes.geojson')}")
-            if os.path.exists('data/communes.geojson'):
-                st.text(f"File size: {os.path.getsize('data/communes.geojson')} bytes")
+        # Fallback: still return map with hospital marker
         
         _add_hospital_marker(m, hospital_finess, hospital_info)
         return m, diagnostics_list
     
-    # Detect INSEE key
-    # Detect INSEE key in GeoJSON properties
-    # For official arrondissement GeoJSON, use 'c_arinsee' instead of 'code'
+    # Detect INSEE key. For official arrondissement GeoJSON, use 'c_arinsee'
     if has_paris_arrondissements:
         insee_key = 'c_arinsee'
     else:
         insee_key = detect_insee_key(geojson_data)
     if not insee_key:
-        insee_key = 'code'  # Fallback
+        # Fallback to 'code' which is used by our communes GeoJSON
+        insee_key = 'code'
         
         if not insee_key:
             _add_hospital_marker(m, hospital_finess, hospital_info)
@@ -196,7 +190,7 @@ def create_recruitment_map(
     
     # Pre-calculate all choropleth data to determine global scale
     for i, competitor_finess in enumerate(competitors):
-        df, diagnostics = competitor_choropleth_df(competitor_finess, cp_to_insee, "even_split")
+        df, diagnostics = competitor_choropleth_df(competitor_finess, cp_to_insee, allocation)
         diagnostics_list.append(diagnostics)
         
         if not df.empty:
@@ -260,8 +254,8 @@ def create_recruitment_map(
     markers_fg_selected.add_to(m)
     markers_fg_comp.add_to(m)
     
-    # Add layer control (collapsed and moved to bottom-right to avoid obstructing the map)
-    folium.LayerControl(collapsed=True, position='bottomright').add_to(m)
+    # Add layer control
+    folium.LayerControl(collapsed=False, position='topright').add_to(m)
     
     return m, diagnostics_list
 
@@ -289,7 +283,7 @@ def _add_choropleth_layer(
                 c = str(props[insee_key]).strip().upper()
                 feature_codes.add(c if c.startswith(('2A','2B')) else c.zfill(5))
         
-        # Identify if Paris codes are present (no UI output)
+        # Presence checks (no UI output)
         paris_geo_codes = [c for c in feature_codes if c.startswith('75')]
         
         # Check if we're using arrondissement polygons (no aggregation needed)
@@ -309,7 +303,7 @@ def _add_choropleth_layer(
                 # Paris: arr 75101..75120 -> 75056
                 has_75056 = '75056' in feature_codes
                 has_arrondissements = any(code.startswith('751') for code in feature_codes)
-                # Check availability for aggregation (no UI output)
+                # Paris aggregation only when arrondissement polygons are absent
                 
                 if has_75056 and not has_arrondissements:
                     total = 0.0
@@ -321,13 +315,7 @@ def _add_choropleth_layer(
                             arrondissement_count += 1
                     if total > 0:
                         vm['75056'] = vm.get('75056', 0.0) + total
-                        # Debug logging
-                        st.success(f"✅ Paris aggregation: {total:.1f} patients from {arrondissement_count} arrondissements → 75056")
-                    # No arrondissement data to aggregate
-                    pass
-                else:
-                    # Aggregation not needed
-                    pass
+                    
                 # Marseille: arr 13201..13216 -> 13055
                 if ('13055' in feature_codes) and not any(code.startswith('132') for code in feature_codes):
                     total = 0.0
@@ -399,6 +387,7 @@ def _add_choropleth_layer(
         # Add GeoJSON layer
         folium.GeoJson(
             geojson_data,
+            pane="choropleths",
             style_function=style_function,
             tooltip=folium.GeoJsonTooltip(
                 fields=[],
@@ -431,7 +420,8 @@ def _add_hospital_marker(
                 location=location,
                 popup=f"<b>{name}</b><br/>FINESS: {hospital_finess}",
                 tooltip=f"Selected Hospital: {name}",
-                icon=folium.Icon(color='red', icon='hospital-o', prefix='fa')
+                icon=folium.Icon(color='red', icon='hospital-o', prefix='fa'),
+                pane="markers"
             ).add_to(m)
             
     except (ValueError, TypeError) as e:
@@ -486,7 +476,8 @@ def _add_competitor_markers(
                         color=color,  # Use the same color but darker for border
                         weight=3,     # Slightly thicker border
                         fillColor=color,
-                        fillOpacity=0.6  # Lighter center fill
+                        fillOpacity=0.6,  # Lighter center fill
+                        pane="markers"
                     ).add_to(m)
                     
                 except (ValueError, TypeError):
