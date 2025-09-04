@@ -160,7 +160,7 @@ def create_recruitment_map(
                 st.cache_data.clear()
                 st.rerun()
         
-        st.warning("⚠️ Choropleth layers will not be shown. The base map will still work.")
+        st.warning("Choropleth layers will not be shown. The base map will still work.")
         
         # Show some debugging info
         with st.expander("🔧 Debug Information"):
@@ -289,16 +289,12 @@ def _add_choropleth_layer(
                 c = str(props[insee_key]).strip().upper()
                 feature_codes.add(c if c.startswith(('2A','2B')) else c.zfill(5))
         
-        # Debug: show what Paris codes we have in GeoJSON
+        # Identify if Paris codes are present (no UI output)
         paris_geo_codes = [c for c in feature_codes if c.startswith('75')]
-        st.info(f"🔍 Total feature codes: {len(feature_codes)}, Paris codes: {paris_geo_codes}")
-        if not paris_geo_codes:
-            st.warning("⚠️ No Paris codes found in GeoJSON!")
         
         # Check if we're using arrondissement polygons (no aggregation needed)
         has_arrondissement_polygons = any(code.startswith('751') for code in feature_codes)
         if has_arrondissement_polygons:
-            st.info(f"🗺️ Using arrondissement polygons - showing individual arrondissement data")
             # Skip aggregation - show data directly on arrondissement polygons
             skip_aggregation = True
         else:
@@ -313,7 +309,7 @@ def _add_choropleth_layer(
                 # Paris: arr 75101..75120 -> 75056
                 has_75056 = '75056' in feature_codes
                 has_arrondissements = any(code.startswith('751') for code in feature_codes)
-                st.info(f"🔍 Paris aggregation check: has_75056={has_75056}, has_arrondissements={has_arrondissements}")
+                # Check availability for aggregation (no UI output)
                 
                 if has_75056 and not has_arrondissements:
                     total = 0.0
@@ -327,10 +323,11 @@ def _add_choropleth_layer(
                         vm['75056'] = vm.get('75056', 0.0) + total
                         # Debug logging
                         st.success(f"✅ Paris aggregation: {total:.1f} patients from {arrondissement_count} arrondissements → 75056")
-                    else:
-                        st.warning("⚠️ No arrondissement data found to aggregate")
+                    # No arrondissement data to aggregate
+                    pass
                 else:
-                    st.info(f"ℹ️ Paris aggregation skipped: has_75056={has_75056}, has_arrondissements={has_arrondissements}")
+                    # Aggregation not needed
+                    pass
                 # Marseille: arr 13201..13216 -> 13055
                 if ('13055' in feature_codes) and not any(code.startswith('132') for code in feature_codes):
                     total = 0.0

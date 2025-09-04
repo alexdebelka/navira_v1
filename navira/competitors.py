@@ -173,10 +173,7 @@ def competitor_choropleth_df(
         # Limit unmatched examples for display
         unmatched_examples = unmatched_cps[:10]  # Show max 10 examples
         
-        # Debug Paris mapping if we have Paris data
-        if paris_debug:
-            import streamlit as st
-            st.info(f"🔍 Paris mapping debug: {paris_debug}")
+        # Suppress Paris debug output in UI
         
         diagnostics = ChloroplethDiagnostics(
             total_cps=total_cps,
