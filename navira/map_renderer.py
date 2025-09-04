@@ -111,10 +111,26 @@ def create_recruitment_map(
         if not df.empty:
             needed_insee_codes.extend(df['insee5'].tolist())
     
+    # Add aggregation target codes for major cities when we have arrondissement data
+    has_paris_arr = any(code.startswith('751') for code in needed_insee_codes)
+    has_marseille_arr = any(code.startswith('132') for code in needed_insee_codes)
+    has_lyon_arr = any(code.startswith('6938') or code.startswith('6912') for code in needed_insee_codes)
+    
+    if has_paris_arr:
+        needed_insee_codes.append('75056')  # Single Paris polygon
+        st.info(f"🔍 Added Paris target polygon 75056 for arrondissement aggregation")
+    if has_marseille_arr:
+        needed_insee_codes.append('13055')  # Single Marseille polygon  
+    if has_lyon_arr:
+        needed_insee_codes.extend(['69380', '69123'])  # Lyon polygons
+    
     # Load GeoJSON - simple and direct approach
     from .geo import load_communes_geojson_filtered, load_communes_geojson_simple, detect_insee_key
     
     # Try to load GeoJSON data
+    # Debug: Show what INSEE codes we need
+    st.info(f"🔍 Needed INSEE codes: {needed_insee_codes[:10]}{'...' if len(needed_insee_codes) > 10 else ''} (total: {len(needed_insee_codes)})")
+    
     if needed_insee_codes:
         geojson_data = load_communes_geojson_filtered(needed_insee_codes)
     else:
