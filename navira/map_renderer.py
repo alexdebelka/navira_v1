@@ -266,9 +266,8 @@ def _add_choropleth_layer(
         
         # Debug: show what Paris codes we have in GeoJSON
         paris_geo_codes = [c for c in feature_codes if c.startswith('75')]
-        if paris_geo_codes:
-            st.info(f"🔍 GeoJSON contains Paris codes: {sorted(paris_geo_codes)}")
-        else:
+        st.info(f"🔍 Total feature codes: {len(feature_codes)}, Paris codes: {paris_geo_codes}")
+        if not paris_geo_codes:
             st.warning("⚠️ No Paris codes found in GeoJSON!")
 
         # If the GeoJSON does NOT contain arrondissement polygons for major cities,
