@@ -1694,7 +1694,9 @@ if not complications.empty:
     # Build hospital subset based on labels and top 10
     km_subset_ids = set()
     try:
-        est_df = st.session_state.get('establishments', None) or all_data.get('establishments')
+        est_df = st.session_state.get('establishments', None)
+        if est_df is None or (hasattr(est_df, 'empty') and est_df.empty):
+            est_df = all_data.get('establishments')
         ann_df = st.session_state.get('annual', None) or all_data.get('annual')
         if est_df is None or ann_df is None:
             est_df, ann_df = get_dataframes()
@@ -1772,7 +1774,9 @@ if not complications.empty:
         km_curves = {}
         
         # Get hospital label information for grouping
-        est_df = st.session_state.get('establishments', None) or all_data.get('establishments')
+        est_df = st.session_state.get('establishments', None)
+        if est_df is None or (hasattr(est_df, 'empty') and est_df.empty):
+            est_df = all_data.get('establishments')
         if est_df is not None and not est_df.empty:
             est_labels = est_df[['id', 'cso', 'LAB_SOFFCO']].copy()
             est_labels['id'] = est_labels['id'].astype(str)

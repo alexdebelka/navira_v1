@@ -26,7 +26,7 @@ class MapConfig:
     DEFAULT_ZOOM = 6
     HOSPITAL_ZOOM = 10
     MAX_ZOOM = 13
-    CHOROPLETH_OPACITY = 0.7
+    CHOROPLETH_OPACITY = 0.5
     CHOROPLETH_LINE_OPACITY = 0.3
     COLORS = ['#ffffcc', '#c7e9b4', '#7fcdbb', '#41b6c4', '#2c7fb8', '#253494']
 
@@ -248,8 +248,8 @@ def create_recruitment_map(
     comp_colormap.add_to(m)
     
     # Add markers in separate toggleable layers
-    markers_fg_selected = folium.FeatureGroup(name='Selected hospital marker', show=True)
-    markers_fg_comp = folium.FeatureGroup(name='Competitor markers', show=True)
+    markers_fg_selected = folium.FeatureGroup(name='Selected hospital marker', show=True, overlay=True, control=True)
+    markers_fg_comp = folium.FeatureGroup(name='Competitor markers', show=True, overlay=True, control=True)
 
     _add_hospital_marker(markers_fg_selected, hospital_finess, hospital_info)
     _add_competitor_markers(markers_fg_comp, competitors, establishments_df)
@@ -262,17 +262,20 @@ def create_recruitment_map(
         js = folium.Element(
             f"""
             <script>
-            var mapRef = {m.get_name()};
-            function bringMarkersFront() {{
-              try {{
-                {markers_fg_selected.get_name()}.bringToFront();
-                {markers_fg_comp.get_name()}.bringToFront();
-              }} catch(e) {{}}
-            }}
-            mapRef.on('overlayadd', function(e) {{ bringMarkersFront(); }});
-            mapRef.on('layeradd', function(e) {{ bringMarkersFront(); }});
-            // initial
-            bringMarkersFront();
+            (function() {{
+                var mapRef = {m.get_name()};
+                function bringMarkersFront() {{
+                    try {{
+                        {markers_fg_selected.get_name()}.bringToFront();
+                        {markers_fg_comp.get_name()}.bringToFront();
+                    }} catch(e) {{}}
+                }}
+                mapRef.on('overlayadd', bringMarkersFront);
+                mapRef.on('layeradd', bringMarkersFront);
+                mapRef.on('moveend', bringMarkersFront);
+                mapRef.whenReady(bringMarkersFront);
+                setTimeout(bringMarkersFront, 100);
+            }})();
             </script>
             """
         )
