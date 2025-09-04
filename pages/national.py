@@ -1892,8 +1892,19 @@ if not complications.empty:
                 debug_signatures['multi_chart_error'] = {'error': str(e)}
                 
         elif len(km_curves) == 1:
-            # Single curve
+            # Single curve - use consistent color mapping
             curve_name, curve_data = list(km_curves.items())[0]
+            
+            # Use consistent color for single curves too
+            color_mapping = {
+                'CSO Hospitals': '#1f77b4',      # Blue
+                'SOFFCO Hospitals': '#e67e22',   # Orange  
+                'No Labels': '#2ca02c',          # Green
+                'Overall': '#d62728'             # Red
+            }
+            
+            curve_color = color_mapping.get(curve_name, '#e67e22')  # Default to orange if unknown
+            
             fig_km_nat = create_km_chart(
                 curve_df=curve_data,
                 page_id="national",
@@ -1901,7 +1912,7 @@ if not complications.empty:
                 yaxis_title='Complication Rate (%)',
                 xaxis_title=km_xaxis_label,
                 height=320,
-                color='#e67e22',
+                color=curve_color,
                 show_complication_rate=True
             )
             
