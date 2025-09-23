@@ -954,6 +954,28 @@ with tab_complications:
                             title='Hospital complication rate by approach'),
                     use_container_width=True
                 )
+                # Show latest-year breakdown table for transparency
+                try:
+                    y_latest = int(show['year'].max())
+                    row = merged[merged['year'] == y_latest]
+                    if not row.empty:
+                        ap_tbl = pd.DataFrame({
+                            'Approach': ['Coelioscopy','Robotic','Open Surgery'],
+                            'Procedures': [int(row['COE'].iloc[0]), int(row['ROB'].iloc[0]), int(row['LAP'].iloc[0])],
+                            'Allocated events': [
+                                float(row['COE_events'].iloc[0]),
+                                float(row['ROB_events'].iloc[0]),
+                                float(row['LAP_events'].iloc[0])
+                            ],
+                            'Rate (%)': [
+                                float(row['COE_rate_pct'].iloc[0]),
+                                float(row['ROB_rate_pct'].iloc[0]),
+                                float(row['LAP_rate_pct'].iloc[0])
+                            ]
+                        })
+                        st.dataframe(ap_tbl, use_container_width=True, hide_index=True)
+                except Exception:
+                    pass
         # National comparison (using national complications and total approach volumes)
         nat = complications.copy()
         if 'quarter_date' in nat.columns:
@@ -986,6 +1008,27 @@ with tab_complications:
                             title='National complication rate by approach'),
                     use_container_width=True
                 )
+                try:
+                    y_latest_n = int(nat_show['year'].max())
+                    rown = nat_m[nat_m['year'] == y_latest_n]
+                    if not rown.empty:
+                        ap_nt = pd.DataFrame({
+                            'Approach': ['Coelioscopy','Robotic','Open Surgery'],
+                            'Procedures': [int(rown['COE'].iloc[0]), int(rown['ROB'].iloc[0]), int(rown['LAP'].iloc[0])],
+                            'Allocated events': [
+                                float(rown['COE_events'].iloc[0]),
+                                float(rown['ROB_events'].iloc[0]),
+                                float(rown['LAP_events'].iloc[0])
+                            ],
+                            'Rate (%)': [
+                                float(rown['COE_rate_pct'].iloc[0]),
+                                float(rown['ROB_rate_pct'].iloc[0]),
+                                float(rown['LAP_rate_pct'].iloc[0])
+                            ]
+                        })
+                        st.dataframe(ap_nt, use_container_width=True, hide_index=True)
+                except Exception:
+                    pass
         # Latest-year side-by-side table (hospital vs national)
         try:
             latest_year = int(max(show['year'].max(), nat_show['year'].max()))
