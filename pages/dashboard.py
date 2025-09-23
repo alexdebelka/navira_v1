@@ -22,10 +22,12 @@ from auth_wrapper import add_auth_to_page
 from navigation_utils import handle_navigation_request
 handle_navigation_request()
 
+# Identify this page early to avoid redirect loops for limited users
+st.session_state.current_page = "hospital"
+st.session_state._on_hospital_dashboard = True
+
 # Add authentication check
 add_auth_to_page()
-# Mark that we are on hospital dashboard for limited users redirect logic
-st.session_state._on_hospital_dashboard = True
 
 # --- Page Configuration ---
 st.set_page_config(
