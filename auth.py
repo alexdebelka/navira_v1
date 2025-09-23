@@ -80,6 +80,16 @@ def init_database():
     conn.commit()
     conn.close()
 
+    # Seed required users (idempotent)
+    try:
+        create_default_admin()
+    except Exception:
+        pass
+    try:
+        _ensure_pilot_user_andrea()
+    except Exception:
+        pass
+
 def hash_password(password: str) -> str:
     """Hash a password using SHA-256."""
     return hashlib.sha256(password.encode()).hexdigest()
@@ -623,6 +633,23 @@ def create_default_admin():
             print("Please change the password after first login!")
     
     conn.close()
+
+def _ensure_pilot_user_andrea():
+    """Ensure the limited pilot user 'andrea.lazzati' exists with default password."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM users WHERE username = ?', ("andrea.lazzati",))
+        row = cursor.fetchone()
+        if not row:
+            # Create with a stable email placeholder; login uses username
+            create_user("andrea.lazzati", "andrea.lazzati@navira.com", "12345!", role="user")
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     # Initialize database and create default admin
