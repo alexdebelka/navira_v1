@@ -904,9 +904,9 @@ with tab_complications:
     except Exception as e:
         st.error(f"Error computing KM: {e}")
 
-    # --- Approach-specific complication rates (estimated by proportional allocation) ---
+    # --- Approach-specific complication rates (using approach volumes as denominators and proportional allocation of events) ---
     try:
-        st.markdown("#### Estimated Complication Rates by Surgical Approach")
+        st.markdown("#### Complication Rates by Surgical Approach")
         # Build hospital yearly complications (events and totals)
         hosp_year = hosp_comp.copy()
         if 'quarter_date' in hosp_year.columns:
@@ -920,16 +920,29 @@ with tab_complications:
             hosp_year.groupby('year', as_index=False)
                      .agg(events=('complications_count','sum'), total=('procedures_count','sum'))
         )
-        # Hospital approach counts by year from annual
-        appr_cols = [c for c in ['COE','ROB','LAP'] if c in selected_hospital_all_data.columns]
-        appr_year = selected_hospital_all_data[['annee'] + appr_cols].rename(columns={'annee':'year'}) if appr_cols else pd.DataFrame()
-        if not hosp_year_agg.empty and not appr_year.empty:
-            merged = hosp_year_agg.merge(appr_year, on='year', how='inner')
+        # Hospital approach counts by year from procedure_details
+        pd_approach = procedure_details.copy()
+        hosp_appr_year = pd.DataFrame()
+        if not pd_approach.empty:
+            pd_approach = pd_approach[pd_approach['hospital_id'].astype(str) == str(selected_hospital_id)]
+            if not pd_approach.empty:
+                hosp_appr_year = (
+                    pd_approach.groupby(['year','surgical_approach'], as_index=False)['procedure_count']
+                                .sum()
+                                .pivot(index='year', columns='surgical_approach', values='procedure_count')
+                                .reset_index()
+                )
+                for c in ['COE','ROB','LAP']:
+                    if c not in hosp_appr_year.columns:
+                        hosp_appr_year[c] = 0
+        if not hosp_year_agg.empty and not hosp_appr_year.empty:
+            merged = hosp_year_agg.merge(hosp_appr_year, on='year', how='inner')
+            appr_cols = ['COE','ROB','LAP']
             # Compute shares per approach and allocate events
+            row_tot = merged[appr_cols].sum(axis=1).replace(0, 1)
             for code in appr_cols:
-                merged[f'{code}_share'] = merged[code] / merged[appr_cols].sum(axis=1).replace(0, 1)
-                merged[f'{code}_events_est'] = merged['events'] * merged[f'{code}_share']
-                merged[f'{code}_rate_pct'] = (merged[f'{code}_events_est'] / merged[code].replace(0, pd.NA) * 100)
+                merged[f'{code}_events'] = merged['events'] * (merged[code] / row_tot)
+                merged[f'{code}_rate_pct'] = (merged[f'{code}_events'] / merged[code].replace(0, pd.NA) * 100)
             # Melt for plotting
             plot_cols = [f'{c}_rate_pct' for c in appr_cols]
             show = merged[['year'] + plot_cols].copy()
@@ -938,29 +951,39 @@ with tab_complications:
             if not show.empty:
                 st.plotly_chart(
                     px.line(show.dropna(subset=['Rate (%)']), x='year', y='Rate (%)', color='approach', markers=True,
-                            title='Hospital (estimated) complication rate by approach'),
+                            title='Hospital complication rate by approach'),
                     use_container_width=True
                 )
-        # National comparison (estimated)
+        # National comparison (using national complications and total approach volumes)
         nat = complications.copy()
         if 'quarter_date' in nat.columns:
             nat['year'] = nat['quarter_date'].dt.year
         nat_agg = nat.groupby('year', as_index=False).agg(events=('complications_count','sum'), total=('procedures_count','sum'))
-        nat_appr_cols = [c for c in ['COE','ROB','LAP'] if c in annual.columns]
-        nat_appr_year = annual[['annee'] + nat_appr_cols].groupby('annee', as_index=False).sum().rename(columns={'annee':'year'}) if nat_appr_cols else pd.DataFrame()
+        nat_appr_year = pd.DataFrame()
+        if not procedure_details.empty:
+            nat_appr_year = (
+                procedure_details.groupby(['year','surgical_approach'], as_index=False)['procedure_count']
+                                 .sum()
+                                 .pivot(index='year', columns='surgical_approach', values='procedure_count')
+                                 .reset_index()
+            )
+            for c in ['COE','ROB','LAP']:
+                if c not in nat_appr_year.columns:
+                    nat_appr_year[c] = 0
         if not nat_agg.empty and not nat_appr_year.empty:
             nat_m = nat_agg.merge(nat_appr_year, on='year', how='inner')
-            for code in nat_appr_cols:
-                nat_m[f'{code}_share'] = nat_m[code] / nat_m[nat_appr_cols].sum(axis=1).replace(0, 1)
-                nat_m[f'{code}_events_est'] = nat_m['events'] * nat_m[f'{code}_share']
-                nat_m[f'{code}_rate_pct'] = (nat_m[f'{code}_events_est'] / nat_m[code].replace(0, pd.NA) * 100)
-            plot_n_cols = [f'{c}_rate_pct' for c in nat_appr_cols]
+            nat_cols = ['COE','ROB','LAP']
+            row_tot_n = nat_m[nat_cols].sum(axis=1).replace(0, 1)
+            for code in nat_cols:
+                nat_m[f'{code}_events'] = nat_m['events'] * (nat_m[code] / row_tot_n)
+                nat_m[f'{code}_rate_pct'] = (nat_m[f'{code}_events'] / nat_m[code].replace(0, pd.NA) * 100)
+            plot_n_cols = [f'{c}_rate_pct' for c in nat_cols]
             nat_show = nat_m[['year'] + plot_n_cols].copy().melt('year', var_name='approach', value_name='Rate (%)')
             nat_show['approach'] = nat_show['approach'].str.replace('_rate_pct','', regex=False).map({'COE':'Coelioscopy','ROB':'Robotic','LAP':'Open Surgery'})
             if not nat_show.empty:
                 st.plotly_chart(
                     px.line(nat_show.dropna(subset=['Rate (%)']), x='year', y='Rate (%)', color='approach', markers=True,
-                            title='National (estimated) complication rate by approach'),
+                            title='National complication rate by approach'),
                     use_container_width=True
                 )
         # Latest-year side-by-side table (hospital vs national)
@@ -971,7 +994,7 @@ with tab_complications:
             if not latest_h.empty and not latest_n.empty:
                 comp = latest_h.merge(latest_n, on=['year','approach'], suffixes=(' (Hosp)',' (Nat)'))
                 comp = comp[['approach','Rate (%) (Hosp)','Rate (%) (Nat)']].sort_values('approach')
-                st.markdown(f"##### {latest_year} Comparison: Hospital vs National (estimated)")
+                st.markdown(f"##### {latest_year} Comparison: Hospital vs National")
                 st.dataframe(comp.reset_index(drop=True), use_container_width=True, hide_index=True)
         except Exception:
             pass
@@ -1008,19 +1031,7 @@ with tab_complications:
                                color='procedure_type'), use_container_width=True
                     )
 
-                # Robotic share among revisions by year
-                rev_by_year = (
-                    rev[rev['is_revision'] == 1]
-                    .groupby(['year'], as_index=False)
-                    .agg(total=('procedure_count','sum'),
-                         robotic=('procedure_count', lambda s: int(rev.loc[s.index][rev.loc[s.index]['surgical_approach']=='ROB']['procedure_count'].sum())))
-                )
-                if not rev_by_year.empty:
-                    rev_by_year['Robotic %'] = rev_by_year.apply(lambda r: (r['robotic']/r['total']*100) if r['total']>0 else 0.0, axis=1)
-                    st.plotly_chart(
-                        px.line(rev_by_year, x='year', y='Robotic %', markers=True, title='Robotic Share Among Revisions'),
-                        use_container_width=True
-                    )
+                # Removed robotic share among revisions per request
     except Exception:
         pass
 
