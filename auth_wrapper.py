@@ -36,6 +36,27 @@ def check_auth():
     except Exception:
         pass
 
+    # Limited access mode for specific pilot users
+    try:
+        user = st.session_state.get('user') or {}
+        username = (user or {}).get('username', '')
+        email = (user or {}).get('email', '')
+        is_limited_user = username == 'andrea.lazzati' or email.startswith('andrea.lazzati')
+        if is_limited_user:
+            # Force-select Avicenne hospital (FINESS id)
+            st.session_state.selected_hospital_id = '930100037'
+            st.session_state._limited_user = True
+            # If we're not already on the hospital dashboard, redirect there
+            if not st.session_state.get('_on_hospital_dashboard', False):
+                try:
+                    from navigation_utils import navigate_to_hospital_dashboard
+                    navigate_to_hospital_dashboard()
+                except Exception:
+                    st.session_state.navigate_to = "hospital"
+                    st.rerun()
+    except Exception:
+        pass
+
     # Check if user has permission for this page
     from auth import get_user_permissions
     user_permissions = get_user_permissions(st.session_state.user['id'])

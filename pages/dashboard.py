@@ -24,6 +24,8 @@ handle_navigation_request()
 
 # Add authentication check
 add_auth_to_page()
+# Mark that we are on hospital dashboard for limited users redirect logic
+st.session_state._on_hospital_dashboard = True
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -91,9 +93,13 @@ except Exception:
 
 
 # --- Safely check for selected hospital and data ---
+# In limited mode, we force Avicenne selection upstream
 if "selected_hospital_id" not in st.session_state or st.session_state.selected_hospital_id is None:
-    st.warning("Please select a hospital from the Home page first.", icon="👈")
-    st.stop()
+    if st.session_state.get('_limited_user'):
+        st.session_state.selected_hospital_id = '930100037'
+    else:
+        st.warning("Please select a hospital from the Home page first.", icon="👈")
+        st.stop()
 
 # --- Load data and averages from session state ---
 filtered_df = st.session_state.get('filtered_df', pd.DataFrame())
@@ -244,7 +250,10 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-tab_activity, tab_complications, tab_geo = st.tabs(["📈 Activity", "🧪 Complications", "🗺️ Geography"])
+if st.session_state.get('_limited_user'):
+    tab_activity, tab_complications = st.tabs(["📈 Activity", "🧪 Complications"])  # Hide geography for limited
+else:
+    tab_activity, tab_complications, tab_geo = st.tabs(["📈 Activity", "🧪 Complications", "🗺️ Geography"])
 
 def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, cities_df):
     try:
@@ -843,7 +852,8 @@ with tab_complications:
     except Exception as e:
         st.error(f"Error computing KM: {e}")
 
-with tab_geo:
+if not st.session_state.get('_limited_user'):
+    with tab_geo:
     st.subheader("Recruitment Zone and Competitors (Top-5 Choropleths)")
     
     # UI Controls

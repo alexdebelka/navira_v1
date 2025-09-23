@@ -51,22 +51,30 @@ def add_sidebar_to_page():
             except Exception:
                 pass
 
-        if st.button("🏠 Dashboard", use_container_width=True):
-            _track("Dashboard")
-            navigate_to_dashboard()
-        if st.button("🏥 Hospital Explorer", use_container_width=True):
-            _track("Hospital Explorer")
-            navigate_to_hospital_explorer()
-        if st.button("📈 National Overview", use_container_width=True):
-            _track("National Overview")
-            navigate_to_national()
-        if st.button("📊 Hospital Analysis", use_container_width=True):
-            _track("Hospital Analysis")
-            navigate_to_hospital_dashboard()
-        if st.button("⚖️ Hospital Comparison", use_container_width=True):
-            _track("Hospital Comparison")
-            from navigation_utils import navigate_to_hospital_compare
-            navigate_to_hospital_compare()
+        limited = bool(st.session_state.get('_limited_user'))
+        if not limited:
+            if st.button("🏠 Dashboard", use_container_width=True):
+                _track("Dashboard")
+                navigate_to_dashboard()
+            if st.button("🏥 Hospital Explorer", use_container_width=True):
+                _track("Hospital Explorer")
+                navigate_to_hospital_explorer()
+            if st.button("📈 National Overview", use_container_width=True):
+                _track("National Overview")
+                navigate_to_national()
+            if st.button("📊 Hospital Analysis", use_container_width=True):
+                _track("Hospital Analysis")
+                navigate_to_hospital_dashboard()
+            if st.button("⚖️ Hospital Comparison", use_container_width=True):
+                _track("Hospital Comparison")
+                from navigation_utils import navigate_to_hospital_compare
+                navigate_to_hospital_compare()
+        else:
+            # Limited users see only the hospital dashboard entry
+            st.info("Limited pilot access enabled")
+            if st.button("📊 Hospital Dashboard (Avicenne)", use_container_width=True):
+                _track("Hospital Dashboard (Limited)")
+                navigate_to_hospital_dashboard()
         # Assistant feature flag
         _assistant_enabled = False
         try:
@@ -82,14 +90,14 @@ def add_sidebar_to_page():
         except Exception:
             _assistant_enabled = False
 
-        if _assistant_enabled:
+        if _assistant_enabled and not limited:
             if st.button("💬 Assistant", use_container_width=True):
                 _track("Assistant")
                 from navigation_utils import navigate_to_assistant
                 navigate_to_assistant()
 
         # Admin section (only for admin users)
-        if st.session_state.user['role'] == 'admin':
+        if st.session_state.user['role'] == 'admin' and not limited:
             st.markdown("---")
             st.subheader("⚙️ Admin")
             if st.button("👥 User Management", use_container_width=True):
