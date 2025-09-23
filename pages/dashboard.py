@@ -18,6 +18,7 @@ from streamlit_folium import st_folium
 import plotly.express as px
 import plotly.graph_objects as go
 from navira.data_loader import get_dataframes, get_all_dataframes
+import os
 from auth_wrapper import add_auth_to_page
 from navigation_utils import handle_navigation_request
 handle_navigation_request()
@@ -920,21 +921,25 @@ with tab_complications:
             hosp_year.groupby('year', as_index=False)
                      .agg(events=('complications_count','sum'), total=('procedures_count','sum'))
         )
-        # Hospital approach counts by year from procedure_details
-        pd_approach = procedure_details.copy()
-        hosp_appr_year = pd.DataFrame()
-        if not pd_approach.empty:
-            pd_approach = pd_approach[pd_approach['hospital_id'].astype(str) == str(selected_hospital_id)]
-            if not pd_approach.empty:
-                hosp_appr_year = (
-                    pd_approach.groupby(['year','surgical_approach'], as_index=False)['procedure_count']
-                                .sum()
-                                .pivot(index='year', columns='surgical_approach', values='procedure_count')
-                                .reset_index()
-                )
-                for c in ['COE','ROB','LAP']:
-                    if c not in hosp_appr_year.columns:
-                        hosp_appr_year[c] = 0
+        # Load and process approach data from 03_tab_vda_new.csv
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        data_dir = os.path.join(script_dir, '..', 'data')
+        vda_path = os.path.join(data_dir, "03_tab_vda_new.csv")
+        try:
+            vda_df = pd.read_csv(vda_path, sep=';')
+            vda_df = vda_df.rename(columns={'finessGeoDP': 'hospital_id', 'annee': 'year', 'vda': 'approach', 'n': 'count'})
+            vda_df['hospital_id'] = vda_df['hospital_id'].astype(str)
+            hosp_vda = vda_df[vda_df['hospital_id'] == str(selected_hospital_id)]
+            hosp_appr_year = (
+                hosp_vda.pivot(index='year', columns='approach', values='count')
+                        .reset_index()
+                        .fillna(0)
+            )
+            for c in ['COE','ROB','LAP']:
+                if c not in hosp_appr_year.columns:
+                    hosp_appr_year[c] = 0
+        except Exception:
+            hosp_appr_year = pd.DataFrame()
         if not hosp_year_agg.empty and not hosp_appr_year.empty:
             merged = hosp_year_agg.merge(hosp_appr_year, on='year', how='inner')
             appr_cols = ['COE','ROB','LAP']
@@ -949,11 +954,12 @@ with tab_complications:
             show = show.melt('year', var_name='approach', value_name='Rate (%)')
             show['approach'] = show['approach'].str.replace('_rate_pct','', regex=False).map({'COE':'Coelioscopy','ROB':'Robotic','LAP':'Open Surgery'})
             if not show.empty:
-                st.plotly_chart(
-                    px.line(show.dropna(subset=['Rate (%)']), x='year', y='Rate (%)', color='approach', markers=True,
-                            title='Hospital complication rate by approach'),
-                    use_container_width=True
-                )
+                fig_hosp = px.line(show.dropna(subset=['Rate (%)']), x='year', y='Rate (%)', color='approach', markers=True,
+                                   title='Hospital complication rate by approach',
+                                   color_discrete_map={'Coelioscopy': '#50C878', 'Robotic': '#FF7518', 'Open Surgery': '#8e4585'})
+                fig_hosp.update_traces(line=dict(width=3), marker=dict(size=8))
+                fig_hosp.update_layout(height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_hosp, use_container_width=True)
                 # Show latest-year breakdown table for transparency
                 try:
                     y_latest = int(show['year'].max())
@@ -976,22 +982,23 @@ with tab_complications:
                         st.dataframe(ap_tbl, use_container_width=True, hide_index=True)
                 except Exception:
                     pass
-        # National comparison (using national complications and total approach volumes)
+        # National comparison using aggregated approach data
         nat = complications.copy()
         if 'quarter_date' in nat.columns:
             nat['year'] = nat['quarter_date'].dt.year
         nat_agg = nat.groupby('year', as_index=False).agg(events=('complications_count','sum'), total=('procedures_count','sum'))
-        nat_appr_year = pd.DataFrame()
-        if not procedure_details.empty:
+        try:
+            nat_vda = vda_df.groupby(['year','approach'], as_index=False)['count'].sum()
             nat_appr_year = (
-                procedure_details.groupby(['year','surgical_approach'], as_index=False)['procedure_count']
-                                 .sum()
-                                 .pivot(index='year', columns='surgical_approach', values='procedure_count')
-                                 .reset_index()
+                nat_vda.pivot(index='year', columns='approach', values='count')
+                       .reset_index()
+                       .fillna(0)
             )
             for c in ['COE','ROB','LAP']:
                 if c not in nat_appr_year.columns:
                     nat_appr_year[c] = 0
+        except Exception:
+            nat_appr_year = pd.DataFrame()
         if not nat_agg.empty and not nat_appr_year.empty:
             nat_m = nat_agg.merge(nat_appr_year, on='year', how='inner')
             nat_cols = ['COE','ROB','LAP']
@@ -1003,11 +1010,12 @@ with tab_complications:
             nat_show = nat_m[['year'] + plot_n_cols].copy().melt('year', var_name='approach', value_name='Rate (%)')
             nat_show['approach'] = nat_show['approach'].str.replace('_rate_pct','', regex=False).map({'COE':'Coelioscopy','ROB':'Robotic','LAP':'Open Surgery'})
             if not nat_show.empty:
-                st.plotly_chart(
-                    px.line(nat_show.dropna(subset=['Rate (%)']), x='year', y='Rate (%)', color='approach', markers=True,
-                            title='National complication rate by approach'),
-                    use_container_width=True
-                )
+                fig_nat = px.line(nat_show.dropna(subset=['Rate (%)']), x='year', y='Rate (%)', color='approach', markers=True,
+                                  title='National complication rate by approach',
+                                  color_discrete_map={'Coelioscopy': '#50C878', 'Robotic': '#FF7518', 'Open Surgery': '#8e4585'})
+                fig_nat.update_traces(line=dict(width=3), marker=dict(size=8))
+                fig_nat.update_layout(height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_nat, use_container_width=True)
                 try:
                     y_latest_n = int(nat_show['year'].max())
                     rown = nat_m[nat_m['year'] == y_latest_n]
@@ -1031,18 +1039,26 @@ with tab_complications:
                     pass
         # Latest-year side-by-side table (hospital vs national)
         try:
-            latest_year = int(max(show['year'].max(), nat_show['year'].max()))
-            latest_h = show[show['year'] == latest_year].dropna()
-            latest_n = nat_show[nat_show['year'] == latest_year].dropna()
-            if not latest_h.empty and not latest_n.empty:
-                comp = latest_h.merge(latest_n, on=['year','approach'], suffixes=(' (Hosp)',' (Nat)'))
-                comp = comp[['approach','Rate (%) (Hosp)','Rate (%) (Nat)']].sort_values('approach')
-                st.markdown(f"##### {latest_year} Comparison: Hospital vs National")
-                st.dataframe(comp.reset_index(drop=True), use_container_width=True, hide_index=True)
+            if not show.empty and not nat_show.empty:
+                latest_year = int(max(show['year'].max(), nat_show['year'].max()))
+            elif not show.empty:
+                latest_year = int(show['year'].max())
+            elif not nat_show.empty:
+                latest_year = int(nat_show['year'].max())
+            else:
+                latest_year = None
+            if latest_year:
+                latest_h = show[show['year'] == latest_year].dropna() if not show.empty else pd.DataFrame()
+                latest_n = nat_show[nat_show['year'] == latest_year].dropna() if not nat_show.empty else pd.DataFrame()
+                if not latest_h.empty and not latest_n.empty:
+                    comp = latest_h.merge(latest_n, on=['year','approach'], suffixes=(' (Hosp)',' (Nat)'))
+                    comp = comp[['approach','Rate (%) (Hosp)','Rate (%) (Nat)']].sort_values('approach')
+                    st.markdown(f"##### {latest_year} Comparison: Hospital vs National")
+                    st.dataframe(comp.reset_index(drop=True), use_container_width=True, hide_index=True)
         except Exception:
             pass
-    except Exception:
-        pass
+    except Exception as e:
+        st.error(f"Error computing approach-specific rates: {e}")
 
     # --- Revision surgeries deep‑dive (from procedure_details) ---
     try:
@@ -1061,7 +1077,17 @@ with tab_complications:
                 rr2.metric("Robotic revisions (2024)", f"{rob_rev_24:,}")
                 rr3.metric("Revision share of all 2024 procedures", f"{(total_rev_24/total_24*100):.1f}%")
 
-                # Revisions by procedure type (2024)
+                # Revisions by procedure type (2024) - use proper names
+                procedure_names = {
+                    'SLE': 'Sleeve Gastrectomy',
+                    'BPG': 'Gastric Bypass', 
+                    'ANN': 'Gastric Banding',
+                    'REV': 'Revision Surgery',
+                    'ABL': 'Band Removal',
+                    'DBP': 'Bilio-pancreatic Diversion',
+                    'GVC': 'Gastroplasty',
+                    'NDD': 'Not Defined'
+                }
                 rev_by_proc = (
                     rev24[rev24['is_revision'] == 1]
                     .groupby('procedure_type', as_index=False)['procedure_count']
@@ -1069,9 +1095,10 @@ with tab_complications:
                     .sort_values('procedure_count', ascending=False)
                 )
                 if not rev_by_proc.empty:
+                    rev_by_proc['procedure_name'] = rev_by_proc['procedure_type'].map(procedure_names).fillna(rev_by_proc['procedure_type'])
                     st.plotly_chart(
-                        px.bar(rev_by_proc, x='procedure_type', y='procedure_count', title='Revisions by Procedure Type (2024)',
-                               color='procedure_type'), use_container_width=True
+                        px.bar(rev_by_proc, x='procedure_name', y='procedure_count', title='Revisions by Procedure Type (2024)',
+                               color='procedure_name'), use_container_width=True
                     )
 
                 # Removed robotic share among revisions per request
