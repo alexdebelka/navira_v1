@@ -108,6 +108,41 @@ filtered_df = st.session_state.get('filtered_df', pd.DataFrame())
 selected_hospital_id = st.session_state.selected_hospital_id
 national_averages = st.session_state.get('national_averages', {})
 
+# Fallback: compute national averages locally if missing (when landing directly here)
+@st.cache_data(show_spinner=False)
+def _compute_national_averages_fallback(annual_df: pd.DataFrame) -> dict:
+    try:
+        if annual_df is None or annual_df.empty:
+            return {}
+        df = annual_df.copy()
+        # Keep hospitals with sufficient volume if column exists
+        if 'total_procedures_year' in df.columns:
+            eligible = df[df['total_procedures_year'] >= 25]
+        else:
+            eligible = df
+        # Average per hospital across years for procedures and approaches
+        avg = {}
+        for col in ['SLE','BPG','ANN','REV','ABL','DBP','GVC','NDD','LAP','COE','ROB']:
+            if col in eligible.columns:
+                avg[col] = float(eligible.groupby('id')[col].mean().mean())
+        # Total surgeries per period per hospital, then mean across hospitals
+        if 'total_procedures_year' in eligible.columns:
+            totals = eligible.groupby('id')['total_procedures_year'].sum()
+            avg['total_procedures_period'] = float(totals.mean()) if not totals.empty else 0.0
+        # Approach mix percentages
+        total_approaches = sum(avg.get(c, 0) for c in ['LAP','COE','ROB'])
+        avg['approaches_pct'] = {}
+        if total_approaches > 0:
+            for code, name in {'LAP':'Open Surgery','COE':'Coelioscopy','ROB':'Robotic'}.items():
+                avg['approaches_pct'][name] = (avg.get(code, 0) / total_approaches) * 100
+        return avg
+    except Exception:
+        return {}
+
+if not national_averages:
+    national_averages = _compute_national_averages_fallback(annual)
+    st.session_state.national_averages = national_averages
+
 # --- Helper: robust complications lookup by hospital id ---
 @st.cache_data(show_spinner=False)
 def _get_hospital_complications(complications_df: pd.DataFrame, hospital_id: str) -> pd.DataFrame:
@@ -768,6 +803,21 @@ with tab_complications:
                              color='Metric', color_discrete_map={'Hospital':'#1f77b4','National':'#ff7f0e'})
             fig_bar.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig_bar, use_container_width=True)
+
+            # Expected vs observed for the latest 6‑month period
+            try:
+                latest_mask = (hosp_sem['year'] == sem_key[0]) & (hosp_sem['half'] == sem_key[1])
+                latest_row = hosp_sem[latest_mask].iloc[0]
+                hosp_events = float(latest_row['events'])
+                hosp_total = float(latest_row['total']) if 'total' in latest_row else float(latest_row['procedures_count'])
+                expected_events = hosp_total * (nat_val / 100.0)
+                excess = hosp_events - expected_events
+                ex1, ex2, ex3 = st.columns(3)
+                ex1.metric("Latest 6‑mo complications", f"{int(hosp_events):,}")
+                ex2.metric("Expected at nat. rate", f"{expected_events:.1f}")
+                ex3.metric("Excess (±)", f"{excess:+.1f}")
+            except Exception:
+                pass
         
         # Removed Quarterly Rate vs National chart due to unreliable hospital quarterly data
     else:
@@ -853,6 +903,126 @@ with tab_complications:
             
     except Exception as e:
         st.error(f"Error computing KM: {e}")
+
+    # --- Approach-specific complication rates (estimated by proportional allocation) ---
+    try:
+        st.markdown("#### Estimated Complication Rates by Surgical Approach")
+        # Build hospital yearly complications (events and totals)
+        hosp_year = hosp_comp.copy()
+        if 'quarter_date' in hosp_year.columns:
+            hosp_year['year'] = hosp_year['quarter_date'].dt.year
+        elif 'quarter' in hosp_year.columns:
+            hosp_year['year'] = hosp_year['quarter'].astype(str).str[:4].astype(int)
+        else:
+            hosp_year['year'] = pd.NA
+        hosp_year = hosp_year.dropna(subset=['year'])
+        hosp_year_agg = (
+            hosp_year.groupby('year', as_index=False)
+                     .agg(events=('complications_count','sum'), total=('procedures_count','sum'))
+        )
+        # Hospital approach counts by year from annual
+        appr_cols = [c for c in ['COE','ROB','LAP'] if c in selected_hospital_all_data.columns]
+        appr_year = selected_hospital_all_data[['annee'] + appr_cols].rename(columns={'annee':'year'}) if appr_cols else pd.DataFrame()
+        if not hosp_year_agg.empty and not appr_year.empty:
+            merged = hosp_year_agg.merge(appr_year, on='year', how='inner')
+            # Compute shares per approach and allocate events
+            for code in appr_cols:
+                merged[f'{code}_share'] = merged[code] / merged[appr_cols].sum(axis=1).replace(0, 1)
+                merged[f'{code}_events_est'] = merged['events'] * merged[f'{code}_share']
+                merged[f'{code}_rate_pct'] = (merged[f'{code}_events_est'] / merged[code].replace(0, pd.NA) * 100)
+            # Melt for plotting
+            plot_cols = [f'{c}_rate_pct' for c in appr_cols]
+            show = merged[['year'] + plot_cols].copy()
+            show = show.melt('year', var_name='approach', value_name='Rate (%)')
+            show['approach'] = show['approach'].str.replace('_rate_pct','', regex=False).map({'COE':'Coelioscopy','ROB':'Robotic','LAP':'Open Surgery'})
+            if not show.empty:
+                st.plotly_chart(
+                    px.line(show.dropna(subset=['Rate (%)']), x='year', y='Rate (%)', color='approach', markers=True,
+                            title='Hospital (estimated) complication rate by approach'),
+                    use_container_width=True
+                )
+        # National comparison (estimated)
+        nat = complications.copy()
+        if 'quarter_date' in nat.columns:
+            nat['year'] = nat['quarter_date'].dt.year
+        nat_agg = nat.groupby('year', as_index=False).agg(events=('complications_count','sum'), total=('procedures_count','sum'))
+        nat_appr_cols = [c for c in ['COE','ROB','LAP'] if c in annual.columns]
+        nat_appr_year = annual[['annee'] + nat_appr_cols].groupby('annee', as_index=False).sum().rename(columns={'annee':'year'}) if nat_appr_cols else pd.DataFrame()
+        if not nat_agg.empty and not nat_appr_year.empty:
+            nat_m = nat_agg.merge(nat_appr_year, on='year', how='inner')
+            for code in nat_appr_cols:
+                nat_m[f'{code}_share'] = nat_m[code] / nat_m[nat_appr_cols].sum(axis=1).replace(0, 1)
+                nat_m[f'{code}_events_est'] = nat_m['events'] * nat_m[f'{code}_share']
+                nat_m[f'{code}_rate_pct'] = (nat_m[f'{code}_events_est'] / nat_m[code].replace(0, pd.NA) * 100)
+            plot_n_cols = [f'{c}_rate_pct' for c in nat_appr_cols]
+            nat_show = nat_m[['year'] + plot_n_cols].copy().melt('year', var_name='approach', value_name='Rate (%)')
+            nat_show['approach'] = nat_show['approach'].str.replace('_rate_pct','', regex=False).map({'COE':'Coelioscopy','ROB':'Robotic','LAP':'Open Surgery'})
+            if not nat_show.empty:
+                st.plotly_chart(
+                    px.line(nat_show.dropna(subset=['Rate (%)']), x='year', y='Rate (%)', color='approach', markers=True,
+                            title='National (estimated) complication rate by approach'),
+                    use_container_width=True
+                )
+        # Latest-year side-by-side table (hospital vs national)
+        try:
+            latest_year = int(max(show['year'].max(), nat_show['year'].max()))
+            latest_h = show[show['year'] == latest_year].dropna()
+            latest_n = nat_show[nat_show['year'] == latest_year].dropna()
+            if not latest_h.empty and not latest_n.empty:
+                comp = latest_h.merge(latest_n, on=['year','approach'], suffixes=(' (Hosp)',' (Nat)'))
+                comp = comp[['approach','Rate (%) (Hosp)','Rate (%) (Nat)']].sort_values('approach')
+                st.markdown(f"##### {latest_year} Comparison: Hospital vs National (estimated)")
+                st.dataframe(comp.reset_index(drop=True), use_container_width=True, hide_index=True)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    # --- Revision surgeries deep‑dive (from procedure_details) ---
+    try:
+        st.markdown("#### Revision Surgeries Overview")
+        rev = procedure_details.copy()
+        if not rev.empty:
+            rev = rev[rev['hospital_id'].astype(str) == str(selected_hospital_id)]
+            if not rev.empty:
+                rev['is_revision'] = pd.to_numeric(rev.get('is_revision', 0), errors='coerce').fillna(0)
+                rev24 = rev[rev['year'] == 2024]
+                total_rev_24 = int(rev24[rev24['is_revision'] == 1]['procedure_count'].sum())
+                total_24 = int(rev24['procedure_count'].sum()) or 1
+                rob_rev_24 = int(rev24[(rev24['is_revision'] == 1) & (rev24['surgical_approach'] == 'ROB')]['procedure_count'].sum())
+                rr1, rr2, rr3 = st.columns(3)
+                rr1.metric("Revisions (2024)", f"{total_rev_24:,}")
+                rr2.metric("Robotic revisions (2024)", f"{rob_rev_24:,}")
+                rr3.metric("Revision share of all 2024 procedures", f"{(total_rev_24/total_24*100):.1f}%")
+
+                # Revisions by procedure type (2024)
+                rev_by_proc = (
+                    rev24[rev24['is_revision'] == 1]
+                    .groupby('procedure_type', as_index=False)['procedure_count']
+                    .sum()
+                    .sort_values('procedure_count', ascending=False)
+                )
+                if not rev_by_proc.empty:
+                    st.plotly_chart(
+                        px.bar(rev_by_proc, x='procedure_type', y='procedure_count', title='Revisions by Procedure Type (2024)',
+                               color='procedure_type'), use_container_width=True
+                    )
+
+                # Robotic share among revisions by year
+                rev_by_year = (
+                    rev[rev['is_revision'] == 1]
+                    .groupby(['year'], as_index=False)
+                    .agg(total=('procedure_count','sum'),
+                         robotic=('procedure_count', lambda s: int(rev.loc[s.index][rev.loc[s.index]['surgical_approach']=='ROB']['procedure_count'].sum())))
+                )
+                if not rev_by_year.empty:
+                    rev_by_year['Robotic %'] = rev_by_year.apply(lambda r: (r['robotic']/r['total']*100) if r['total']>0 else 0.0, axis=1)
+                    st.plotly_chart(
+                        px.line(rev_by_year, x='year', y='Robotic %', markers=True, title='Robotic Share Among Revisions'),
+                        use_container_width=True
+                    )
+    except Exception:
+        pass
 
 if not st.session_state.get('_limited_user'):
     with tab_geo:
