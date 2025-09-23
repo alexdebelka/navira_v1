@@ -943,15 +943,18 @@ with tab_complications:
             for code in appr_cols:
                 merged[f'{code}_events'] = merged['events'] * (merged[code] / row_tot)
                 merged[f'{code}_rate_pct'] = (merged[f'{code}_events'] / merged[code].replace(0, pd.NA) * 100)
+            
             # Melt for plotting
             plot_cols = [f'{c}_rate_pct' for c in appr_cols]
             show = merged[['year'] + plot_cols].copy()
             show = show.melt('year', var_name='approach', value_name='Rate (%)')
             show['approach'] = show['approach'].str.replace('_rate_pct','', regex=False).map({'COE':'Coelioscopy','ROB':'Robotic','LAP':'Open Surgery'})
+            
+            # Remove duplicates and handle NaN values properly
+            show = show.dropna(subset=['Rate (%)']).drop_duplicates(['year', 'approach'])
+            
             if not show.empty:
-                # Fill NaN values with 0 for approaches with no data in certain years
                 show_plot = show.copy()
-                show_plot['Rate (%)'] = show_plot['Rate (%)'].fillna(0)
                 
                 fig_hosp = px.line(show_plot, x='year', y='Rate (%)', color='approach', markers=True,
                                   title='Hospital complication rate by approach',
@@ -1007,10 +1010,12 @@ with tab_complications:
             plot_n_cols = [f'{c}_rate_pct' for c in nat_cols]
             nat_show = nat_m[['year'] + plot_n_cols].copy().melt('year', var_name='approach', value_name='Rate (%)')
             nat_show['approach'] = nat_show['approach'].str.replace('_rate_pct','', regex=False).map({'COE':'Coelioscopy','ROB':'Robotic','LAP':'Open Surgery'})
+            
+            # Remove duplicates and handle NaN values properly
+            nat_show = nat_show.dropna(subset=['Rate (%)']).drop_duplicates(['year', 'approach'])
+            
             if not nat_show.empty:
-                # Fill NaN values with 0 for approaches with no data in certain years
                 nat_show_plot = nat_show.copy()
-                nat_show_plot['Rate (%)'] = nat_show_plot['Rate (%)'].fillna(0)
                 
                 fig_nat = px.line(nat_show_plot, x='year', y='Rate (%)', color='approach', markers=True,
                                   title='National complication rate by approach',
