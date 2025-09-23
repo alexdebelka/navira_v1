@@ -854,101 +854,101 @@ with tab_complications:
 
 if not st.session_state.get('_limited_user'):
     with tab_geo:
-    st.subheader("Recruitment Zone and Competitors (Top-5 Choropleths)")
-    
-    # UI Controls
-    col1, col2 = st.columns(2)
-    with col1:
-        allocation = "even_split"
-    with col2:
-        max_competitors = st.slider("Max Competitors", 1, 5, 5, help="Number of competitor layers to show")
-    
-    # Import the new functionality
-    try:
-        from navira.map_renderer import create_recruitment_map, render_map_diagnostics
-        from navira.competitors import get_competitor_names
-        from navira.geo import get_geojson_summary, load_communes_geojson
+        st.subheader("Recruitment Zone and Competitors (Top-5 Choropleths)")
         
-        # Show GeoJSON status and add cache controls
-        # Removed GeoJSON status and cache controls per request
+        # UI Controls
+        col1, col2 = st.columns(2)
+        with col1:
+            allocation = "even_split"
+        with col2:
+            max_competitors = st.slider("Max Competitors", 1, 5, 5, help="Number of competitor layers to show")
         
-        # Prepare hospital info
-        hospital_info = {
-            'name': selected_hospital_details.get('name', 'Unknown Hospital'),
-            'latitude': selected_hospital_details.get('latitude'),
-            'longitude': selected_hospital_details.get('longitude')
-        }
-        
-        # Create the recruitment map
-        with st.spinner("🗺️ Generating recruitment zone choropleths..."):
-            recruitment_map, diagnostics = create_recruitment_map(
-                hospital_finess=str(selected_hospital_id),
-                hospital_info=hospital_info,
-                establishments_df=establishments,
-                allocation=allocation,
-                max_competitors=max_competitors
-            )
-        
-        # Render the map
-        st.markdown("### 🗺️ Interactive Recruitment Zone Map")
-        
+        # Import the new functionality
         try:
-            map_data = st_folium(
-                recruitment_map,
-                width=None,
-                height=600,
-                key="recruitment_choropleth_map",
-                use_container_width=True
-            )
-        except Exception as e:
-            st.error(f"Error rendering choropleth map: {e}")
-            st.info("Falling back to coordinate display...")
-            st.markdown(f"""
-            **Hospital Location:**
-            - **Name:** {hospital_info['name']}
-            - **Coordinates:** {hospital_info.get('latitude', 'N/A')}, {hospital_info.get('longitude', 'N/A')}
-            """)
-        
-        # Diagnostics panel removed per request
+            from navira.map_renderer import create_recruitment_map, render_map_diagnostics
+            from navira.competitors import get_competitor_names
+            from navira.geo import get_geojson_summary, load_communes_geojson
             
-    except ImportError as e:
-        st.error(f"Import error: {e}")
-        st.info("Using fallback simple map...")
+            # Show GeoJSON status and add cache controls
+            # Removed GeoJSON status and cache controls per request
+            
+            # Prepare hospital info
+            hospital_info = {
+                'name': selected_hospital_details.get('name', 'Unknown Hospital'),
+                'latitude': selected_hospital_details.get('latitude'),
+                'longitude': selected_hospital_details.get('longitude')
+            }
+            
+            # Create the recruitment map
+            with st.spinner("🗺️ Generating recruitment zone choropleths..."):
+                recruitment_map, diagnostics = create_recruitment_map(
+                    hospital_finess=str(selected_hospital_id),
+                    hospital_info=hospital_info,
+                    establishments_df=establishments,
+                    allocation=allocation,
+                    max_competitors=max_competitors
+                )
+            
+            # Render the map
+            st.markdown("### 🗺️ Interactive Recruitment Zone Map")
+            
+            try:
+                map_data = st_folium(
+                    recruitment_map,
+                    width=None,
+                    height=600,
+                    key="recruitment_choropleth_map",
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"Error rendering choropleth map: {e}")
+                st.info("Falling back to coordinate display...")
+                st.markdown(f"""
+                **Hospital Location:**
+                - **Name:** {hospital_info['name']}
+                - **Coordinates:** {hospital_info.get('latitude', 'N/A')}, {hospital_info.get('longitude', 'N/A')}
+                """)
+            
+            # Diagnostics panel removed per request
+                
+        except ImportError as e:
+            st.error(f"Import error: {e}")
+            st.info("Using fallback simple map...")
+            
+            # Fallback to simple map if new modules not available
+            try:
+                center = [float(selected_hospital_details.get('latitude')), float(selected_hospital_details.get('longitude'))]
+                if any(pd.isna(center)):
+                    raise ValueError
+            except Exception:
+                center = [48.8566, 2.3522]
+            
+            simple_map = folium.Map(location=center, zoom_start=10, tiles="OpenStreetMap")
+            folium.Marker(
+                location=center,
+                popup=f"<b>{selected_hospital_details.get('name', 'Selected Hospital')}</b>",
+                icon=folium.Icon(color='red', icon='hospital-o', prefix='fa')
+            ).add_to(simple_map)
+            
+            try:
+                st_folium(simple_map, width=None, height=500, key="fallback_simple_map", use_container_width=True)
+            except Exception as e:
+                st.error(f"Fallback map also failed: {e}")
         
-        # Fallback to simple map if new modules not available
-        try:
-            center = [float(selected_hospital_details.get('latitude')), float(selected_hospital_details.get('longitude'))]
-            if any(pd.isna(center)):
-                raise ValueError
-        except Exception:
-            center = [48.8566, 2.3522]
-        
-        simple_map = folium.Map(location=center, zoom_start=10, tiles="OpenStreetMap")
-        folium.Marker(
-            location=center,
-            popup=f"<b>{selected_hospital_details.get('name', 'Selected Hospital')}</b>",
-            icon=folium.Icon(color='red', icon='hospital-o', prefix='fa')
-        ).add_to(simple_map)
-        
-        try:
-            st_folium(simple_map, width=None, height=500, key="fallback_simple_map", use_container_width=True)
-        except Exception as e:
-            st.error(f"Fallback map also failed: {e}")
-
-    # Competitors list
-    st.markdown("#### Nearby/Competitor Hospitals")
-    hosp_competitors = competitors[competitors['hospital_id'] == str(selected_hospital_id)]
-    if not hosp_competitors.empty:
-        comp_named = hosp_competitors.merge(establishments[['id','name','ville','statut']], left_on='competitor_id', right_on='id', how='left')
-        comp_named = comp_named.sort_values('competitor_patients', ascending=False)
-        for _, r in comp_named.head(5).iterrows():
-            c1, c2, c3 = st.columns([3,2,1])
-            c1.markdown(f"**{r.get('name','Unknown')}**")
-            c1.caption(f"📍 {r.get('ville','')} ")
-            c2.markdown(r.get('statut',''))
-            c3.metric("Patients", f"{int(r.get('competitor_patients',0)):,}")
-    else:
-        st.info("No competitor data available.")
+        # Competitors list
+        st.markdown("#### Nearby/Competitor Hospitals")
+        hosp_competitors = competitors[competitors['hospital_id'] == str(selected_hospital_id)]
+        if not hosp_competitors.empty:
+            comp_named = hosp_competitors.merge(establishments[['id','name','ville','statut']], left_on='competitor_id', right_on='id', how='left')
+            comp_named = comp_named.sort_values('competitor_patients', ascending=False)
+            for _, r in comp_named.head(5).iterrows():
+                c1, c2, c3 = st.columns([3,2,1])
+                c1.markdown(f"**{r.get('name','Unknown')}**")
+                c1.caption(f"📍 {r.get('ville','')} ")
+                c2.markdown(r.get('statut',''))
+                c3.metric("Patients", f"{int(r.get('competitor_patients',0)):,}")
+        else:
+            st.info("No competitor data available.")
 
 # Stop here to avoid rendering legacy sections below while we transition to the tabbed layout
 st.stop()
