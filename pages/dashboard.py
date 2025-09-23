@@ -904,114 +904,121 @@ with tab_complications:
     except Exception as e:
         st.error(f"Error computing KM: {e}")
 
-    # --- Approach-specific complication rates (using complications data with approach allocation) ---
+    # --- Approach-specific complication rates (calculated directly from procedure_details) ---
     try:
         st.markdown("#### Complication Rates by Surgical Approach")
-        # Build hospital yearly complications (events and totals)
-        hosp_year = hosp_comp.copy()
-        if 'quarter_date' in hosp_year.columns:
-            hosp_year['year'] = hosp_year['quarter_date'].dt.year
-        elif 'quarter' in hosp_year.columns:
-            hosp_year['year'] = hosp_year['quarter'].astype(str).str[:4].astype(int)
-        else:
-            hosp_year['year'] = pd.NA
-        hosp_year = hosp_year.dropna(subset=['year'])
-        hosp_year_agg = (
-            hosp_year.groupby('year', as_index=False)
-                     .agg(events=('complications_count','sum'), total=('procedures_count','sum'))
-        )
-        
-        # Hospital approach counts by year from procedure_details
-        pd_approach = procedure_details.copy()
-        hosp_appr_year = pd.DataFrame()
-        if not pd_approach.empty:
-            pd_approach = pd_approach[pd_approach['hospital_id'].astype(str) == str(selected_hospital_id)]
-            if not pd_approach.empty:
-                hosp_appr_year = (
-                    pd_approach.groupby(['year','surgical_approach'], as_index=False)['procedure_count']
-                                .sum()
-                                .pivot(index='year', columns='surgical_approach', values='procedure_count')
-                                .reset_index()
+        # Calculate approach-specific complication rates directly from procedure_details
+        hosp_proc_details = procedure_details.copy()
+        if not hosp_proc_details.empty:
+            hosp_proc_details = hosp_proc_details[hosp_proc_details['hospital_id'].astype(str) == str(selected_hospital_id)]
+            if not hosp_proc_details.empty:
+                # Group by year and approach, sum procedures and revisions
+                approach_rates = (
+                    hosp_proc_details.groupby(['year', 'surgical_approach'], as_index=False)
+                    .agg(
+                        total_procedures=('procedure_count', 'sum'),
+                        revision_procedures=('procedure_count', lambda x: hosp_proc_details.loc[x.index, 'procedure_count'].where(
+                            hosp_proc_details.loc[x.index, 'is_revision'] == 1, 0
+                        ).sum())
+                    )
                 )
+                
+                # Calculate complication rates (revisions / total procedures * 100)
+                approach_rates['complication_rate'] = (approach_rates['revision_procedures'] / approach_rates['total_procedures'] * 100)
+                
+                # Pivot for plotting
+                hosp_appr_year = (
+                    approach_rates.pivot(index='year', columns='surgical_approach', values='complication_rate')
+                    .reset_index()
+                    .fillna(0)
+                )
+                
+                # Ensure all approach columns exist
                 for c in ['COE','ROB','LAP']:
                     if c not in hosp_appr_year.columns:
                         hosp_appr_year[c] = 0
-                        
-        if not hosp_year_agg.empty and not hosp_appr_year.empty:
-            merged = hosp_year_agg.merge(hosp_appr_year, on='year', how='inner')
-            appr_cols = ['COE','ROB','LAP']
-            # Compute shares per approach and allocate events proportionally
-            row_tot = merged[appr_cols].sum(axis=1).replace(0, 1)
-            for code in appr_cols:
-                merged[f'{code}_events'] = merged['events'] * (merged[code] / row_tot)
-                merged[f'{code}_rate_pct'] = (merged[f'{code}_events'] / merged[code].replace(0, pd.NA) * 100)
             
-            # Melt for plotting
-            plot_cols = [f'{c}_rate_pct' for c in appr_cols]
-            show = merged[['year'] + plot_cols].copy()
-            show = show.melt('year', var_name='approach', value_name='Rate (%)')
-            show['approach'] = show['approach'].str.replace('_rate_pct','', regex=False).map({'COE':'Coelioscopy','ROB':'Robotic','LAP':'Open Surgery'})
-            
-            # Remove duplicates and handle NaN values properly
-            show = show.dropna(subset=['Rate (%)']).drop_duplicates(['year', 'approach'])
-            
-            if not show.empty:
-                show_plot = show.copy()
+                # Melt for plotting
+                plot_cols = ['COE','ROB','LAP']
+                show = hosp_appr_year[['year'] + plot_cols].copy()
+                show = show.melt('year', var_name='approach', value_name='Rate (%)')
+                show['approach'] = show['approach'].map({'COE':'Coelioscopy','ROB':'Robotic','LAP':'Open Surgery'})
                 
-                fig_hosp = px.line(show_plot, x='year', y='Rate (%)', color='approach', markers=True,
-                                  title='Hospital complication rate by approach',
-                                  color_discrete_map={'Coelioscopy': '#1f77b4', 'Robotic': '#ff7f0e', 'Open Surgery': '#2ca02c'})
-                fig_hosp.update_traces(line=dict(width=3), marker=dict(size=8))
-                fig_hosp.update_layout(height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_hosp, use_container_width=True)
-                # Show latest-year breakdown table for transparency
-                try:
-                    y_latest = int(show['year'].max())
-                    row = merged[merged['year'] == y_latest]
-                    if not row.empty:
-                        ap_tbl = pd.DataFrame({
-                            'Approach': ['Coelioscopy','Robotic','Open Surgery'],
-                            'Procedures': [int(row['COE'].iloc[0]), int(row['ROB'].iloc[0]), int(row['LAP'].iloc[0])],
-                            'Allocated events': [
-                                float(row['COE_events'].iloc[0]),
-                                float(row['ROB_events'].iloc[0]),
-                                float(row['LAP_events'].iloc[0])
-                            ],
-                            'Rate (%)': [
-                                float(row['COE_rate_pct'].iloc[0]),
-                                float(row['ROB_rate_pct'].iloc[0]),
-                                float(row['LAP_rate_pct'].iloc[0])
-                            ]
-                        })
-                        st.dataframe(ap_tbl, use_container_width=True, hide_index=True)
-                except Exception:
-                    pass
-        # National comparison (using complications data with approach allocation)
-        nat = complications.copy()
-        if 'quarter_date' in nat.columns:
-            nat['year'] = nat['quarter_date'].dt.year
-        nat_agg = nat.groupby('year', as_index=False).agg(events=('complications_count','sum'), total=('procedures_count','sum'))
-        nat_appr_year = pd.DataFrame()
+                # Remove duplicates and handle NaN values properly
+                show = show.dropna(subset=['Rate (%)']).drop_duplicates(['year', 'approach'])
+                
+                if not show.empty:
+                    show_plot = show.copy()
+                    
+                    fig_hosp = px.line(show_plot, x='year', y='Rate (%)', color='approach', markers=True,
+                                      title='Hospital complication rate by approach',
+                                      color_discrete_map={'Coelioscopy': '#1f77b4', 'Robotic': '#ff7f0e', 'Open Surgery': '#2ca02c'})
+                    fig_hosp.update_traces(line=dict(width=3), marker=dict(size=8))
+                    fig_hosp.update_layout(height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_hosp, use_container_width=True)
+                    # Show latest-year breakdown table for transparency
+                    try:
+                        y_latest = int(show['year'].max())
+                        latest_rates = approach_rates[approach_rates['year'] == y_latest]
+                        if not latest_rates.empty:
+                            # Get the latest year data for the table
+                            latest_coe = latest_rates[latest_rates['surgical_approach'] == 'COE']
+                            latest_rob = latest_rates[latest_rates['surgical_approach'] == 'ROB']
+                            latest_lap = latest_rates[latest_rates['surgical_approach'] == 'LAP']
+                            
+                            ap_tbl = pd.DataFrame({
+                                'Approach': ['Coelioscopy','Robotic','Open Surgery'],
+                                'Procedures': [
+                                    int(latest_coe['total_procedures'].iloc[0]) if not latest_coe.empty else 0,
+                                    int(latest_rob['total_procedures'].iloc[0]) if not latest_rob.empty else 0,
+                                    int(latest_lap['total_procedures'].iloc[0]) if not latest_lap.empty else 0
+                                ],
+                                'Revisions': [
+                                    int(latest_coe['revision_procedures'].iloc[0]) if not latest_coe.empty else 0,
+                                    int(latest_rob['revision_procedures'].iloc[0]) if not latest_rob.empty else 0,
+                                    int(latest_lap['revision_procedures'].iloc[0]) if not latest_lap.empty else 0
+                                ],
+                                'Rate (%)': [
+                                    float(latest_coe['complication_rate'].iloc[0]) if not latest_coe.empty else 0,
+                                    float(latest_rob['complication_rate'].iloc[0]) if not latest_rob.empty else 0,
+                                    float(latest_lap['complication_rate'].iloc[0]) if not latest_lap.empty else 0
+                                ]
+                            })
+                            st.dataframe(ap_tbl, use_container_width=True, hide_index=True)
+                    except Exception:
+                        pass
+        # National comparison (calculated directly from procedure_details)
         if not procedure_details.empty:
-            nat_appr_year = (
-                procedure_details.groupby(['year','surgical_approach'], as_index=False)['procedure_count']
-                                 .sum()
-                                 .pivot(index='year', columns='surgical_approach', values='procedure_count')
-                                 .reset_index()
+            # Calculate national approach-specific complication rates
+            nat_approach_rates = (
+                procedure_details.groupby(['year', 'surgical_approach'], as_index=False)
+                .agg(
+                    total_procedures=('procedure_count', 'sum'),
+                    revision_procedures=('procedure_count', lambda x: procedure_details.loc[x.index, 'procedure_count'].where(
+                        procedure_details.loc[x.index, 'is_revision'] == 1, 0
+                    ).sum())
+                )
             )
+            
+            # Calculate national complication rates
+            nat_approach_rates['complication_rate'] = (nat_approach_rates['revision_procedures'] / nat_approach_rates['total_procedures'] * 100)
+            
+            # Pivot for plotting
+            nat_appr_year = (
+                nat_approach_rates.pivot(index='year', columns='surgical_approach', values='complication_rate')
+                .reset_index()
+                .fillna(0)
+            )
+            
+            # Ensure all approach columns exist
             for c in ['COE','ROB','LAP']:
                 if c not in nat_appr_year.columns:
                     nat_appr_year[c] = 0
-        if not nat_agg.empty and not nat_appr_year.empty:
-            nat_m = nat_agg.merge(nat_appr_year, on='year', how='inner')
-            nat_cols = ['COE','ROB','LAP']
-            row_tot_n = nat_m[nat_cols].sum(axis=1).replace(0, 1)
-            for code in nat_cols:
-                nat_m[f'{code}_events'] = nat_m['events'] * (nat_m[code] / row_tot_n)
-                nat_m[f'{code}_rate_pct'] = (nat_m[f'{code}_events'] / nat_m[code].replace(0, pd.NA) * 100)
-            plot_n_cols = [f'{c}_rate_pct' for c in nat_cols]
-            nat_show = nat_m[['year'] + plot_n_cols].copy().melt('year', var_name='approach', value_name='Rate (%)')
-            nat_show['approach'] = nat_show['approach'].str.replace('_rate_pct','', regex=False).map({'COE':'Coelioscopy','ROB':'Robotic','LAP':'Open Surgery'})
+            
+            # Melt for plotting
+            plot_n_cols = ['COE','ROB','LAP']
+            nat_show = nat_appr_year[['year'] + plot_n_cols].copy().melt('year', var_name='approach', value_name='Rate (%)')
+            nat_show['approach'] = nat_show['approach'].map({'COE':'Coelioscopy','ROB':'Robotic','LAP':'Open Surgery'})
             
             # Remove duplicates and handle NaN values properly
             nat_show = nat_show.dropna(subset=['Rate (%)']).drop_duplicates(['year', 'approach'])
@@ -1027,20 +1034,29 @@ with tab_complications:
                 st.plotly_chart(fig_nat, use_container_width=True)
                 try:
                     y_latest_n = int(nat_show['year'].max())
-                    rown = nat_m[nat_m['year'] == y_latest_n]
-                    if not rown.empty:
+                    latest_nat_rates = nat_approach_rates[nat_approach_rates['year'] == y_latest_n]
+                    if not latest_nat_rates.empty:
+                        # Get the latest year national data for the table
+                        latest_nat_coe = latest_nat_rates[latest_nat_rates['surgical_approach'] == 'COE']
+                        latest_nat_rob = latest_nat_rates[latest_nat_rates['surgical_approach'] == 'ROB']
+                        latest_nat_lap = latest_nat_rates[latest_nat_rates['surgical_approach'] == 'LAP']
+                        
                         ap_nt = pd.DataFrame({
                             'Approach': ['Coelioscopy','Robotic','Open Surgery'],
-                            'Procedures': [int(rown['COE'].iloc[0]), int(rown['ROB'].iloc[0]), int(rown['LAP'].iloc[0])],
-                            'Allocated events': [
-                                float(rown['COE_events'].iloc[0]),
-                                float(rown['ROB_events'].iloc[0]),
-                                float(rown['LAP_events'].iloc[0])
+                            'Procedures': [
+                                int(latest_nat_coe['total_procedures'].iloc[0]) if not latest_nat_coe.empty else 0,
+                                int(latest_nat_rob['total_procedures'].iloc[0]) if not latest_nat_rob.empty else 0,
+                                int(latest_nat_lap['total_procedures'].iloc[0]) if not latest_nat_lap.empty else 0
+                            ],
+                            'Revisions': [
+                                int(latest_nat_coe['revision_procedures'].iloc[0]) if not latest_nat_coe.empty else 0,
+                                int(latest_nat_rob['revision_procedures'].iloc[0]) if not latest_nat_rob.empty else 0,
+                                int(latest_nat_lap['revision_procedures'].iloc[0]) if not latest_nat_lap.empty else 0
                             ],
                             'Rate (%)': [
-                                float(rown['COE_rate_pct'].iloc[0]),
-                                float(rown['ROB_rate_pct'].iloc[0]),
-                                float(rown['LAP_rate_pct'].iloc[0])
+                                float(latest_nat_coe['complication_rate'].iloc[0]) if not latest_nat_coe.empty else 0,
+                                float(latest_nat_rob['complication_rate'].iloc[0]) if not latest_nat_rob.empty else 0,
+                                float(latest_nat_lap['complication_rate'].iloc[0]) if not latest_nat_lap.empty else 0
                             ]
                         })
                         st.dataframe(ap_nt, use_container_width=True, hide_index=True)
