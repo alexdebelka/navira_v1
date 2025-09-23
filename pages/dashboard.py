@@ -949,11 +949,16 @@ with tab_complications:
             show = show.melt('year', var_name='approach', value_name='Rate (%)')
             show['approach'] = show['approach'].str.replace('_rate_pct','', regex=False).map({'COE':'Coelioscopy','ROB':'Robotic','LAP':'Open Surgery'})
             if not show.empty:
-                st.plotly_chart(
-                    px.line(show.dropna(subset=['Rate (%)']), x='year', y='Rate (%)', color='approach', markers=True,
-                            title='Hospital complication rate by approach'),
-                    use_container_width=True
-                )
+                # Fill NaN values with 0 for approaches with no data in certain years
+                show_plot = show.copy()
+                show_plot['Rate (%)'] = show_plot['Rate (%)'].fillna(0)
+                
+                fig_hosp = px.line(show_plot, x='year', y='Rate (%)', color='approach', markers=True,
+                                  title='Hospital complication rate by approach',
+                                  color_discrete_map={'Coelioscopy': '#1f77b4', 'Robotic': '#ff7f0e', 'Open Surgery': '#2ca02c'})
+                fig_hosp.update_traces(line=dict(width=3), marker=dict(size=8))
+                fig_hosp.update_layout(height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_hosp, use_container_width=True)
                 # Show latest-year breakdown table for transparency
                 try:
                     y_latest = int(show['year'].max())
@@ -1003,11 +1008,16 @@ with tab_complications:
             nat_show = nat_m[['year'] + plot_n_cols].copy().melt('year', var_name='approach', value_name='Rate (%)')
             nat_show['approach'] = nat_show['approach'].str.replace('_rate_pct','', regex=False).map({'COE':'Coelioscopy','ROB':'Robotic','LAP':'Open Surgery'})
             if not nat_show.empty:
-                st.plotly_chart(
-                    px.line(nat_show.dropna(subset=['Rate (%)']), x='year', y='Rate (%)', color='approach', markers=True,
-                            title='National complication rate by approach'),
-                    use_container_width=True
-                )
+                # Fill NaN values with 0 for approaches with no data in certain years
+                nat_show_plot = nat_show.copy()
+                nat_show_plot['Rate (%)'] = nat_show_plot['Rate (%)'].fillna(0)
+                
+                fig_nat = px.line(nat_show_plot, x='year', y='Rate (%)', color='approach', markers=True,
+                                  title='National complication rate by approach',
+                                  color_discrete_map={'Coelioscopy': '#1f77b4', 'Robotic': '#ff7f0e', 'Open Surgery': '#2ca02c'})
+                fig_nat.update_traces(line=dict(width=3), marker=dict(size=8))
+                fig_nat.update_layout(height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_nat, use_container_width=True)
                 try:
                     y_latest_n = int(nat_show['year'].max())
                     rown = nat_m[nat_m['year'] == y_latest_n]
