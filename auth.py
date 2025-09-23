@@ -431,7 +431,26 @@ def login_page():
                     save_session_to_file(session_token, user)
                     
                     st.success("Login successful!")
-                    st.session_state.current_page = "dashboard"
+                    # For limited pilot user, go straight to hospital dashboard with Avicenne
+                    try:
+                        uname = (user or {}).get('username', '')
+                        mail = (user or {}).get('email', '')
+                        is_limited = uname == 'andrea.lazzati' or str(mail).startswith('andrea.lazzati')
+                    except Exception:
+                        is_limited = False
+                    if is_limited:
+                        try:
+                            st.session_state._limited_user = True
+                            st.session_state.selected_hospital_id = '930100037'
+                            st.session_state.current_page = "hospital"
+                            from navigation_utils import navigate_to_hospital_dashboard
+                            navigate_to_hospital_dashboard()
+                            return True
+                        except Exception:
+                            st.session_state.navigate_to = "hospital"
+                            st.rerun()
+                    else:
+                        st.session_state.current_page = "dashboard"
                     
                     # Track login
                     try:
