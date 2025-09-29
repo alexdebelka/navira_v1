@@ -344,13 +344,56 @@ st.markdown("---")
 st.markdown(
     """
     <style>
-      /* Enlarge the top navigation tabs for better visibility */
-      div[data-testid="stTabs"] div[role="tablist"] { gap: 14px; }
-      div[data-testid="stTabs"] button[role="tab"] {
-        font-size: 1.10rem;
-        padding: 12px 20px;
+      /* Make navigation tabs much bigger and more prominent */
+      div[data-testid="stTabs"] {
+        margin: 20px 0 30px 0;
       }
-      div[data-testid="stTabs"] button[role="tab"] p { font-size: 1.10rem; }
+      div[data-testid="stTabs"] div[role="tablist"] { 
+        gap: 20px; 
+        border-bottom: 3px solid #f0f2f6;
+        padding-bottom: 5px;
+      }
+      div[data-testid="stTabs"] button[role="tab"] {
+        font-size: 1.8rem !important;
+        font-weight: 600 !important;
+        padding: 20px 35px !important;
+        margin: 0 5px !important;
+        border-radius: 12px 12px 0 0 !important;
+        border: none !important;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+        color: #495057 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+      }
+      div[data-testid="stTabs"] button[role="tab"]:hover {
+        background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+      }
+      div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+        color: white !important;
+        font-weight: 700 !important;
+        box-shadow: 0 4px 15px rgba(0,123,255,0.3) !important;
+      }
+      div[data-testid="stTabs"] button[role="tab"] p { 
+        font-size: 1.8rem !important;
+        font-weight: 600 !important;
+        margin: 0 !important;
+      }
+      /* Make the active tab indicator more prominent */
+      div[data-testid="stTabs"] button[role="tab"][aria-selected="true"]::after {
+        content: '';
+        position: absolute;
+        bottom: -8px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80%;
+        height: 4px;
+        background: #007bff;
+        border-radius: 2px;
+        box-shadow: 0 2px 8px rgba(0,123,255,0.4);
+      }
     </style>
     """,
     unsafe_allow_html=True,
