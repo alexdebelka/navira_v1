@@ -191,7 +191,20 @@ selected_hospital_all_data = annual[annual['id'] == str(selected_hospital_id)]
 # --- (The rest of your dashboard page code follows here) ---
 # I'm including the rest of the file for completeness.
 st.title("📊 Hospital Details Dashboard")
-st.markdown(f"## {selected_hospital_details['name']}")
+
+# Hospital header with name and address
+st.markdown(f"## 🏥 {selected_hospital_details['name']}")
+
+# Address section
+if 'adresse' in selected_hospital_details and pd.notna(selected_hospital_details['adresse']):
+    address_line = f"📍 {selected_hospital_details['adresse']}, {selected_hospital_details['code_postal']} {selected_hospital_details['ville']}"
+    st.markdown(f"**Address:** {address_line}")
+else:
+    st.markdown(f"**Address:** {selected_hospital_details['code_postal']} {selected_hospital_details['ville']}")
+
+st.markdown("---")
+
+# Hospital details in columns
 col1, col2, col3 = st.columns(3)
 col1.markdown(f"**City:** {selected_hospital_details['ville']}")
 col2.markdown(f"**Status:** {selected_hospital_details['statut']}")
@@ -200,7 +213,7 @@ if 'Distance (km)' in selected_hospital_details:
 st.markdown("---")
 metric_col1, metric_col2 = st.columns(2)
 with metric_col1:
-    st.markdown("#### Surgery Statistics (2020-2024)")
+    st.markdown("#### 📊 Summary (2020-2024)")
     total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
     total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
     hospital_revision_pct = (total_rev_hospital / total_proc_hospital) * 100 if total_proc_hospital > 0 else 0
@@ -233,20 +246,75 @@ with metric_col1:
         #     value=f"{national_revision_pct:.1f}%"
         # )
 
-    # Procedure mix metrics (2020-2024): Sleeve, Bypass, Other
+    # Procedure mix pie chart (2020-2024)
     try:
         proc_cols_present = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
         sleeve_total = int(selected_hospital_all_data.get('SLE', pd.Series(dtype=float)).sum()) if 'SLE' in proc_cols_present else 0
         bypass_total = int(selected_hospital_all_data.get('BPG', pd.Series(dtype=float)).sum()) if 'BPG' in proc_cols_present else 0
         other_codes = [c for c in proc_cols_present if c not in ['SLE', 'BPG']]
         other_total = int(selected_hospital_all_data[other_codes].sum().sum()) if other_codes else 0
-        st.markdown("#### Procedure Mix (2020-2024)")
-        p1, p2, p3 = st.columns(3)
-        p1.metric("Sleeve", f"{sleeve_total:,}")
-        p2.metric("Gastric Bypass", f"{bypass_total:,}")
-        p3.metric("Other", f"{other_total:,}")
-    except Exception:
-        pass
+        
+        # Create procedure mix data for pie chart
+        procedure_data = []
+        if sleeve_total > 0:
+            procedure_data.append({'Procedure': 'Sleeve Gastrectomy', 'Count': sleeve_total, 'Color': '#1f77b4'})
+        if bypass_total > 0:
+            procedure_data.append({'Procedure': 'Gastric Bypass', 'Count': bypass_total, 'Color': '#ff7f0e'})
+        if other_total > 0:
+            procedure_data.append({'Procedure': 'Other Procedures', 'Count': other_total, 'Color': '#2ca02c'})
+        
+        if procedure_data:
+            st.markdown("##### 🥧 Procedure Mix Distribution")
+            df_procedures = pd.DataFrame(procedure_data)
+            
+            # Create pie chart with improved styling
+            fig = px.pie(df_procedures, 
+                        values='Count', 
+                        names='Procedure',
+                        color_discrete_sequence=['#1f77b4', '#ff7f0e', '#2ca02c'],
+                        hole=0.4)  # Donut chart for modern look
+            
+            # Improve chart styling
+            fig.update_traces(
+                textposition='inside', 
+                textinfo='percent+label',
+                hovertemplate='<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>'
+            )
+            
+            fig.update_layout(
+                height=350,
+                margin=dict(l=20, r=20, t=40, b=20),
+                showlegend=True,
+                legend=dict(
+                    orientation="v",
+                    yanchor="middle",
+                    y=0.5,
+                    xanchor="left",
+                    x=1.02
+                ),
+                font=dict(size=12),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
+            )
+            
+            # Display the pie chart
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Add summary metrics below the chart
+            total_procedures = sleeve_total + bypass_total + other_total
+            if total_procedures > 0:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Sleeve Gastrectomy", f"{sleeve_total:,}", f"{(sleeve_total/total_procedures*100):.1f}%")
+                with col2:
+                    st.metric("Gastric Bypass", f"{bypass_total:,}", f"{(bypass_total/total_procedures*100):.1f}%")
+                with col3:
+                    st.metric("Other Procedures", f"{other_total:,}", f"{(other_total/total_procedures*100):.1f}%")
+        else:
+            st.info("No procedure data available for this hospital.")
+            
+    except Exception as e:
+        st.warning(f"Unable to display procedure mix: {str(e)}")
 with metric_col2:
     st.markdown("#### Labels & Affiliations")
     if selected_hospital_details.get('university') == 1: st.success("🎓 University Hospital")
