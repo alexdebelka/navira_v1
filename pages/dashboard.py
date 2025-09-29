@@ -338,7 +338,7 @@ with metric_col2:
             st.markdown("##### Robotic Share Trend (%)")
             st.plotly_chart(spark2, use_container_width=True)
 
-#f0f2f6
+
 # --- New Tabbed Layout: Activity, Complications, Geography ---
 st.markdown("---")
 st.markdown(
@@ -733,12 +733,97 @@ with tab_activity:
     col1, col2 = st.columns([2, 1])  # Hospital graphs larger (2), National graphs smaller (1)
     
     with col1:
-        st.markdown("#### Hospital: Total Surgeries per Year")
+        # Combined chart: Total Surgeries line + Procedure Mix bars
+        st.markdown("#### Hospital: Total Surgeries & Procedure Mix")
+        
+        # Get procedure data for the combined chart
+        proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
         hosp_year = selected_hospital_all_data[['annee','total_procedures_year']].dropna()
-        if not hosp_year.empty:
-            fig = px.line(hosp_year, x='annee', y='total_procedures_year', markers=True, title='Hospital Total Surgeries')
-            fig.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig, use_container_width=True)
+        
+        if not hosp_year.empty and proc_codes:
+            # Create procedure mix data
+            proc_df = selected_hospital_all_data[['annee']+proc_codes].copy()
+            proc_long = []
+            for _, r in proc_df.iterrows():
+                total = max(1, sum(r[c] for c in proc_codes))
+                sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
+                other = total - sleeve - bypass
+                for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
+                    proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
+            pl = pd.DataFrame(proc_long)
+            
+            if not pl.empty:
+                # Create the combined chart
+                fig = go.Figure()
+                
+                # Add stacked bar chart for procedure mix
+                colors = {'Sleeve': '#ffae91', 'Gastric Bypass': '#60a5fa', 'Other': '#fbbf24'}
+                for procedure in pl['Procedures'].unique():
+                    data = pl[pl['Procedures'] == procedure]
+                    fig.add_trace(go.Bar(
+                        x=data['annee'],
+                        y=data['Share'],
+                        name=procedure,
+                        marker_color=colors.get(procedure, '#cccccc'),
+                        yaxis='y',
+                        opacity=0.7
+                    ))
+                
+                # Add line chart for total surgeries (on secondary y-axis)
+                hosp_year_clean = hosp_year.dropna()
+                fig.add_trace(go.Scatter(
+                    x=hosp_year_clean['annee'],
+                    y=hosp_year_clean['total_procedures_year'],
+                    mode='lines+markers',
+                    name='Total Surgeries',
+                    line=dict(color='#ff0000', width=4),
+                    marker=dict(size=8, color='#ff0000'),
+                    yaxis='y2',
+                    hovertemplate='<b>Total Surgeries</b><br>Year: %{x}<br>Count: %{y}<extra></extra>'
+                ))
+                
+                # Update layout with dual y-axes
+                fig.update_layout(
+                    height=400,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    barmode='stack',
+                    title='Total Surgeries & Procedure Mix Overlay',
+                    xaxis_title='Year',
+                    yaxis=dict(
+                        title='Procedure Share (%)',
+                        side='left',
+                        range=[0, 100]
+                    ),
+                    yaxis2=dict(
+                        title='Total Surgeries Count',
+                        side='right',
+                        overlaying='y',
+                        range=[0, max(hosp_year_clean['total_procedures_year']) * 1.1]
+                    ),
+                    legend=dict(
+                        orientation="v",
+                        yanchor="top",
+                        y=1,
+                        xanchor="left",
+                        x=1.02
+                    )
+                )
+                
+                # Update bar hover templates
+                fig.update_traces(
+                    selector=dict(type="bar"),
+                    hovertemplate='<b>%{fullData.name}</b><br>Year: %{x}<br>Share: %{y:.1f}%<extra></extra>'
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Add summary metrics below the chart
+                st.markdown("**Chart Explanation:**")
+                st.markdown("- **Colored bars** show the percentage share of each procedure type per year")
+                st.markdown("- **Red line** shows the total number of surgeries performed per year")
+                st.markdown("- **Left y-axis** shows procedure share percentages")
+                st.markdown("- **Right y-axis** shows total surgery counts")
     
     with col2:
         st.markdown("#### National: Average Surgeries per Hospital")
@@ -760,20 +845,6 @@ with tab_activity:
     proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
     if proc_codes:
         col1, col2 = st.columns([2, 1])  # Hospital graphs larger (2), National graphs smaller (1)
-        
-        with col1:
-            st.markdown("#### Hospital: Procedure Mix (share %)")
-            proc_df = selected_hospital_all_data[['annee']+proc_codes].copy()
-            proc_long = []
-            for _, r in proc_df.iterrows():
-                total = max(1, sum(r[c] for c in proc_codes))
-                sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
-                other = total - sleeve - bypass
-                for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
-                    proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
-            pl = pd.DataFrame(proc_long)
-            if not pl.empty:
-                st.plotly_chart(px.bar(pl, x='annee', y='Share', color='Procedures', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
         
         with col2:
             st.markdown("#### National: Procedure Mix (share %)")
