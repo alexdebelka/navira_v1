@@ -338,7 +338,7 @@ with metric_col2:
             st.markdown("##### Robotic Share Trend (%)")
             st.plotly_chart(spark2, use_container_width=True)
 
-    
+#f0f2f6
 # --- New Tabbed Layout: Activity, Complications, Geography ---
 st.markdown("---")
 st.markdown(
@@ -350,11 +350,11 @@ st.markdown(
       }
       div[data-testid="stTabs"] div[role="tablist"] { 
         gap: 20px; 
-        border-bottom: 3px solid #f0f2f6;
+        border-bottom: 3px solid #808080; 
         padding-bottom: 5px;
       }
       div[data-testid="stTabs"] button[role="tab"] {
-        font-size: 1.8rem !important;
+        font-size: 1.1rem !important;
         font-weight: 600 !important;
         padding: 20px 35px !important;
         margin: 0 5px !important;
