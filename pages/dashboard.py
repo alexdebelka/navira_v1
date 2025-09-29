@@ -776,8 +776,8 @@ with tab_activity:
                     y=hosp_year_clean['total_procedures_year'],
                     mode='lines+markers',
                     name='Total Surgeries',
-                    line=dict(color='#ff0000', width=4),
-                    marker=dict(size=8, color='#ff0000'),
+                    line=dict(color='#961316', width=4),
+                    marker=dict(size=8, color='#961316'),
                     yaxis='y2',
                     hovertemplate='<b>Total Surgeries</b><br>Year: %{x}<br>Count: %{y}<extra></extra>'
                 ))
@@ -821,13 +821,15 @@ with tab_activity:
                 # Add summary metrics below the chart
                 st.markdown("**Chart Explanation:**")
                 st.markdown("- **Colored bars** show the percentage share of each procedure type per year")
-                st.markdown("- **Red line** shows the total number of surgeries performed per year")
+                st.markdown("- **Dark red line** shows the total number of surgeries performed per year")
                 st.markdown("- **Left y-axis** shows procedure share percentages")
                 st.markdown("- **Right y-axis** shows total surgery counts")
     
     with col2:
-        st.markdown("#### National: Average Surgeries per Hospital")
-        if national_averages:
+        # Combined chart: National Average Surgeries line + National Procedure Mix bars
+        st.markdown("#### National: Average Surgeries & Procedure Mix")
+        
+        if national_averages and proc_codes:
             # Create national trend data
             nat_data = []
             for year in range(2020, 2025):
@@ -836,18 +838,6 @@ with tab_activity:
                     avg_procedures = year_data['total_procedures_year'].mean()
                     nat_data.append({'Year': year, 'Avg Procedures': avg_procedures})
             
-            if nat_data:
-                nat_df = pd.DataFrame(nat_data)
-                fig = px.line(nat_df, x='Year', y='Avg Procedures', markers=True, title='National Average')
-                fig.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-    # Procedure share (3 buckets)
-    proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
-    if proc_codes:
-        col1, col2 = st.columns([2, 1])  # Hospital graphs larger (2), National graphs smaller (1)
-        
-        with col2:
-            st.markdown("#### National: Procedure Mix (share %)")
             # Create national procedure mix data
             nat_proc_data = []
             for year in range(2020, 2025):
@@ -862,9 +852,85 @@ with tab_activity:
                         for label, val in [("Sleeve", total_sleeve), ("Gastric Bypass", total_bypass), ("Other", total_other)]:
                             nat_proc_data.append({'Year': year, 'Procedures': label, 'Share': (val / total_all) * 100})
             
-            if nat_proc_data:
+            if nat_data and nat_proc_data:
+                nat_df = pd.DataFrame(nat_data)
                 nat_proc_df = pd.DataFrame(nat_proc_data)
-                st.plotly_chart(px.bar(nat_proc_df, x='Year', y='Share', color='Procedures', barmode='stack').update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+                
+                # Create the combined national chart
+                fig_nat = go.Figure()
+                
+                # Add stacked bar chart for national procedure mix
+                colors = {'Sleeve': '#ffae91', 'Gastric Bypass': '#60a5fa', 'Other': '#fbbf24'}
+                for procedure in nat_proc_df['Procedures'].unique():
+                    data = nat_proc_df[nat_proc_df['Procedures'] == procedure]
+                    fig_nat.add_trace(go.Bar(
+                        x=data['Year'],
+                        y=data['Share'],
+                        name=procedure,
+                        marker_color=colors.get(procedure, '#cccccc'),
+                        yaxis='y',
+                        opacity=0.7
+                    ))
+                
+                # Add line chart for national average surgeries (on secondary y-axis)
+                fig_nat.add_trace(go.Scatter(
+                    x=nat_df['Year'],
+                    y=nat_df['Avg Procedures'],
+                    mode='lines+markers',
+                    name='National Average',
+                    line=dict(color='#961316', width=4),
+                    marker=dict(size=8, color='#961316'),
+                    yaxis='y2',
+                    hovertemplate='<b>National Average</b><br>Year: %{x}<br>Avg Count: %{y:.1f}<extra></extra>'
+                ))
+                
+                # Update layout with dual y-axes
+                fig_nat.update_layout(
+                    height=400,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    barmode='stack',
+                    title='National Average & Procedure Mix Overlay',
+                    xaxis_title='Year',
+                    yaxis=dict(
+                        title='Procedure Share (%)',
+                        side='left',
+                        range=[0, 100]
+                    ),
+                    yaxis2=dict(
+                        title='Average Surgeries per Hospital',
+                        side='right',
+                        overlaying='y',
+                        range=[0, max(nat_df['Avg Procedures']) * 1.1]
+                    ),
+                    legend=dict(
+                        orientation="v",
+                        yanchor="top",
+                        y=1,
+                        xanchor="left",
+                        x=1.02
+                    )
+                )
+                
+                # Update bar hover templates
+                fig_nat.update_traces(
+                    selector=dict(type="bar"),
+                    hovertemplate='<b>%{fullData.name}</b><br>Year: %{x}<br>Share: %{y:.1f}%<extra></extra>'
+                )
+                
+                st.plotly_chart(fig_nat, use_container_width=True)
+                
+                # Add summary metrics below the chart
+                st.markdown("**Chart Explanation:**")
+                st.markdown("- **Colored bars** show the national percentage share of each procedure type per year")
+                st.markdown("- **Dark red line** shows the national average surgeries per hospital per year")
+                st.markdown("- **Left y-axis** shows procedure share percentages")
+                st.markdown("- **Right y-axis** shows average surgery counts")
+    # Procedure share (3 buckets)
+    proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
+    if proc_codes:
+        col1, col2 = st.columns([2, 1])  # Hospital graphs larger (2), National graphs smaller (1)
+        
     # Approaches share
     appr_codes = [c for c in SURGICAL_APPROACH_NAMES.keys() if c in selected_hospital_all_data.columns]
     if appr_codes:
