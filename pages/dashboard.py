@@ -802,12 +802,13 @@ with tab_activity:
                         range=[0, max(hosp_year_clean['total_procedures_year']) * 1.1]
                     ),
                     legend=dict(
-                        orientation="v",
-                        yanchor="top",
-                        y=1,
-                        xanchor="left",
-                        x=1.02
-                    )
+                        orientation="h",
+                        yanchor="bottom",
+                        y=-0.3,
+                        xanchor="center",
+                        x=0.5
+                    ),
+                    margin=dict(b=100)
                 )
                 
                 # Update bar hover templates
@@ -904,12 +905,13 @@ with tab_activity:
                         range=[0, max(nat_df['Avg Procedures']) * 1.1]
                     ),
                     legend=dict(
-                        orientation="v",
-                        yanchor="top",
-                        y=1,
-                        xanchor="left",
-                        x=1.02
-                    )
+                        orientation="h",
+                        yanchor="bottom",
+                        y=-0.3,
+                        xanchor="center",
+                        x=0.5
+                    ),
+                    margin=dict(b=100)
                 )
                 
                 # Update bar hover templates
