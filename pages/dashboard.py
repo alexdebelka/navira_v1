@@ -1073,59 +1073,103 @@ with tab_complications:
         # 12‑month rolling complication rate for this hospital
         try:
             st.markdown("#### Hospital 12‑month Rolling Complication Rate")
-            roll = hosp_comp.dropna(subset=['quarter_date']).sort_values('quarter_date').copy()
-            if not roll.empty:
-                # Prefer provided rolling_rate (fraction); otherwise compute from 4-quarter rolling sums
-                if 'rolling_rate' in roll.columns:
-                    roll['rolling_pct'] = pd.to_numeric(roll['rolling_rate'], errors='coerce') * 100.0
-                else:
-                    roll['complications_count'] = pd.to_numeric(roll.get('complications_count', 0), errors='coerce').fillna(0)
-                    roll['procedures_count'] = pd.to_numeric(roll.get('procedures_count', 0), errors='coerce').fillna(0)
-                    denom = roll['procedures_count'].rolling(window=4, min_periods=1).sum()
-                    num = roll['complications_count'].rolling(window=4, min_periods=1).sum()
-                    roll['rolling_pct'] = (num / denom.replace({0: pd.NA})) * 100.0
 
-                # Clean values for plotting
-                roll['rolling_pct'] = pd.to_numeric(roll['rolling_pct'], errors='coerce')
-                roll_plot = roll.dropna(subset=['rolling_pct'])
-
-                fig_roll = go.Figure()
-                if not roll_plot.empty:
-                    fig_roll.add_trace(go.Scatter(
-                    x=roll_plot['quarter_date'],
-                    y=roll_plot['rolling_pct'],
-                    mode='lines+markers',
-                    name='Hospital Rolling Rate',
-                    line=dict(color='#ff7f0e', width=3),
-                    marker=dict(size=6, color='#ff7f0e')
-                ))
-                else:
-                    fig_roll.add_annotation(xref='paper', yref='paper', x=0.5, y=0.5, text='No valid hospital rolling data', showarrow=False)
-
-                # Optional national benchmark overlay
+            @st.cache_data(show_spinner=False)
+            def _load_external_rolling_csv(path: str = "data/22_complication_trimestre.csv") -> pd.DataFrame:
                 try:
-                    if 'national_avg_data' in locals() and not national_avg_data.empty and 'national_rate' in national_avg_data.columns:
-                        fig_roll.add_trace(go.Scatter(
-                            x=national_avg_data['quarter_date'],
-                            y=national_avg_data['national_rate'],
-                            mode='lines',
-                            name='National Average',
-                            line=dict(color='#1f77b4', width=2, dash='dash')
-                        ))
+                    df = pd.read_csv(path, sep=';', dtype=str)
+                    # Normalize column names
+                    df.columns = [c.strip().strip('"').lower() for c in df.columns]
+                    # Parse dates and numerics (commas to dots if present)
+                    if 'trimestre_date' in df.columns:
+                        df['trimestre_date'] = pd.to_datetime(df['trimestre_date'], errors='coerce')
+                    for col in ['taux_glissant','moyenne_nationale','ic_low','ic_high']:
+                        if col in df.columns:
+                            df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.', regex=False), errors='coerce')
+                    if 'finessgeodp' in df.columns:
+                        df['finessgeodp'] = df['finessgeodp'].astype(str).str.strip()
+                    return df
                 except Exception:
-                    pass
+                    return pd.DataFrame()
 
-                fig_roll.update_layout(
-                    title='Hospital 12‑month Rolling Complication Rate',
-                    xaxis_title='Quarter',
-                    yaxis_title='Complication Rate (%)',
-                    height=400,
-                    hovermode='x unified',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)'
-                )
+            ext = _load_external_rolling_csv()
+            used_external = False
+            fig_roll = go.Figure()
+            if not ext.empty and 'finessgeodp' in ext.columns:
+                hosp_ext = ext[ext['finessgeodp'] == str(selected_hospital_id)].copy()
+                if not hosp_ext.empty and 'trimestre_date' in hosp_ext.columns and 'taux_glissant' in hosp_ext.columns:
+                    hosp_ext = hosp_ext.dropna(subset=['trimestre_date']).sort_values('trimestre_date')
+                    fig_roll.add_trace(go.Scatter(
+                        x=hosp_ext['trimestre_date'],
+                        y=hosp_ext['taux_glissant'],
+                        mode='lines+markers',
+                        name='Hospital Rolling Rate',
+                        line=dict(color='#ff7f0e', width=3),
+                        marker=dict(size=6, color='#ff7f0e')
+                    ))
+                    # National series from same CSV (deduplicate by date)
+                    if 'moyenne_nationale' in hosp_ext.columns:
+                        nat_series = hosp_ext.dropna(subset=['moyenne_nationale'])[['trimestre_date','moyenne_nationale']].drop_duplicates('trimestre_date')
+                        if not nat_series.empty:
+                            fig_roll.add_trace(go.Scatter(
+                                x=nat_series['trimestre_date'],
+                                y=nat_series['moyenne_nationale'],
+                                mode='lines',
+                                name='National Average',
+                                line=dict(color='#1f77b4', width=2, dash='dash')
+                            ))
+                    used_external = True
 
-                st.plotly_chart(fig_roll, use_container_width=True)
+            if not used_external:
+                # Fallback to computing from internal aggregates
+                roll = hosp_comp.dropna(subset=['quarter_date']).sort_values('quarter_date').copy()
+                if not roll.empty:
+                    if 'rolling_rate' in roll.columns:
+                        roll['rolling_pct'] = pd.to_numeric(roll['rolling_rate'], errors='coerce') * 100.0
+                    else:
+                        roll['complications_count'] = pd.to_numeric(roll.get('complications_count', 0), errors='coerce').fillna(0)
+                        roll['procedures_count'] = pd.to_numeric(roll.get('procedures_count', 0), errors='coerce').fillna(0)
+                        denom = roll['procedures_count'].rolling(window=4, min_periods=1).sum()
+                        num = roll['complications_count'].rolling(window=4, min_periods=1).sum()
+                        roll['rolling_pct'] = (num / denom.replace({0: pd.NA})) * 100.0
+                    roll['rolling_pct'] = pd.to_numeric(roll['rolling_pct'], errors='coerce')
+                    roll_plot = roll.dropna(subset=['rolling_pct'])
+                    if not roll_plot.empty:
+                        fig_roll.add_trace(go.Scatter(
+                            x=roll_plot['quarter_date'],
+                            y=roll_plot['rolling_pct'],
+                            mode='lines+markers',
+                            name='Hospital Rolling Rate',
+                            line=dict(color='#ff7f0e', width=3),
+                            marker=dict(size=6, color='#ff7f0e')
+                        ))
+                    else:
+                        fig_roll.add_annotation(xref='paper', yref='paper', x=0.5, y=0.5, text='No valid hospital rolling data', showarrow=False)
+
+                    # Optional national overlay from earlier calc
+                    try:
+                        if 'national_avg_data' in locals() and not national_avg_data.empty and 'national_rate' in national_avg_data.columns:
+                            fig_roll.add_trace(go.Scatter(
+                                x=national_avg_data['quarter_date'],
+                                y=national_avg_data['national_rate'],
+                                mode='lines',
+                                name='National Average',
+                                line=dict(color='#1f77b4', width=2, dash='dash')
+                            ))
+                    except Exception:
+                        pass
+
+            fig_roll.update_layout(
+                title='Hospital 12‑month Rolling Complication Rate',
+                xaxis_title='Quarter',
+                yaxis_title='Complication Rate (%)',
+                height=400,
+                hovermode='x unified',
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+
+            st.plotly_chart(fig_roll, use_container_width=True)
         except Exception:
             pass
 
