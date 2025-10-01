@@ -908,7 +908,7 @@ with tab_activity:
                     legend=dict(
                         orientation="h",
                         yanchor="bottom",
-                        y=-0.58,
+                        y=-0.78,
                         xanchor="center",
                         x=0.5
                     ),
