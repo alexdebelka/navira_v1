@@ -264,7 +264,7 @@ with metric_col1:
             procedure_data.append({'Procedure': 'Other Procedures', 'Count': other_total, 'Color': '#2ca02c'})
         
         if procedure_data:
-            st.markdown("##### 🥧 Procedure Mix Distribution")
+            st.markdown("##### Procedure Mix Distribution")
             df_procedures = pd.DataFrame(procedure_data)
             
             # Create pie chart with improved styling
