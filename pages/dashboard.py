@@ -804,11 +804,12 @@ with tab_activity:
                     legend=dict(
                         orientation="h",
                         yanchor="bottom",
-                        y=-0.3,
+                        y=-0.38,
                         xanchor="center",
                         x=0.5
                     ),
-                    margin=dict(b=100)
+                    xaxis=dict(automargin=True),
+                    margin=dict(b=140)
                 )
                 
                 # Update bar hover templates
@@ -907,11 +908,12 @@ with tab_activity:
                     legend=dict(
                         orientation="h",
                         yanchor="bottom",
-                        y=-0.3,
+                        y=-0.38,
                         xanchor="center",
                         x=0.5
                     ),
-                    margin=dict(b=100)
+                    xaxis=dict(automargin=True),
+                    margin=dict(b=140)
                 )
                 
                 # Update bar hover templates
