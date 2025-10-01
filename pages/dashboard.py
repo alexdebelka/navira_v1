@@ -1070,6 +1070,60 @@ with tab_complications:
             except Exception:
                 pass
         
+        # 12‑month rolling complication rate for this hospital
+        try:
+            st.markdown("#### Hospital 12‑month Rolling Complication Rate")
+            roll = hosp_comp.dropna(subset=['quarter_date']).sort_values('quarter_date').copy()
+            if not roll.empty:
+                # Prefer provided rolling_rate (fraction); otherwise compute from 4-quarter rolling sums
+                if 'rolling_rate' in roll.columns and pd.api.types.is_numeric_dtype(roll['rolling_rate']):
+                    roll['rolling_pct'] = pd.to_numeric(roll['rolling_rate'], errors='coerce') * 100.0
+                else:
+                    roll['complications_count'] = pd.to_numeric(roll.get('complications_count', 0), errors='coerce').fillna(0)
+                    roll['procedures_count'] = pd.to_numeric(roll.get('procedures_count', 0), errors='coerce').fillna(0)
+                    roll['rolling_pct'] = (
+                        roll['complications_count'].rolling(window=4, min_periods=1).sum()
+                        / roll['procedures_count'].rolling(window=4, min_periods=1).sum()
+                        * 100.0
+                    )
+
+                fig_roll = go.Figure()
+                fig_roll.add_trace(go.Scatter(
+                    x=roll['quarter_date'],
+                    y=roll['rolling_pct'],
+                    mode='lines+markers',
+                    name='Hospital Rolling Rate',
+                    line=dict(color='#ff7f0e', width=3),
+                    marker=dict(size=6, color='#ff7f0e')
+                ))
+
+                # Optional national benchmark overlay
+                try:
+                    if 'national_avg_data' in locals() and not national_avg_data.empty and 'national_rate' in national_avg_data.columns:
+                        fig_roll.add_trace(go.Scatter(
+                            x=national_avg_data['quarter_date'],
+                            y=national_avg_data['national_rate'],
+                            mode='lines',
+                            name='National Average',
+                            line=dict(color='#1f77b4', width=2, dash='dash')
+                        ))
+                except Exception:
+                    pass
+
+                fig_roll.update_layout(
+                    title='Hospital 12‑month Rolling Complication Rate',
+                    xaxis_title='Quarter',
+                    yaxis_title='Complication Rate (%)',
+                    height=400,
+                    hovermode='x unified',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)'
+                )
+
+                st.plotly_chart(fig_roll, use_container_width=True)
+        except Exception:
+            pass
+
         # Removed Quarterly Rate vs National chart due to unreliable hospital quarterly data
     else:
         st.info("No complications data available for this hospital.")
