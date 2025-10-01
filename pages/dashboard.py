@@ -1178,8 +1178,8 @@ with tab_complications:
                     debug_signatures['km_curve'] = debug_dataframe_signature(km_curve, "Final KM curve")
                     
                     if not km_curve.empty:
-                        # Create chart with unique key for this hospital - showing complication rate
-                        fig_km = create_km_chart(
+                        # Build hospital chart
+                        fig_km_hosp = create_km_chart(
                             curve_df=km_curve,
                             page_id=f"hospital_{selected_hospital_id}",
                             title="Hospital Complication Rate Over Time (KM)",
@@ -1189,11 +1189,58 @@ with tab_complications:
                             color='#1f77b4',
                             show_complication_rate=True
                         )
-                        
-                        st.plotly_chart(fig_km, use_container_width=True, key=f"km_hospital_{selected_hospital_id}_v2")
-                        
+
+                        # Compute national comparison curve (same 6‑month buckets)
+                        fig_km_nat = None
+                        try:
+                            nat_src = complications.copy()
+                            if not nat_src.empty and 'quarter_date' in nat_src.columns:
+                                nat_src = nat_src.dropna(subset=['quarter_date']).sort_values('quarter_date')
+                                nat_src['year'] = nat_src['quarter_date'].dt.year
+                                nat_src['half'] = ((nat_src['quarter_date'].dt.quarter - 1) // 2 + 1)
+                                nat_src['semester'] = nat_src['year'].astype(str) + ' H' + nat_src['half'].astype(int).astype(str)
+                                nat_sem = (
+                                    nat_src.groupby(['year','half','semester'], as_index=False)
+                                          .agg(events=('complications_count','sum'), total=('procedures_count','sum'))
+                                          .sort_values(['year','half'])
+                                )
+                                if not nat_sem.empty:
+                                    nat_sig = debug_dataframe_signature(nat_sem, "National semester aggregated")
+                                    km_curve_nat = compute_complication_rates_from_aggregates(
+                                        df=nat_sem,
+                                        time_col='semester',
+                                        event_col='events',
+                                        at_risk_col='total',
+                                        group_cols=None,
+                                        data_hash=nat_sig['hash'],
+                                        cache_version="v1"
+                                    )
+                                    if not km_curve_nat.empty:
+                                        fig_km_nat = create_km_chart(
+                                            curve_df=km_curve_nat,
+                                            page_id="national_cmp",
+                                            title="National Complication Rate Over Time (KM)",
+                                            yaxis_title='Complication Rate (%)',
+                                            xaxis_title='6‑month interval',
+                                            height=400,
+                                            color='#d62728',
+                                            show_complication_rate=True
+                                        )
+                        except Exception as _:
+                            fig_km_nat = None
+
+                        # Render side-by-side
+                        c_left, c_right = st.columns(2)
+                        with c_left:
+                            st.plotly_chart(fig_km_hosp, use_container_width=True, key=f"km_hospital_{selected_hospital_id}_v2")
+                        with c_right:
+                            if fig_km_nat is not None:
+                                st.plotly_chart(fig_km_nat, use_container_width=True, key="km_national_cmp_v2")
+                            else:
+                                st.info("National KM curve unavailable.")
+
                         with st.expander('Method (approximation)'):
-                            st.markdown("This curve approximates a Kaplan–Meier survival function using aggregate 6‑month intervals. For each interval, hazard = events / total procedures, and survival multiplies (1 − hazard) across intervals. It uses hospital‑level aggregates (not patient‑level times).")
+                            st.markdown("This curve approximates a Kaplan–Meier survival function using aggregate 6‑month intervals. For each interval, hazard = events / total procedures, and survival multiplies (1 − hazard) across intervals. It uses hospital‑ and national‑level aggregates (not patient‑level times).")
                     else:
                         st.info('KM computation returned empty results.')
                         
