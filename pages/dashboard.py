@@ -1076,26 +1076,31 @@ with tab_complications:
             roll = hosp_comp.dropna(subset=['quarter_date']).sort_values('quarter_date').copy()
             if not roll.empty:
                 # Prefer provided rolling_rate (fraction); otherwise compute from 4-quarter rolling sums
-                if 'rolling_rate' in roll.columns and pd.api.types.is_numeric_dtype(roll['rolling_rate']):
+                if 'rolling_rate' in roll.columns:
                     roll['rolling_pct'] = pd.to_numeric(roll['rolling_rate'], errors='coerce') * 100.0
                 else:
                     roll['complications_count'] = pd.to_numeric(roll.get('complications_count', 0), errors='coerce').fillna(0)
                     roll['procedures_count'] = pd.to_numeric(roll.get('procedures_count', 0), errors='coerce').fillna(0)
-                    roll['rolling_pct'] = (
-                        roll['complications_count'].rolling(window=4, min_periods=1).sum()
-                        / roll['procedures_count'].rolling(window=4, min_periods=1).sum()
-                        * 100.0
-                    )
+                    denom = roll['procedures_count'].rolling(window=4, min_periods=1).sum()
+                    num = roll['complications_count'].rolling(window=4, min_periods=1).sum()
+                    roll['rolling_pct'] = (num / denom.replace({0: pd.NA})) * 100.0
+
+                # Clean values for plotting
+                roll['rolling_pct'] = pd.to_numeric(roll['rolling_pct'], errors='coerce')
+                roll_plot = roll.dropna(subset=['rolling_pct'])
 
                 fig_roll = go.Figure()
-                fig_roll.add_trace(go.Scatter(
-                    x=roll['quarter_date'],
-                    y=roll['rolling_pct'],
+                if not roll_plot.empty:
+                    fig_roll.add_trace(go.Scatter(
+                    x=roll_plot['quarter_date'],
+                    y=roll_plot['rolling_pct'],
                     mode='lines+markers',
                     name='Hospital Rolling Rate',
                     line=dict(color='#ff7f0e', width=3),
                     marker=dict(size=6, color='#ff7f0e')
                 ))
+                else:
+                    fig_roll.add_annotation(xref='paper', yref='paper', x=0.5, y=0.5, text='No valid hospital rolling data', showarrow=False)
 
                 # Optional national benchmark overlay
                 try:
