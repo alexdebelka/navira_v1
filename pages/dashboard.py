@@ -64,6 +64,16 @@ st.markdown("""
         [data-testid="stPageNav"] {
             display: none;
         }
+        /* Lightweight cards and pills for metrics */
+        .nv-card { border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 12px 14px; background: rgba(255,255,255,.03); }
+        .nv-card.small { padding: 8px 10px; }
+        .nv-metric-title { font-weight: 600; font-size: 0.95rem; color: #cfcfcf; text-align: center; margin-bottom: 6px; }
+        .nv-metric-value { font-weight: 700; font-size: 2rem; text-align: center; }
+        .nv-center-label { font-weight:600; text-align:center; color:#cfcfcf; padding-top:16px; }
+        .nv-pill { display:inline-block; border-radius:9999px; padding: 3px 10px; font-weight:600; font-size: .8rem; color:#fff; }
+        .nv-pill.green { background:#16a34a; }
+        .nv-pill.red { background:#ef4444; }
+        .nv-row-gap { height: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -1366,22 +1376,27 @@ with tab_complications:
                         rel_delta = None
 
                     st.markdown("##### Severe complications — Clavien–Dindo grades 3–5")
-                    # Top metric row
-                    m1, m2, m3 = st.columns([1, 1, 1])
+                    # Card-style top row with spacing and center label
+                    m1, m_mid, m3 = st.columns([1.2, 1, 1.2])
                     with m1:
-                        delta_txt = None
-                        if rel_delta is not None:
-                            arrow = "↑" if rel_delta > 0 else ("↓" if rel_delta < 0 else "→")
-                            delta_txt = f"{arrow} {rel_delta:+.0f}% vs National"
-                        st.metric("Hospital (overall)", f"{hosp_overall_rate:.1f}%", delta=delta_txt)
-                    with m2:
-                        st.markdown("<div style='text-align:center;font-weight:600;'>Overall complication rate</div>", unsafe_allow_html=True)
+                        st.markdown("<div class='nv-card'>" 
+                                    + "<div class='nv-metric-title'>Hospital (overall)</div>"
+                                    + f"<div class='nv-metric-value'>{hosp_overall_rate:.1f}%</div>"
+                                    + (f"<div style='text-align:center;margin-top:6px;'><span class='nv-pill {('red' if (rel_delta or 0)>0 else 'green')}'>{('↑' if (rel_delta or 0)>0 else '↓')} {abs(rel_delta):.0f}% vs National</span></div>" if rel_delta is not None else "")
+                                    + "</div>", unsafe_allow_html=True)
+                    with m_mid:
+                        st.markdown("<div class='nv-center-label'>Overall complication rate</div>", unsafe_allow_html=True)
                     with m3:
-                        st.metric("National benchmark", f"{nat_overall_rate:.1f}%")
+                        st.markdown("<div class='nv-card'>" 
+                                    + "<div class='nv-metric-title'>National benchmark</div>"
+                                    + f"<div class='nv-metric-value'>{nat_overall_rate:.1f}%</div>"
+                                    + "</div>", unsafe_allow_html=True)
                     if caption:
                         st.caption(caption)
 
-                    # Detail rows for grades 3, 4, 5
+                    st.markdown("<div class='nv-row-gap'></div>", unsafe_allow_html=True)
+
+                    # Detail cards grid: three columns (grade, hospital, national)
                     def _grade_rate(g: int, src: pd.DataFrame, total: int) -> float:
                         try:
                             c = int(pd.to_numeric(src[src.get('clavien_category') == g]['count'], errors='coerce').fillna(0).sum())
@@ -1389,26 +1404,20 @@ with tab_complications:
                         except Exception:
                             return 0.0
 
-                    rows = []
-                    for g in [3,4,5]:
-                        rows.append({
-                            'grade': g,
-                            'h_rate': _grade_rate(g, hosp_period_df, hosp_total),
-                            'n_rate': _grade_rate(g, nat_period_df, nat_total),
-                        })
-                    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
                     h1, h2, h3 = st.columns([1, 1, 1])
                     h1.markdown("**Clavien grade**")
                     h2.markdown("**Hospital**")
                     h3.markdown("**National benchmark**")
-                    for r in rows:
+                    for g in [3,4,5]:
+                        r_h = _grade_rate(g, hosp_period_df, hosp_total)
+                        r_n = _grade_rate(g, nat_period_df, nat_total)
+                        better = r_h <= r_n
+                        arrow = "↑" if not better else "↓"
+                        pill_class = 'red' if not better else 'green'
                         c1, c2, c3 = st.columns([1, 1, 1])
-                        c1.markdown(f"{r['grade']}")
-                        better = r['h_rate'] <= r['n_rate']
-                        arrow = "⬇️" if not better else "⬆️"
-                        color = "#ef4444" if not better else "#22c55e"
-                        c2.markdown(f"<span>{r['h_rate']:.1f}%</span> <span style='color:{color};font-size:16px;'>{arrow}</span>", unsafe_allow_html=True)
-                        c3.markdown(f"{r['n_rate']:.1f}%")
+                        c1.markdown(f"<div class='nv-card small' style='text-align:center;'><b>{g}</b></div>", unsafe_allow_html=True)
+                        c2.markdown(f"<div class='nv-card small' style='text-align:center;'><span style='font-weight:700'>{r_h:.1f}%</span> <span class='nv-pill {pill_class}' style='margin-left:8px'>{arrow}</span></div>", unsafe_allow_html=True)
+                        c3.markdown(f"<div class='nv-card small' style='text-align:center;'>{r_n:.1f}%</div>", unsafe_allow_html=True)
 
                     # Aggregate counts across selected period
                     if 'count' in view_df.columns:
