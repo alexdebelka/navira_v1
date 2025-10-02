@@ -1255,7 +1255,9 @@ with tab_complications:
                         st.plotly_chart(fig_los, use_container_width=True)
                     else:
                         st.info('No LOS years available for this hospital.')
+                else:
                     st.info('No length of stay data found for this hospital.')
+            else:
                 st.info('Length of stay dataset unavailable.')
         except Exception:
             pass
