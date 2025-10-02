@@ -420,10 +420,17 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-if st.session_state.get('_limited_user'):
-    tab_activity, tab_complications = st.tabs(["📈 Activity", "🧪 Complications"])  # Hide geography for limited
-else:
+user_ctx = st.session_state.get('user') or {}
+username_ctx = (user_ctx or {}).get('username', '')
+_limited = bool(st.session_state.get('_limited_user'))
+# Pilot override: enable Geography for pilot user even if limited
+_pilot_geo_override = username_ctx == 'andrea.lazzati'
+show_geography = (not _limited) or _pilot_geo_override
+
+if show_geography:
     tab_activity, tab_complications, tab_geo = st.tabs(["📈 Activity", "🧪 Complications", "🗺️ Geography"])
+else:
+    tab_activity, tab_complications = st.tabs(["📈 Activity", "🧪 Complications"])  # Hide geography for limited
 
 def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, cities_df):
     try:
