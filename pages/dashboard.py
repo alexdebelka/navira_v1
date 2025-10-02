@@ -200,6 +200,16 @@ if est_row.empty:
 selected_hospital_details = est_row.iloc[0]
 selected_hospital_all_data = annual[annual['id'] == str(selected_hospital_id)]
 
+# Year helpers for dynamic 2025 inclusion (YTD)
+try:
+    _years_all = sorted(pd.to_numeric(annual.get('annee', pd.Series(dtype=float)), errors='coerce').dropna().astype(int).unique().tolist())
+    latest_year_activity = max([y for y in _years_all if y <= 2025]) if _years_all else 2024
+except Exception:
+    latest_year_activity = 2025
+years_window = [y for y in _years_all if 2020 <= y <= latest_year_activity] if '_years_all' in locals() else list(range(2020, 2026))
+is_ytd_2025 = (latest_year_activity == 2025)
+ytd_suffix = " (YTD)" if is_ytd_2025 else ""
+
 # --- (The rest of your dashboard page code follows here) ---
 # I'm including the rest of the file for completeness.
 st.title("📊 Hospital Details Dashboard")
@@ -225,7 +235,7 @@ if 'Distance (km)' in selected_hospital_details:
 st.markdown("---")
 metric_col1, metric_col2 = st.columns(2)
 with metric_col1:
-    st.markdown("#### 📊 Summary (2020-2024)")
+    st.markdown(f"#### 📊 Summary (2020–{latest_year_activity}{ytd_suffix})")
     total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
     total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
     hospital_revision_pct = (total_rev_hospital / total_proc_hospital) * 100 if total_proc_hospital > 0 else 0
@@ -258,7 +268,7 @@ with metric_col1:
         #     value=f"{national_revision_pct:.1f}%"
         # )
 
-    # Procedure mix pie chart (2020-2024)
+    # Procedure mix pie chart (2020–latest)
     try:
         proc_cols_present = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
         sleeve_total = int(selected_hospital_all_data.get('SLE', pd.Series(dtype=float)).sum()) if 'SLE' in proc_cols_present else 0
@@ -846,7 +856,7 @@ with tab_activity:
         if national_averages and proc_codes:
             # Create national trend data
             nat_data = []
-            for year in range(2020, 2025):
+            for year in years_window:
                 year_data = annual[annual['annee'] == year]
                 if not year_data.empty:
                     avg_procedures = year_data['total_procedures_year'].mean()
@@ -854,7 +864,7 @@ with tab_activity:
             
             # Create national procedure mix data
             nat_proc_data = []
-            for year in range(2020, 2025):
+            for year in years_window:
                 year_data = annual[annual['annee'] == year]
                 if not year_data.empty:
                     total_sleeve = year_data['SLE'].sum() if 'SLE' in year_data.columns else 0
@@ -972,7 +982,7 @@ with tab_activity:
             st.markdown("#### National: Surgical Approaches (share %)")
             # Create national surgical approach data
             nat_appr_data = []
-            for year in range(2020, 2025):
+            for year in years_window:
                 year_data = annual[annual['annee'] == year]
                 if not year_data.empty:
                     total_robotic = year_data['ROB'].sum() if 'ROB' in year_data.columns else 0
@@ -1974,7 +1984,7 @@ try:
               <div class="nv-tooltip"><span class="nv-info-badge">i</span>
                 <div class="nv-tooltiptext">
                   <b>Understanding this chart:</b><br/>
-                  Annual total surgeries performed at the selected hospital (2020–2024).
+                  Annual total surgeries performed at the selected hospital (2020–{latest_year_activity}{ytd_suffix}).
                 </div>
               </div>
             </div>
@@ -2019,7 +2029,7 @@ try:
 
                     **Key findings:**
                     - Peak year: **{int(peak_row['annee'])}** with **{int(peak_row['total_procedures_year']):,}** surgeries
-                    - 2024 value: **{int(last_row['total_procedures_year']):,}**
+                    - {latest_year_activity}{ytd_suffix} value: **{int(last_row['total_procedures_year']):,}**
                     """
                 )
         except Exception:
@@ -2180,7 +2190,7 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
 
     # Right column: National analytics in tabs (won't overshadow hospital charts)
     with right:
-        tabs = st.tabs(["National over time", "2024 mix"])
+        tabs = st.tabs(["National over time", f"{latest_year_activity}{ytd_suffix} mix"])
         with tabs[0]:
             try:
                 nat_df = annual.copy()
@@ -2216,11 +2226,11 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
                 pass
         with tabs[1]:
             try:
-                year_2024 = selected_hospital_all_data[selected_hospital_all_data['annee'] == 2024]
+                year_sel = selected_hospital_all_data[selected_hospital_all_data['annee'] == latest_year_activity]
                 hosp_counts = {}
                 for code, name in BARIATRIC_PROCEDURE_NAMES.items():
-                    if code in year_2024.columns:
-                        hosp_counts[name] = int(year_2024[code].sum())
+                    if code in year_sel.columns:
+                        hosp_counts[name] = int(year_sel[code].sum())
                 hosp_total = sum(hosp_counts.values()) or 1
                 # Collapse to three categories
                 hosp_sleeve = hosp_counts.get('Sleeve Gastrectomy', 0)
@@ -2232,13 +2242,13 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
                     'Other': hosp_other / hosp_total * 100
                 }
 
-                nat_2024 = annual[annual['annee'] == 2024]
-                if 'total_procedures_year' in nat_2024.columns:
-                    nat_2024 = nat_2024[nat_2024['total_procedures_year'] >= 25]
+                nat_sel = annual[annual['annee'] == latest_year_activity]
+                if 'total_procedures_year' in nat_sel.columns:
+                    nat_sel = nat_sel[nat_sel['total_procedures_year'] >= 25]
                 nat_counts = {}
                 for code, name in BARIATRIC_PROCEDURE_NAMES.items():
-                    if code in nat_2024.columns:
-                        nat_counts[name] = int(nat_2024[code].sum())
+                    if code in nat_sel.columns:
+                        nat_counts[name] = int(nat_sel[code].sum())
                 nat_total = sum(nat_counts.values()) or 1
                 # Collapse to three categories
                 nat_sleeve = nat_counts.get('Sleeve Gastrectomy', 0)
@@ -2281,7 +2291,7 @@ if not bariatric_df_melted.empty and bariatric_df_melted['Count'].sum() > 0:
                     )
 
                 mix_fig.update_layout(
-                    barmode='group', height=360, title='2024 Procedure Mix: Hospital vs National',
+                    barmode='group', height=360, title=f'{latest_year_activity}{ytd_suffix} Procedure Mix: Hospital vs National',
                     xaxis_title='% of procedures', yaxis_title=None,
                     plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
                 )
@@ -2353,7 +2363,7 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
             )
 
     with right2:
-        tabs2 = st.tabs(["National over time", "2024 mix"])
+        tabs2 = st.tabs(["National over time", f"{latest_year_activity}{ytd_suffix} mix"])
         with tabs2[0]:
             try:
                 nat_df2 = annual.copy()
@@ -2378,21 +2388,21 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
 
         with tabs2[1]:
             try:
-                year_2024 = selected_hospital_all_data[selected_hospital_all_data['annee'] == 2024]
+                year_sel = selected_hospital_all_data[selected_hospital_all_data['annee'] == latest_year_activity]
                 h_counts = {}
                 for code, name in SURGICAL_APPROACH_NAMES.items():
-                    if code in year_2024.columns:
-                        h_counts[name] = int(year_2024[code].sum())
+                    if code in year_sel.columns:
+                        h_counts[name] = int(year_sel[code].sum())
                 h_tot = sum(h_counts.values()) or 1
                 h_pct = {k: (v / h_tot * 100) for k, v in h_counts.items()}
 
-                nat_2024 = annual[annual['annee'] == 2024]
-                if 'total_procedures_year' in nat_2024.columns:
-                    nat_2024 = nat_2024[nat_2024['total_procedures_year'] >= 25]
+                nat_sel2 = annual[annual['annee'] == latest_year_activity]
+                if 'total_procedures_year' in nat_sel2.columns:
+                    nat_sel2 = nat_sel2[nat_sel2['total_procedures_year'] >= 25]
                 n_counts = {}
                 for code, name in SURGICAL_APPROACH_NAMES.items():
-                    if code in nat_2024.columns:
-                        n_counts[name] = int(nat_2024[code].sum())
+                    if code in nat_sel2.columns:
+                        n_counts[name] = int(nat_sel2[code].sum())
                 n_tot = sum(n_counts.values()) or 1
                 n_pct = {k: (v / n_tot * 100) for k, v in n_counts.items()}
 
@@ -2426,7 +2436,7 @@ if not approach_df_melted.empty and approach_df_melted['Count'].sum() > 0:
                         )
                     )
                 mix2.update_layout(
-                    barmode='group', height=360, title='2024 Approach Mix: Hospital vs National',
+                    barmode='group', height=360, title=f'{latest_year_activity}{ytd_suffix} Approach Mix: Hospital vs National',
                     xaxis_title='% of surgeries', yaxis_title=None,
                     plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
                 )
@@ -2470,10 +2480,10 @@ if not hospital_procedure_details.empty:
     ).fillna(0)
     robotic_rates['robotic_rate'] = (robotic_rates['procedure_count'] / robotic_rates['total_count'] * 100)
     
-    # Show current year (2024) robotic rates
-    current_year_rates = robotic_rates[robotic_rates['year'] == 2024]
+    # Show current year (latest, possibly 2025 YTD) robotic rates
+    current_year_rates = robotic_rates[robotic_rates['year'] == latest_year_activity]
     if not current_year_rates.empty:
-        st.markdown("##### 2024 Robotic Adoption by Procedure Type")
+        st.markdown(f"##### {latest_year_activity}{ytd_suffix} Robotic Adoption by Procedure Type")
         
         # Map procedure codes to names
         procedure_names = {
