@@ -1186,6 +1186,12 @@ with tab_complications:
         try:
             st.markdown("#### Length of Stay (days) — distribution by year")
             df_los = los_90.copy()
+            # Fallback to CSV if parquet bundle didn't include LOS
+            if (df_los is None or df_los.empty):
+                try:
+                    df_los = pd.read_csv('data/export_TAB_LOS_HOP_90.csv')
+                except Exception:
+                    df_los = pd.DataFrame()
             if not df_los.empty and all(c in df_los.columns for c in ['finessGeoDP','annee','duree_90_cat','PCT']):
                 # Normalize types
                 df_los['finessGeoDP'] = df_los['finessGeoDP'].astype(str).str.strip()
