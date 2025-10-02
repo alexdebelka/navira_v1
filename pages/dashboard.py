@@ -770,104 +770,17 @@ with tab_activity:
     except Exception:
         pass
     
-    # Monthly procedure volume trends
-    try:
-        @st.cache_data(show_spinner=False)
-        def _load_monthly_volumes(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.csv") -> pd.DataFrame:
-            try:
-                df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int, 'mois': int})
-                df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
-                return df
-            except Exception:
-                return pd.DataFrame()
-        
-        monthly_vol = _load_monthly_volumes()
-        if not monthly_vol.empty and 'finessGeoDP' in monthly_vol.columns:
-            hosp_monthly = monthly_vol[monthly_vol['finessGeoDP'] == str(selected_hospital_id)].copy()
-            if not hosp_monthly.empty:
-                st.markdown("#### Monthly Procedure Volume Trends")
-                
-                # Create date column for proper time series
-                hosp_monthly['date'] = pd.to_datetime(hosp_monthly['annee'].astype(str) + '-' + hosp_monthly['mois'].astype(str).str.zfill(2) + '-01')
-                
-                # Aggregate by month (sum across procedure types)
-                monthly_totals = hosp_monthly.groupby('date', as_index=False)['TOT_month'].first().sort_values('date')
-                
-                # Create monthly trend chart
-                fig_monthly = go.Figure()
-                fig_monthly.add_trace(go.Scatter(
-                    x=monthly_totals['date'],
-                    y=monthly_totals['TOT_month'],
-                    mode='lines+markers',
-                    name='Monthly Total',
-                    line=dict(color='#1f77b4', width=2),
-                    marker=dict(size=4),
-                    hovertemplate='%{x|%b %Y}<br>Procedures: %{y}<extra></extra>'
-                ))
-                
-                # Add 12-month rolling average
-                if len(monthly_totals) >= 12:
-                    monthly_totals['rolling_avg'] = monthly_totals['TOT_month'].rolling(window=12, center=False).mean()
-                    fig_monthly.add_trace(go.Scatter(
-                        x=monthly_totals['date'],
-                        y=monthly_totals['rolling_avg'],
-                        mode='lines',
-                        name='12-month Average',
-                        line=dict(color='#ff7f0e', width=3, dash='dash'),
-                        hovertemplate='%{x|%b %Y}<br>12-mo Avg: %{y:.1f}<extra></extra>'
-                    ))
-                
-                fig_monthly.update_layout(
-                    height=400,
-                    xaxis_title='Month',
-                    yaxis_title='Number of Procedures',
-                    hovermode='x unified',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                )
-                
-                st.plotly_chart(fig_monthly, use_container_width=True)
-                
-                # Show procedure-specific monthly trends
-                with st.expander("📊 View by Procedure Type"):
-                    # Get procedure volumes by type
-                    proc_monthly = hosp_monthly.groupby(['date', 'baria_t'], as_index=False).agg({'TOT_month_tcn': 'first'})
-                    
-                    # Filter to main procedures
-                    main_procs = proc_monthly[proc_monthly['baria_t'].isin(['SLE', 'BPG'])].copy()
-                    
-                    if not main_procs.empty:
-                        fig_by_proc = go.Figure()
-                        
-                        proc_colors = {'SLE': '#60a5fa', 'BPG': '#f97316'}
-                        proc_names = {'SLE': 'Sleeve Gastrectomy', 'BPG': 'Gastric Bypass'}
-                        
-                        for proc_type in main_procs['baria_t'].unique():
-                            proc_data = main_procs[main_procs['baria_t'] == proc_type].sort_values('date')
-                            fig_by_proc.add_trace(go.Scatter(
-                                x=proc_data['date'],
-                                y=proc_data['TOT_month_tcn'],
-                                mode='lines+markers',
-                                name=proc_names.get(proc_type, proc_type),
-                                line=dict(color=proc_colors.get(proc_type, '#cccccc'), width=2),
-                                marker=dict(size=4),
-                                hovertemplate='%{x|%b %Y}<br>' + proc_names.get(proc_type, proc_type) + ': %{y}<extra></extra>'
-                            ))
-                        
-                        fig_by_proc.update_layout(
-                            height=350,
-                            xaxis_title='Month',
-                            yaxis_title='Number of Procedures',
-                            hovermode='x unified',
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            paper_bgcolor='rgba(0,0,0,0)'
-                        )
-                        
-                        st.plotly_chart(fig_by_proc, use_container_width=True)
-    except Exception as e:
-        st.warning(f"Could not load monthly volume data: {e}")
-    # Total surgeries and quick mix charts
+    # Load monthly volume data helper function
+    @st.cache_data(show_spinner=False)
+    def _load_monthly_volumes(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.csv") -> pd.DataFrame:
+        try:
+            df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int, 'mois': int})
+            df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
+            return df
+        except Exception:
+            return pd.DataFrame()
+    
+    # Total surgeries and quick mix charts (MOVED TO TOP)
     col1, col2 = st.columns([2, 1])  # Hospital graphs larger (2), National graphs smaller (1)
     
     with col1:
@@ -1162,6 +1075,105 @@ with tab_activity:
                 st.markdown("- **Right y-axis** shows average surgery counts")
                 if 2025 in nat_proc_df['Year'].values:
                     st.info("📅 **Note:** 2025 data is year-to-date through July only.")
+    
+    # Monthly procedure volume trends
+    try:
+        @st.cache_data(show_spinner=False)
+        def _load_monthly_volumes(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.csv") -> pd.DataFrame:
+            try:
+                df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int, 'mois': int})
+                df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
+                return df
+            except Exception:
+                return pd.DataFrame()
+        
+        monthly_vol = _load_monthly_volumes()
+        if not monthly_vol.empty and 'finessGeoDP' in monthly_vol.columns:
+            hosp_monthly = monthly_vol[monthly_vol['finessGeoDP'] == str(selected_hospital_id)].copy()
+            if not hosp_monthly.empty:
+                st.markdown("#### Monthly Procedure Volume Trends")
+                
+                # Create date column for proper time series
+                hosp_monthly['date'] = pd.to_datetime(hosp_monthly['annee'].astype(str) + '-' + hosp_monthly['mois'].astype(str).str.zfill(2) + '-01')
+                
+                # Aggregate by month (sum across procedure types)
+                monthly_totals = hosp_monthly.groupby('date', as_index=False)['TOT_month'].first().sort_values('date')
+                
+                # Create monthly trend chart
+                fig_monthly = go.Figure()
+                fig_monthly.add_trace(go.Scatter(
+                    x=monthly_totals['date'],
+                    y=monthly_totals['TOT_month'],
+                    mode='lines+markers',
+                    name='Monthly Total',
+                    line=dict(color='#1f77b4', width=2),
+                    marker=dict(size=4),
+                    hovertemplate='%{x|%b %Y}<br>Procedures: %{y}<extra></extra>'
+                ))
+                
+                # Add 12-month rolling average
+                if len(monthly_totals) >= 12:
+                    monthly_totals['rolling_avg'] = monthly_totals['TOT_month'].rolling(window=12, center=False).mean()
+                    fig_monthly.add_trace(go.Scatter(
+                        x=monthly_totals['date'],
+                        y=monthly_totals['rolling_avg'],
+                        mode='lines',
+                        name='12-month Average',
+                        line=dict(color='#ff7f0e', width=3, dash='dash'),
+                        hovertemplate='%{x|%b %Y}<br>12-mo Avg: %{y:.1f}<extra></extra>'
+                    ))
+                
+                fig_monthly.update_layout(
+                    height=400,
+                    xaxis_title='Month',
+                    yaxis_title='Number of Procedures',
+                    hovermode='x unified',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                )
+                
+                st.plotly_chart(fig_monthly, use_container_width=True)
+                
+                # Show procedure-specific monthly trends
+                with st.expander("📊 View by Procedure Type"):
+                    # Get procedure volumes by type
+                    proc_monthly = hosp_monthly.groupby(['date', 'baria_t'], as_index=False).agg({'TOT_month_tcn': 'first'})
+                    
+                    # Filter to main procedures
+                    main_procs = proc_monthly[proc_monthly['baria_t'].isin(['SLE', 'BPG'])].copy()
+                    
+                    if not main_procs.empty:
+                        fig_by_proc = go.Figure()
+                        
+                        proc_colors = {'SLE': '#60a5fa', 'BPG': '#f97316'}
+                        proc_names = {'SLE': 'Sleeve Gastrectomy', 'BPG': 'Gastric Bypass'}
+                        
+                        for proc_type in main_procs['baria_t'].unique():
+                            proc_data = main_procs[main_procs['baria_t'] == proc_type].sort_values('date')
+                            fig_by_proc.add_trace(go.Scatter(
+                                x=proc_data['date'],
+                                y=proc_data['TOT_month_tcn'],
+                                mode='lines+markers',
+                                name=proc_names.get(proc_type, proc_type),
+                                line=dict(color=proc_colors.get(proc_type, '#cccccc'), width=2),
+                                marker=dict(size=4),
+                                hovertemplate='%{x|%b %Y}<br>' + proc_names.get(proc_type, proc_type) + ': %{y}<extra></extra>'
+                            ))
+                        
+                        fig_by_proc.update_layout(
+                            height=350,
+                            xaxis_title='Month',
+                            yaxis_title='Number of Procedures',
+                            hovermode='x unified',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)'
+                        )
+                        
+                        st.plotly_chart(fig_by_proc, use_container_width=True)
+    except Exception as e:
+        st.warning(f"Could not load monthly volume data: {e}")
+    
     # Procedure share (3 buckets)
     proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
     if proc_codes:
