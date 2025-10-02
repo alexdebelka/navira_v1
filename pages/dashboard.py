@@ -831,14 +831,14 @@ with tab_activity:
             else:
                 # Fallback to annual data
                 proc_df = selected_hospital_all_data[selected_hospital_all_data['annee'] > 2020][['annee']+proc_codes].copy()
-            proc_long = []
-            for _, r in proc_df.iterrows():
-                total = max(1, sum(r[c] for c in proc_codes))
-                sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
-                other = total - sleeve - bypass
-                for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
-                    proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
-            pl = pd.DataFrame(proc_long)
+                proc_long = []
+                for _, r in proc_df.iterrows():
+                    total = max(1, sum(r[c] for c in proc_codes))
+                    sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
+                    other = total - sleeve - bypass
+                    for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
+                        proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
+                pl = pd.DataFrame(proc_long)
             
             if not pl.empty:
                 # Create the combined chart
