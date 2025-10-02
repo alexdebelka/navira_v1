@@ -831,22 +831,22 @@ with tab_activity:
             else:
                 # Fallback to annual data
                 proc_df = selected_hospital_all_data[selected_hospital_all_data['annee'] > 2020][['annee']+proc_codes].copy()
-                proc_long = []
-                for _, r in proc_df.iterrows():
-                    total = max(1, sum(r[c] for c in proc_codes))
-                    sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
-                    other = total - sleeve - bypass
-                    for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
-                        proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
-                pl = pd.DataFrame(proc_long)
+            proc_long = []
+            for _, r in proc_df.iterrows():
+                total = max(1, sum(r[c] for c in proc_codes))
+                sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
+                other = total - sleeve - bypass
+                for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
+                    proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
+            pl = pd.DataFrame(proc_long)
             
             if not pl.empty:
                 # Create the combined chart
                 fig = go.Figure()
                 
                 # Add stacked bar chart for procedure mix with different colors for 2025
-                colors_regular = {'Sleeve': '#ffae91', 'Gastric Bypass': '#60a5fa', 'Other': '#fbbf24'}
-                colors_2025 = {'Sleeve': '#ff6b35', 'Gastric Bypass': '#1e40af', 'Other': '#d97706'}  # Darker/more saturated for 2025
+                colors_regular = {'Sleeve': '#FF6B6B', 'Gastric Bypass': '#4ECDC4', 'Other': '#FFE66D'}  # Coral, Teal, Yellow
+                colors_2025 = {'Sleeve': '#C92A2A', 'Gastric Bypass': '#0C8599', 'Other': '#E8B923'}  # Darker/more saturated for 2025
                 
                 for procedure in pl['Procedures'].unique():
                     data = pl[pl['Procedures'] == procedure]
@@ -980,8 +980,8 @@ with tab_activity:
                 fig_nat = go.Figure()
                 
                 # Add stacked bar chart for national procedure mix with different colors for 2025
-                colors_regular = {'Sleeve': '#ffae91', 'Gastric Bypass': '#60a5fa', 'Other': '#fbbf24'}
-                colors_2025 = {'Sleeve': '#ff6b35', 'Gastric Bypass': '#1e40af', 'Other': '#d97706'}  # Darker/more saturated for 2025
+                colors_regular = {'Sleeve': '#FF6B6B', 'Gastric Bypass': '#4ECDC4', 'Other': '#FFE66D'}  # Coral, Teal, Yellow
+                colors_2025 = {'Sleeve': '#C92A2A', 'Gastric Bypass': '#0C8599', 'Other': '#E8B923'}  # Darker/more saturated for 2025
                 
                 for procedure in nat_proc_df['Procedures'].unique():
                     data = nat_proc_df[nat_proc_df['Procedures'] == procedure]
@@ -1576,120 +1576,120 @@ with tab_complications:
 
         
     # Kaplan–Meier style survival curve using robust system
-    try:
-        st.markdown("#### Kaplan–Meier (approx.) — 6‑month complication rate")
-        
-        # Import new KM system
-        from km import compute_complication_rates_from_aggregates
-        from charts import create_km_chart, create_multi_km_chart  
-        from utils.cache import debug_dataframe_signature, show_debug_panel
-        
-        # Debug signatures
-        debug_signatures = {}
-        
-        # Get hospital-specific complications data
-        km_src = _get_hospital_complications(complications, str(selected_hospital_id)).copy()
-        debug_signatures['hospital_complications'] = debug_dataframe_signature(km_src, f"Hospital {selected_hospital_id} complications")
-        
-        if not km_src.empty and 'quarter_date' in km_src.columns:
-            km_src = km_src.sort_values('quarter_date')
-            km_src['year'] = km_src['quarter_date'].dt.year
-            km_src['half'] = ((km_src['quarter_date'].dt.quarter - 1) // 2 + 1)
-            km_src['semester'] = km_src['year'].astype(str) + ' H' + km_src['half'].astype(int).astype(str)
-            
-            # Aggregate by semester
-            sem = km_src.groupby(['year','half','semester'], as_index=False).agg(
-                events=('complications_count','sum'),
-                total=('procedures_count','sum')
-            ).sort_values(['year','half'])
-            
-            debug_signatures['semester_aggregated'] = debug_dataframe_signature(sem, "Aggregated by semester")
-            
-            if not sem.empty:
-                try:
-                    # Use robust KM computation
-                    km_curve = compute_complication_rates_from_aggregates(
-                        df=sem,
-                        time_col='semester',
-                        event_col='events',
-                        at_risk_col='total', 
-                        group_cols=None,  # Single hospital
-                        data_hash=debug_signatures['semester_aggregated']['hash'],
-                        cache_version="v1"
-                    )
-                    
-                    debug_signatures['km_curve'] = debug_dataframe_signature(km_curve, "Final KM curve")
-                    
-                    if not km_curve.empty:
-                        # Compute national comparison curve (same 6‑month buckets)
-                        fig_km_nat = None
-                        try:
-                            nat_src = complications.copy()
-                            if not nat_src.empty and 'quarter_date' in nat_src.columns:
-                                nat_src = nat_src.dropna(subset=['quarter_date']).sort_values('quarter_date')
-                                nat_src['year'] = nat_src['quarter_date'].dt.year
-                                nat_src['half'] = ((nat_src['quarter_date'].dt.quarter - 1) // 2 + 1)
-                                nat_src['semester'] = nat_src['year'].astype(str) + ' H' + nat_src['half'].astype(int).astype(str)
-                                nat_sem = (
-                                    nat_src.groupby(['year','half','semester'], as_index=False)
-                                          .agg(events=('complications_count','sum'), total=('procedures_count','sum'))
-                                          .sort_values(['year','half'])
-                                )
-                                if not nat_sem.empty:
-                                    nat_sig = debug_dataframe_signature(nat_sem, "National semester aggregated")
-                                    km_curve_nat = compute_complication_rates_from_aggregates(
-                                        df=nat_sem,
-                                        time_col='semester',
-                                        event_col='events',
-                                        at_risk_col='total',
-                                        group_cols=None,
-                                        data_hash=nat_sig['hash'],
-                                        cache_version="v1"
-                                    )
-                                    if not km_curve_nat.empty:
-                                        fig_km_nat = km_curve_nat
-                        except Exception as _:
-                            fig_km_nat = None
-
-                        # Render overlayed comparison chart
-                        curves_to_plot = {"Hospital": km_curve}
-                        if fig_km_nat is not None:
-                            curves_to_plot["National"] = fig_km_nat
-                        overlay_title = "Hospital vs National Complication Rate Over Time (KM, YTD)" if has_2025_data else "Hospital vs National Complication Rate Over Time (KM)"
-                        overlay_fig = create_multi_km_chart(
-                            curves_dict=curves_to_plot,
-                            title=overlay_title,
-                                            yaxis_title='Complication Rate (%)',
-                                            xaxis_title='6‑month interval',
-                                            height=400,
-                            colors=['#1f77b4', '#d62728']
-                        )
-                        st.plotly_chart(overlay_fig, use_container_width=True, key=f"km_overlay_{selected_hospital_id}_v2")
-
-                        if has_2025_data:
-                            st.caption("Note: 2025 data includes records through July.")
-
-                        with st.expander('Method (approximation)'):
-                            st.markdown("This curve approximates a Kaplan–Meier survival function using aggregate 6‑month intervals. For each interval, hazard = events / total procedures, and survival multiplies (1 − hazard) across intervals. It uses hospital‑ and national‑level aggregates (not patient‑level times).")
-                    else:
-                        st.info('KM computation returned empty results.')
-                        
-                except Exception as e:
-                    st.error(f"Error in KM computation: {e}")
-                    debug_signatures['km_error'] = {'error': str(e)}
-            else:
-                st.info('Not enough data to compute 6‑month Kaplan–Meier curve.')
-                debug_signatures['no_semester_data'] = {'message': 'No semester aggregated data'}
-        else:
-            st.info('Complication data unavailable for Kaplan–Meier computation.')
-            debug_signatures['no_raw_data'] = {'message': 'No hospital complications data'}
-        
-        # Show debug panel for this hospital (collapsed by default)
-        if st.checkbox("Show KM debug info", value=False, key=f"km_debug_hospital_{selected_hospital_id}"):
-            show_debug_panel(debug_signatures, expanded=True)
-            
-    except Exception as e:
-        st.error(f"Error computing KM: {e}")
+    # try:
+    #     st.markdown("#### Kaplan–Meier (approx.) — 6‑month complication rate")
+    #     
+    #     # Import new KM system
+    #     from km import compute_complication_rates_from_aggregates
+    #     from charts import create_km_chart, create_multi_km_chart  
+    #     from utils.cache import debug_dataframe_signature, show_debug_panel
+    #     
+    #     # Debug signatures
+    #     debug_signatures = {}
+    #     
+    #     # Get hospital-specific complications data
+    #     km_src = _get_hospital_complications(complications, str(selected_hospital_id)).copy()
+    #     debug_signatures['hospital_complications'] = debug_dataframe_signature(km_src, f"Hospital {selected_hospital_id} complications")
+    #     
+    #     if not km_src.empty and 'quarter_date' in km_src.columns:
+    #         km_src = km_src.sort_values('quarter_date')
+    #         km_src['year'] = km_src['quarter_date'].dt.year
+    #         km_src['half'] = ((km_src['quarter_date'].dt.quarter - 1) // 2 + 1)
+    #         km_src['semester'] = km_src['year'].astype(str) + ' H' + km_src['half'].astype(int).astype(str)
+    #         
+    #         # Aggregate by semester
+    #         sem = km_src.groupby(['year','half','semester'], as_index=False).agg(
+    #             events=('complications_count','sum'),
+    #             total=('procedures_count','sum')
+    #         ).sort_values(['year','half'])
+    #         
+    #         debug_signatures['semester_aggregated'] = debug_dataframe_signature(sem, "Aggregated by semester")
+    #         
+    #         if not sem.empty:
+    #             try:
+    #                 # Use robust KM computation
+    #                 km_curve = compute_complication_rates_from_aggregates(
+    #                     df=sem,
+    #                     time_col='semester',
+    #                     event_col='events',
+    #                     at_risk_col='total', 
+    #                     group_cols=None,  # Single hospital
+    #                     data_hash=debug_signatures['semester_aggregated']['hash'],
+    #                     cache_version="v1"
+    #                 )
+    #                 
+    #                 debug_signatures['km_curve'] = debug_dataframe_signature(km_curve, "Final KM curve")
+    #                 
+    #                 if not km_curve.empty:
+    #                     # Compute national comparison curve (same 6‑month buckets)
+    #                     fig_km_nat = None
+    #                     try:
+    #                         nat_src = complications.copy()
+    #                         if not nat_src.empty and 'quarter_date' in nat_src.columns:
+    #                             nat_src = nat_src.dropna(subset=['quarter_date']).sort_values('quarter_date')
+    #                             nat_src['year'] = nat_src['quarter_date'].dt.year
+    #                             nat_src['half'] = ((nat_src['quarter_date'].dt.quarter - 1) // 2 + 1)
+    #                             nat_src['semester'] = nat_src['year'].astype(str) + ' H' + nat_src['half'].astype(int).astype(str)
+    #                             nat_sem = (
+    #                                 nat_src.groupby(['year','half','semester'], as_index=False)
+    #                                       .agg(events=('complications_count','sum'), total=('procedures_count','sum'))
+    #                                       .sort_values(['year','half'])
+    #                             )
+    #                             if not nat_sem.empty:
+    #                                 nat_sig = debug_dataframe_signature(nat_sem, "National semester aggregated")
+    #                                 km_curve_nat = compute_complication_rates_from_aggregates(
+    #                                     df=nat_sem,
+    #                                     time_col='semester',
+    #                                     event_col='events',
+    #                                     at_risk_col='total',
+    #                                     group_cols=None,
+    #                                     data_hash=nat_sig['hash'],
+    #                                     cache_version="v1"
+    #                                 )
+    #                                 if not km_curve_nat.empty:
+    #                                     fig_km_nat = km_curve_nat
+    #                     except Exception as _:
+    #                         fig_km_nat = None
+    # 
+    #                     # Render overlayed comparison chart
+    #                     curves_to_plot = {"Hospital": km_curve}
+    #                     if fig_km_nat is not None:
+    #                         curves_to_plot["National"] = fig_km_nat
+    #                     overlay_title = "Hospital vs National Complication Rate Over Time (KM, YTD)" if has_2025_data else "Hospital vs National Complication Rate Over Time (KM)"
+    #                     overlay_fig = create_multi_km_chart(
+    #                         curves_dict=curves_to_plot,
+    #                         title=overlay_title,
+    #                                         yaxis_title='Complication Rate (%)',
+    #                                         xaxis_title='6‑month interval',
+    #                                         height=400,
+    #                         colors=['#1f77b4', '#d62728']
+    #                     )
+    #                     st.plotly_chart(overlay_fig, use_container_width=True, key=f"km_overlay_{selected_hospital_id}_v2")
+    # 
+    #                     if has_2025_data:
+    #                         st.caption("Note: 2025 data includes records through July.")
+    # 
+    #                     with st.expander('Method (approximation)'):
+    #                         st.markdown("This curve approximates a Kaplan–Meier survival function using aggregate 6‑month intervals. For each interval, hazard = events / total procedures, and survival multiplies (1 − hazard) across intervals. It uses hospital‑ and national‑level aggregates (not patient‑level times).")
+    #                 else:
+    #                     st.info('KM computation returned empty results.')
+    #                     
+    #             except Exception as e:
+    #                 st.error(f"Error in KM computation: {e}")
+    #                 debug_signatures['km_error'] = {'error': str(e)}
+    #         else:
+    #             st.info('Not enough data to compute 6‑month Kaplan–Meier curve.')
+    #             debug_signatures['no_semester_data'] = {'message': 'No semester aggregated data'}
+    #     else:
+    #         st.info('Complication data unavailable for Kaplan–Meier computation.')
+    #         debug_signatures['no_raw_data'] = {'message': 'No hospital complications data'}
+    #     
+    #     # Show debug panel for this hospital (collapsed by default)
+    #     if st.checkbox("Show KM debug info", value=False, key=f"km_debug_hospital_{selected_hospital_id}"):
+    #         show_debug_panel(debug_signatures, expanded=True)
+    #         
+    # except Exception as e:
+    #     st.error(f"Error computing KM: {e}")
 
     # Removed approach-specific complication rates (hospital and national) per request
 
