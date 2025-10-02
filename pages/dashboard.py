@@ -751,6 +751,17 @@ def _add_recruitment_choropleth_commune_to_map(folium_map, hospital_id, recruitm
 
 with tab_activity:
     st.subheader("Activity Overview")
+    # Show YTD note and available years for quick diagnostics
+    try:
+        if is_ytd_2025:
+            st.caption("Note: 2025 figures are year‑to‑date through July.")
+        yrs_avail = sorted(pd.to_numeric(selected_hospital_all_data.get('annee', pd.Series(dtype=float)), errors='coerce').dropna().astype(int).unique().tolist())
+        if yrs_avail:
+            st.caption(f"Available years for this hospital: {yrs_avail[0]}–{yrs_avail[-1]}")
+            if 2025 not in yrs_avail and is_ytd_2025:
+                st.info("2025 activity is not present in the current dataset. If you recently added 2025 activity CSVs, please rebuild parquet with: make parquet, then reload.")
+    except Exception:
+        pass
     # Total surgeries and quick mix charts
     col1, col2 = st.columns([2, 1])  # Hospital graphs larger (2), National graphs smaller (1)
     
