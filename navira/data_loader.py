@@ -280,6 +280,86 @@ def load_complications():
 
 
 @st.cache_data(show_spinner=False)
+def load_los_90():
+    """Load 90-day post-surgery length of stay distribution per hospital/year.
+
+    Source: data/export_TAB_LOS_HOP_90.csv
+    Columns in source: finessGeoDP, annee, duree_90_cat, VOL, TOT, PCT
+    """
+    try:
+        los90_path = os.path.join(RAW_FALLBACK_DIR, "export_TAB_LOS_HOP_90.csv")
+        df = _read_csv_with_fallback(los90_path, sep=',')
+
+        # Normalize column names
+        rename_map = {
+            'finessGeoDP': 'hospital_id',
+            'annee': 'year',
+            'duree_90_cat': 'category',
+            'VOL': 'count',
+            'TOT': 'total',
+            'PCT': 'percentage',
+        }
+        for k, v in rename_map.items():
+            if k in df.columns and v not in df.columns:
+                df = df.rename(columns={k: v})
+
+        # Types
+        if 'hospital_id' in df.columns:
+            df['hospital_id'] = df['hospital_id'].astype(str)
+        for num_col in ['year', 'count', 'total', 'percentage']:
+            if num_col in df.columns:
+                df[num_col] = pd.to_numeric(df[num_col], errors='coerce')
+
+        # Trim whitespace in category labels
+        if 'category' in df.columns:
+            df['category'] = df['category'].astype(str).str.strip()
+
+        return df
+    except Exception as e:
+        print(f"Error loading LOS-90 data: {e}")
+        return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False)
+def load_clavien():
+    """Load Clavien-Dindo complication categories per hospital/year (90-day).
+
+    Source: data/TAB_CLAV_CAT_HOP_AN.csv
+    Columns in source: finessGeoDP, annee, clav_cat_90, NB, PCT, TOT_y
+    Notes: NB is the number of events in the category; TOT_y appears to be total
+           procedures; PCT is percentage relative to total.
+    """
+    try:
+        clavien_path = os.path.join(RAW_FALLBACK_DIR, "TAB_CLAV_CAT_HOP_AN.csv")
+        df = _read_csv_with_fallback(clavien_path, sep=',')
+
+        # Normalize column names
+        rename_map = {
+            'finessGeoDP': 'hospital_id',
+            'annee': 'year',
+            'clav_cat_90': 'clavien_category',
+            'NB': 'count',
+            'PCT': 'percentage',
+            'TOT_y': 'total',
+        }
+        for k, v in rename_map.items():
+            if k in df.columns and v not in df.columns:
+                df = df.rename(columns={k: v})
+
+        # Types
+        if 'hospital_id' in df.columns:
+            df['hospital_id'] = df['hospital_id'].astype(str)
+        for num_col in ['year', 'clavien_category', 'count', 'percentage', 'total']:
+            if num_col in df.columns:
+                df[num_col] = pd.to_numeric(df[num_col], errors='coerce')
+
+        return df
+    except Exception as e:
+        print(f"Error loading Clavien data: {e}")
+        return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False)
 def load_procedure_details():
     """Load detailed procedure data with surgical approach and technique"""
     try:
@@ -369,6 +449,8 @@ def get_all_dataframes():
     complications = load_complications()
     procedure_details = load_procedure_details()
     cities = load_french_cities()
+    los_90 = load_los_90()
+    clavien = load_clavien()
     
     return {
         'establishments': establishments,
@@ -377,7 +459,9 @@ def get_all_dataframes():
         'competitors': competitors,
         'complications': complications,
         'procedure_details': procedure_details,
-        'cities': cities
+        'cities': cities,
+        'los_90': los_90,
+        'clavien': clavien,
     }
 
 

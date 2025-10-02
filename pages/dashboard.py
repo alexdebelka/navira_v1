@@ -87,6 +87,8 @@ try:
     procedure_details = all_data.get('procedure_details', pd.DataFrame())
     recruitment = all_data.get('recruitment', pd.DataFrame())
     cities = all_data.get('cities', pd.DataFrame())
+    los_90 = all_data.get('los_90', pd.DataFrame())
+    clavien = all_data.get('clavien', pd.DataFrame())
 except Exception:
     st.error("Parquet data not found. Please run: make parquet")
     st.stop()
@@ -1174,6 +1176,131 @@ with tab_complications:
             pass
 
         # Removed Quarterly Rate vs National chart due to unreliable hospital quarterly data
+        try:
+            st.markdown("#### Length of Stay within 90 days after surgery")
+
+            # Filter LOS-90 for selected hospital and latest year available
+            los_src = los_90.copy()
+            if not los_src.empty and 'hospital_id' in los_src.columns:
+                los_src['hospital_id'] = los_src['hospital_id'].astype(str)
+                hos_los = los_src[los_src['hospital_id'] == str(selected_hospital_id)].copy()
+                if not hos_los.empty:
+                    # Pick most recent year
+                    if 'year' in hos_los.columns:
+                        recent_year = int(hos_los['year'].dropna().max())
+                        hos_los = hos_los[hos_los['year'] == recent_year]
+                    # Aggregate categories to required buckets: 0 day, 1-3, 4-6, >6
+                    # Map existing categories: (0,3] ~ 1-3; (3,6] ~ 4-6; (6,480] ~ >6; (0,3] can include 0 if separate zero-day not provided
+                    # If explicit 0-day not available, infer as max(0, total - sum(count where category != '0'))
+                    cat_map = {
+                        '(0,3]': '1-3 days',
+                        '(3,6]': '4-6 days',
+                        '(6,480]': '>6 days',
+                        '(6,225]': '>6 days',
+                        '(0,3] ': '1-3 days',
+                        '(3,6] ': '4-6 days',
+                        '(6,480] ': '>6 days',
+                    }
+                    if 'category' in hos_los.columns:
+                        hos_los['bucket'] = hos_los['category'].map(cat_map).fillna(hos_los['category'])
+                    else:
+                        hos_los['bucket'] = ''
+
+                    # Sum counts by bucket
+                    if 'count' in hos_los.columns:
+                        agg = hos_los.groupby('bucket', as_index=False)['count'].sum()
+                    else:
+                        agg = pd.DataFrame()
+
+                    # Compute 0-day if possible
+                    zero_day_count = None
+                    if not agg.empty and 'total' in hos_los.columns:
+                        total_val = pd.to_numeric(hos_los['total'], errors='coerce').dropna().max()
+                        summed_known = pd.to_numeric(agg['count'], errors='coerce').sum()
+                        if pd.notna(total_val):
+                            z = total_val - summed_known
+                            if z >= 0:
+                                zero_day_count = int(z)
+                    # Build final order and percentages
+                    display_order = ['0 day', '1-3 days', '4-6 days', '>6 days']
+                    disp_df = pd.DataFrame({'bucket': display_order, 'count': [0, 0, 0, 0]})
+                    for i, row in agg.iterrows():
+                        if row['bucket'] in disp_df['bucket'].values:
+                            disp_df.loc[disp_df['bucket'] == row['bucket'], 'count'] = int(row['count'])
+                    if zero_day_count is not None:
+                        disp_df.loc[disp_df['bucket'] == '0 day', 'count'] = int(zero_day_count)
+                    total_disp = int(pd.to_numeric(disp_df['count'], errors='coerce').sum())
+                    disp_df['percentage'] = disp_df['count'].apply(lambda v: (v / total_disp * 100.0) if total_disp > 0 else 0.0)
+
+                    # Plot
+                    fig_los90 = px.bar(
+                        disp_df, x='bucket', y='percentage', text='count',
+                        title=f"90‑day LOS distribution (year {recent_year})",
+                        color='bucket', color_discrete_sequence=['#3b82f6','#22c55e','#f59e0b','#ef4444']
+                    )
+                    fig_los90.update_layout(height=340, xaxis_title='Category', yaxis_title='Share (%)', showlegend=False,
+                        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    fig_los90.update_traces(texttemplate='%{text:,}', textposition='outside')
+                    st.plotly_chart(fig_los90, use_container_width=True)
+                else:
+                    st.info("No LOS‑90 data available for this hospital.")
+            else:
+                st.info("No LOS‑90 dataset available.")
+        except Exception as e:
+            st.warning(f"LOS‑90 section unavailable: {e}")
+
+        try:
+            st.markdown("#### Clavien–Dindo Complication Categories (90 days)")
+
+            # Filter Clavien for selected hospital and latest year
+            cl_src = clavien.copy()
+            if not cl_src.empty and 'hospital_id' in cl_src.columns:
+                cl_src['hospital_id'] = cl_src['hospital_id'].astype(str)
+                hos_cl = cl_src[cl_src['hospital_id'] == str(selected_hospital_id)].copy()
+                if not hos_cl.empty:
+                    # Latest year
+                    if 'year' in hos_cl.columns:
+                        c_year = int(hos_cl['year'].dropna().max())
+                        hos_cl = hos_cl[hos_cl['year'] == c_year]
+
+                    # Map categories: 0 means Clavien 0–2; 3=reoperation; 4=ICU; 5=death
+                    label_map = {0: 'Clavien 0–2', 3: 'Reoperation', 4: 'ICU stay', 5: 'Death'}
+                    if 'clavien_category' in hos_cl.columns:
+                        hos_cl['label'] = hos_cl['clavien_category'].map(label_map).fillna(hos_cl['clavien_category'].astype(str))
+                    else:
+                        hos_cl['label'] = ''
+
+                    # Aggregate
+                    if 'count' in hos_cl.columns:
+                        cl_agg = hos_cl.groupby('label', as_index=False)['count'].sum()
+                    else:
+                        cl_agg = pd.DataFrame()
+
+                    # Ensure fixed order
+                    order = ['Clavien 0–2', 'Reoperation', 'ICU stay', 'Death']
+                    cl_disp = pd.DataFrame({'label': order, 'count': [0, 0, 0, 0]})
+                    for i, row in cl_agg.iterrows():
+                        if row['label'] in cl_disp['label'].values:
+                            cl_disp.loc[cl_disp['label'] == row['label'], 'count'] = int(row['count'])
+                    total_c = int(pd.to_numeric(cl_disp['count'], errors='coerce').sum())
+                    cl_disp['percentage'] = cl_disp['count'].apply(lambda v: (v / total_c * 100.0) if total_c > 0 else 0.0)
+
+                    # Plot
+                    fig_clav = px.bar(
+                        cl_disp, x='label', y='percentage', text='count',
+                        title=f"Clavien categories (year {c_year})",
+                        color='label', color_discrete_sequence=['#16a34a','#f59e0b','#ef4444','#7c3aed']
+                    )
+                    fig_clav.update_layout(height=340, xaxis_title='Category', yaxis_title='Share (%)', showlegend=False,
+                        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    fig_clav.update_traces(texttemplate='%{text:,}', textposition='outside')
+                    st.plotly_chart(fig_clav, use_container_width=True)
+                else:
+                    st.info("No Clavien data available for this hospital.")
+            else:
+                st.info("No Clavien dataset available.")
+        except Exception as e:
+            st.warning(f"Clavien section unavailable: {e}")
     else:
         st.info("No complications data available for this hospital.")
     # Kaplan–Meier style survival curve using robust system
