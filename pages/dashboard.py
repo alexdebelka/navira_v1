@@ -1297,7 +1297,7 @@ with tab_complications:
         
         # Import new KM system
         from km import compute_complication_rates_from_aggregates
-        from charts import create_km_chart  
+        from charts import create_km_chart, create_multi_km_chart  
         from utils.cache import debug_dataframe_signature, show_debug_panel
         
         # Debug signatures
@@ -1337,18 +1337,6 @@ with tab_complications:
                     debug_signatures['km_curve'] = debug_dataframe_signature(km_curve, "Final KM curve")
                     
                     if not km_curve.empty:
-                        # Build hospital chart
-                        fig_km_hosp = create_km_chart(
-                            curve_df=km_curve,
-                            page_id=f"hospital_{selected_hospital_id}",
-                            title="Hospital Complication Rate Over Time (KM)",
-                            yaxis_title='Complication Rate (%)',
-                            xaxis_title='6‑month interval',
-                            height=400,
-                            color='#1f77b4',
-                            show_complication_rate=True
-                        )
-
                         # Compute national comparison curve (same 6‑month buckets)
                         fig_km_nat = None
                         try:
@@ -1375,29 +1363,24 @@ with tab_complications:
                                         cache_version="v1"
                                     )
                                     if not km_curve_nat.empty:
-                                        km_nat_title = "National Complication Rate Over Time (KM, YTD)" if has_2025_data else "National Complication Rate Over Time (KM)"
-                                        fig_km_nat = create_km_chart(
-                                            curve_df=km_curve_nat,
-                                            page_id="national_cmp",
-                                            title=km_nat_title,
-                                            yaxis_title='Complication Rate (%)',
-                                            xaxis_title='6‑month interval',
-                                            height=400,
-                                            color='#d62728',
-                                            show_complication_rate=True
-                                        )
+                                        fig_km_nat = km_curve_nat
                         except Exception as _:
                             fig_km_nat = None
 
-                        # Render side-by-side
-                        c_left, c_right = st.columns(2)
-                        with c_left:
-                            st.plotly_chart(fig_km_hosp, use_container_width=True, key=f"km_hospital_{selected_hospital_id}_v2")
-                        with c_right:
-                            if fig_km_nat is not None:
-                                st.plotly_chart(fig_km_nat, use_container_width=True, key="km_national_cmp_v2")
-                            else:
-                                st.info("National KM curve unavailable.")
+                        # Render overlayed comparison chart
+                        curves_to_plot = {"Hospital": km_curve}
+                        if fig_km_nat is not None:
+                            curves_to_plot["National"] = fig_km_nat
+                        overlay_title = "Hospital vs National Complication Rate Over Time (KM, YTD)" if has_2025_data else "Hospital vs National Complication Rate Over Time (KM)"
+                        overlay_fig = create_multi_km_chart(
+                            curves_dict=curves_to_plot,
+                            title=overlay_title,
+                            yaxis_title='Complication Rate (%)',
+                            xaxis_title='6‑month interval',
+                            height=400,
+                            colors=['#1f77b4', '#d62728']
+                        )
+                        st.plotly_chart(overlay_fig, use_container_width=True, key=f"km_overlay_{selected_hospital_id}_v2")
 
                         if has_2025_data:
                             st.caption("Note: 2025 data includes records through July.")
