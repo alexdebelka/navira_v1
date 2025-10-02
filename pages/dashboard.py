@@ -831,14 +831,14 @@ with tab_activity:
             else:
                 # Fallback to annual data
                 proc_df = selected_hospital_all_data[selected_hospital_all_data['annee'] > 2020][['annee']+proc_codes].copy()
-                proc_long = []
-                for _, r in proc_df.iterrows():
-                    total = max(1, sum(r[c] for c in proc_codes))
-                    sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
-                    other = total - sleeve - bypass
-                    for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
-                        proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
-                pl = pd.DataFrame(proc_long)
+            proc_long = []
+            for _, r in proc_df.iterrows():
+                total = max(1, sum(r[c] for c in proc_codes))
+                sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
+                other = total - sleeve - bypass
+                for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
+                    proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
+            pl = pd.DataFrame(proc_long)
             
             if not pl.empty:
                 # Create the combined chart
@@ -896,7 +896,7 @@ with tab_activity:
                 # Update layout with dual y-axes
                 max_y2 = max(hosp_year_clean['total_procedures_year']) * 1.1 if not hosp_year_clean.empty else 100
                 fig.update_layout(
-                    height=400,
+                    height=450,
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
                     barmode='stack',
@@ -916,12 +916,12 @@ with tab_activity:
                     legend=dict(
                         orientation="h",
                         yanchor="bottom",
-                        y=-0.58,
+                        y=-0.35,
                         xanchor="center",
                         x=0.5
                     ),
                     xaxis=dict(automargin=True),
-                    margin=dict(b=160)
+                    margin=dict(b=140, t=60)
                 )
                 
                 # Update bar hover templates
@@ -1013,7 +1013,7 @@ with tab_activity:
                             opacity=0.85,
                             legendgroup=procedure,
                             showlegend=True
-                        ))
+                    ))
                 
                 # Add line chart for national average surgeries (on secondary y-axis)
                 fig_nat.add_trace(go.Scatter(
@@ -1030,7 +1030,7 @@ with tab_activity:
                 # Update layout with dual y-axes
                 max_nat_y2 = max(nat_df['Avg Procedures']) * 1.1 if not nat_df.empty else 100
                 fig_nat.update_layout(
-                    height=400,
+                    height=450,
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
                     barmode='stack',
@@ -1050,12 +1050,12 @@ with tab_activity:
                     legend=dict(
                         orientation="h",
                         yanchor="bottom",
-                        y=-0.78,
+                        y=-0.35,
                         xanchor="center",
                         x=0.5
                     ),
                     xaxis=dict(automargin=True),
-                    margin=dict(b=160)
+                    margin=dict(b=140, t=60)
                 )
                 
                 # Update bar hover templates
