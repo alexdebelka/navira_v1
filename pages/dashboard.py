@@ -1252,27 +1252,45 @@ with tab_complications:
         try:
             st.markdown("#### Clavien–Dindo Complication Categories (90 days)")
 
-            # Filter Clavien for selected hospital and latest year
+            # Filter Clavien for selected hospital
             cl_src = clavien.copy()
             if not cl_src.empty and 'hospital_id' in cl_src.columns:
                 cl_src['hospital_id'] = cl_src['hospital_id'].astype(str)
                 hos_cl = cl_src[cl_src['hospital_id'] == str(selected_hospital_id)].copy()
                 if not hos_cl.empty:
-                    # Latest year
+                    # Ensure numeric year
                     if 'year' in hos_cl.columns:
-                        c_year = int(hos_cl['year'].dropna().max())
-                        hos_cl = hos_cl[hos_cl['year'] == c_year]
+                        hos_cl['year'] = pd.to_numeric(hos_cl['year'], errors='coerce')
+
+                    # Toggle: 2025 only vs 2020–2025 aggregate
+                    try:
+                        show_2025_only = st.toggle("Show 2025 only (data through July)", value=False)
+                    except Exception:
+                        show_2025_only = st.checkbox("Show 2025 only (data through July)", value=False)
+
+                    if show_2025_only and 'year' in hos_cl.columns:
+                        view_df = hos_cl[hos_cl['year'] == 2025].copy()
+                        title_suffix = "2025 (YTD)"
+                        caption = "Note: 2025 includes data through July."
+                    else:
+                        # Aggregate across 2020–2025 inclusive
+                        if 'year' in hos_cl.columns:
+                            view_df = hos_cl[(hos_cl['year'] >= 2020) & (hos_cl['year'] <= 2025)].copy()
+                        else:
+                            view_df = hos_cl.copy()
+                        title_suffix = "2020–2025"
+                        caption = None
 
                     # Map categories: 0 means Clavien 0–2; 3=reoperation; 4=ICU; 5=death
                     label_map = {0: 'Clavien 0–2', 3: 'Reoperation', 4: 'ICU stay', 5: 'Death'}
-                    if 'clavien_category' in hos_cl.columns:
-                        hos_cl['label'] = hos_cl['clavien_category'].map(label_map).fillna(hos_cl['clavien_category'].astype(str))
+                    if 'clavien_category' in view_df.columns:
+                        view_df['label'] = view_df['clavien_category'].map(label_map).fillna(view_df['clavien_category'].astype(str))
                     else:
-                        hos_cl['label'] = ''
+                        view_df['label'] = ''
 
-                    # Aggregate
-                    if 'count' in hos_cl.columns:
-                        cl_agg = hos_cl.groupby('label', as_index=False)['count'].sum()
+                    # Aggregate counts across selected period
+                    if 'count' in view_df.columns:
+                        cl_agg = view_df.groupby('label', as_index=False)['count'].sum()
                     else:
                         cl_agg = pd.DataFrame()
 
@@ -1288,13 +1306,15 @@ with tab_complications:
                     # Plot
                     fig_clav = px.bar(
                         cl_disp, x='label', y='percentage', text='count',
-                        title=f"Clavien categories (year {c_year})",
+                        title=f"Clavien categories ({title_suffix})",
                         color='label', color_discrete_sequence=['#16a34a','#f59e0b','#ef4444','#7c3aed']
                     )
                     fig_clav.update_layout(height=340, xaxis_title='Category', yaxis_title='Share (%)', showlegend=False,
                         plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                     fig_clav.update_traces(texttemplate='%{text:,}', textposition='outside')
                     st.plotly_chart(fig_clav, use_container_width=True)
+                    if caption:
+                        st.caption(caption)
                 else:
                     st.info("No Clavien data available for this hospital.")
             else:
