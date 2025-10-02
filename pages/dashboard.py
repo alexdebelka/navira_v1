@@ -1039,93 +1039,149 @@ with tab_complications:
     if has_2025_data:
         st.caption("Note: 2025 complication data includes records through July.")
     if not hosp_comp.empty:
-        tot_proc = int(hosp_comp['procedures_count'].sum())
-        tot_comp = int(hosp_comp['complications_count'].sum())
-        rate = (tot_comp / tot_proc * 100) if tot_proc>0 else 0
-        c1, c2 = st.columns(2)
-        c1.metric("Total Complications", f"{tot_comp:,}")
-        c2.metric("Overall Rate", f"{rate:.1f}%")
-        
-        # Calculate national averages for comparison
+        # First: Clavien–Dindo categories (moved to top of section)
+        try:
+            st.markdown("#### Clavien–Dindo Complication Categories (90 days)")
+
+            # Filter Clavien for selected hospital
+            cl_src = clavien.copy()
+            if not cl_src.empty and 'hospital_id' in cl_src.columns:
+                cl_src['hospital_id'] = cl_src['hospital_id'].astype(str)
+                hos_cl = cl_src[cl_src['hospital_id'] == str(selected_hospital_id)].copy()
+                if not hos_cl.empty:
+                    # Ensure numeric year
+                    if 'year' in hos_cl.columns:
+                        hos_cl['year'] = pd.to_numeric(hos_cl['year'], errors='coerce')
+
+                    # Toggle: 2025 only vs 2020–2025 aggregate
+                    try:
+                        show_2025_only = st.toggle("Show 2025 only (data through July)", value=False)
+                    except Exception:
+                        show_2025_only = st.checkbox("Show 2025 only (data through July)", value=False)
+
+                    if show_2025_only and 'year' in hos_cl.columns:
+                        view_df = hos_cl[hos_cl['year'] == 2025].copy()
+                        title_suffix = "2025 (YTD)"
+                        caption = "Note: 2025 includes data through July."
+                    else:
+                        # Aggregate across 2020–2025 inclusive
+                        if 'year' in hos_cl.columns:
+                            view_df = hos_cl[(hos_cl['year'] >= 2020) & (hos_cl['year'] <= 2025)].copy()
+                        else:
+                            view_df = hos_cl.copy()
+                        title_suffix = "2020–2025"
+                        caption = None
+
+                    # Map categories: 0 means Clavien 0–2; 3=reoperation; 4=ICU; 5=death
+                    label_map = {0: 'Clavien 0–2', 3: 'Reoperation', 4: 'ICU stay', 5: 'Death'}
+                    if 'clavien_category' in view_df.columns:
+                        view_df['label'] = view_df['clavien_category'].map(label_map).fillna(view_df['clavien_category'].astype(str))
+                    else:
+                        view_df['label'] = ''
+
+                    # === Summary panel (Hospital vs National, grades 3–5) ===
+                    def _sum_unique_totals(df: pd.DataFrame, id_col: str) -> int:
+                        if 'year' in df.columns and 'total' in df.columns:
+                            try:
+                                grouped = df.groupby([id_col, 'year'], as_index=False)['total'].max()
+                                return int(pd.to_numeric(grouped['total'], errors='coerce').fillna(0).sum())
+                            except Exception:
+                                return int(pd.to_numeric(df['total'], errors='coerce').fillna(0).sum())
+                        return int(pd.to_numeric(df.get('total', 0), errors='coerce').fillna(0).sum())
+
+                    # Hospital severe (3–5)
+                    hosp_period_df = view_df.copy()
+                    hosp_total = _sum_unique_totals(hosp_period_df, 'hospital_id')
+                    hosp_grade_counts = hosp_period_df[hosp_period_df.get('clavien_category').isin([3,4,5])].groupby('clavien_category', as_index=False)['count'].sum()
+                    hosp_overall_events = int(pd.to_numeric(hosp_grade_counts['count'], errors='coerce').fillna(0).sum()) if not hosp_grade_counts.empty else 0
+                    hosp_overall_rate = (hosp_overall_events / hosp_total * 100.0) if hosp_total > 0 else 0.0
+
+                    # National severe (3–5) for same period
+                    nat_period_df = clavien.copy()
+                    if 'year' in nat_period_df.columns and 'year' in hosp_period_df.columns:
+                        years_set = sorted(hosp_period_df['year'].dropna().unique().tolist())
+                        nat_period_df['year'] = pd.to_numeric(nat_period_df['year'], errors='coerce')
+                        nat_period_df = nat_period_df[nat_period_df['year'].isin(years_set)]
+                    nat_total = _sum_unique_totals(nat_period_df, 'hospital_id')
+                    nat_grade_counts = nat_period_df[nat_period_df.get('clavien_category').isin([3,4,5])].groupby('clavien_category', as_index=False)['count'].sum()
+                    nat_overall_events = int(pd.to_numeric(nat_grade_counts['count'], errors='coerce').fillna(0).sum()) if not nat_grade_counts.empty else 0
+                    nat_overall_rate = (nat_overall_events / nat_total * 100.0) if nat_total > 0 else 0.0
+
+                    # Relative delta vs national
+                    rel_delta = None
+                    try:
+                        rel_delta = ((hosp_overall_rate - nat_overall_rate) / nat_overall_rate * 100.0) if nat_overall_rate > 0 else None
+                    except Exception:
+                        rel_delta = None
+
+                    st.markdown("##### Severe complications — Clavien–Dindo grades 3–5")
+                    # Card-style top row with spacing and center label
+                    m1, m_mid, m3 = st.columns([1.2, 1, 1.2])
+                    with m1:
+                        st.markdown("<div class='nv-card'>" 
+                                    + "<div class='nv-metric-title'>Hospital (overall)</div>"
+                                    + f"<div class='nv-metric-value'>{hosp_overall_rate:.1f}%</div>"
+                                    + (f"<div style='text-align:center;margin-top:6px;'><span class='nv-pill {('red' if (rel_delta or 0)>0 else 'green')}'>{('↑' if (rel_delta or 0)>0 else '↓')} {abs(rel_delta):.0f}% vs National</span></div>" if rel_delta is not None else "")
+                                    + "</div>", unsafe_allow_html=True)
+                    with m_mid:
+                        st.markdown("<div class='nv-center-label'>Overall complication rate</div>", unsafe_allow_html=True)
+                    with m3:
+                        st.markdown("<div class='nv-card'>" 
+                                    + "<div class='nv-metric-title'>National benchmark</div>"
+                                    + f"<div class='nv-metric-value'>{nat_overall_rate:.1f}%</div>"
+                                    + "</div>", unsafe_allow_html=True)
+                    if caption:
+                        st.caption(caption)
+
+                    st.markdown("<div class='nv-row-gap'></div>", unsafe_allow_html=True)
+
+                    # Detail cards grid: three columns (grade, hospital, national)
+                    def _grade_rate(g: int, src: pd.DataFrame, total: int) -> float:
+                        try:
+                            c = int(pd.to_numeric(src[src.get('clavien_category') == g]['count'], errors='coerce').fillna(0).sum())
+                            return (c / total * 100.0) if total > 0 else 0.0
+                        except Exception:
+                            return 0.0
+
+                    h1, h2, h3 = st.columns([1, 1, 1])
+                    h1.markdown("**Clavien grade**")
+                    h2.markdown("**Hospital**")
+                    h3.markdown("**National benchmark**")
+                    for g in [3,4,5]:
+                        r_h = _grade_rate(g, hosp_period_df, hosp_total)
+                        r_n = _grade_rate(g, nat_period_df, nat_total)
+                        better = r_h <= r_n
+                        arrow = "↑" if not better else "↓"
+                        pill_class = 'red' if not better else 'green'
+                        c1, c2, c3 = st.columns([1, 1, 1])
+                        c1.markdown(f"<div class='nv-card small' style='text-align:center;'><b>{g}</b></div>", unsafe_allow_html=True)
+                        c2.markdown(f"<div class='nv-card small' style='text-align:center;'><span style='font-weight:700'>{r_h:.1f}%</span> <span class='nv-pill {pill_class}' style='margin-left:8px'>{arrow}</span></div>", unsafe_allow_html=True)
+                        c3.markdown(f"<div class='nv-card small' style='text-align:center;'>{r_n:.1f}%</div>", unsafe_allow_html=True)
+                else:
+                    st.info("No Clavien data available for this hospital.")
+            else:
+                st.info("No Clavien dataset available.")
+        except Exception as e:
+            st.warning(f"Clavien section unavailable: {e}")
+
+        # Prepare national quarterly average series for optional overlays used later
         @st.cache_data(show_spinner=False)
-        def calculate_national_complication_averages():
-            if complications.empty:
-                return pd.DataFrame()
-            
-            # Calculate national averages by quarter
-            national_avg = complications.groupby('quarter_date').agg({
-                'complications_count': 'sum',
-                'procedures_count': 'sum'
-            }).reset_index()
-            
-            national_avg['national_rate'] = (national_avg['complications_count'] / national_avg['procedures_count'] * 100)
-            national_avg['quarter'] = national_avg['quarter_date'].dt.strftime('%YQ%q')
-            
-            return national_avg
-        
-        national_avg_data = calculate_national_complication_averages()
-
-        # 6‑month (semester) aggregation for hospital and national
-        def _to_semester(df: pd.DataFrame) -> pd.DataFrame:
-            if df.empty or 'quarter_date' not in df.columns:
-                return pd.DataFrame()
-            d = df.copy()
-            d = d.dropna(subset=['quarter_date']).sort_values('quarter_date')
-            d['year'] = d['quarter_date'].dt.year
-            d['half'] = ((d['quarter_date'].dt.quarter - 1) // 2 + 1)
-            sem = (
-                d.groupby(['year','half'], as_index=False)
-                  .agg({'complications_count':'sum','procedures_count':'sum'})
-            )
-            sem['rate_pct'] = sem.apply(lambda r: (r['complications_count']/r['procedures_count']*100) if r['procedures_count']>0 else 0.0, axis=1)
-            sem['label'] = sem['year'].astype(int).astype(str) + ' H' + sem['half'].astype(int).astype(str)
-            return sem.sort_values(['year','half'])
-
-        hosp_sem = _to_semester(hosp_comp)
-        nat_sem = _to_semester(complications)
-
-        # Display latest 6‑month metrics and comparison
-        if not hosp_sem.empty:
-            latest_sem = hosp_sem.iloc[-1]
-            sem_key = (int(latest_sem['year']), int(latest_sem['half']))
-            nat_row = nat_sem[(nat_sem['year']==sem_key[0]) & (nat_sem['half']==sem_key[1])]
-            nat_val = float(nat_row['rate_pct'].iloc[0]) if not nat_row.empty else 0.0
-            st.markdown("#### Latest 6‑Month Data")
-            l1, l2 = st.columns(2)
-            with l1:
-                st.metric("Hospital 6‑month rate", f"{float(latest_sem['rate_pct']):.1f}%")
-            with l2:
-                nat_metric_label = "National 6‑month rate (YTD)" if int(latest_sem['year']) == 2025 else "National 6‑month rate"
-                st.metric(nat_metric_label, f"{nat_val:.1f}%")
-            if int(latest_sem['year']) == 2025:
-                st.caption("Note: 2025 data includes records through July.")
-
-            # Bar comparison for the latest semester
-            nat_bar_label = 'National (YTD)' if int(latest_sem['year']) == 2025 else 'National'
-            comp_df = pd.DataFrame({
-                'Metric': ['Hospital', nat_bar_label],
-                'Rate (%)': [float(latest_sem['rate_pct']), nat_val]
-            })
-            fig_bar = px.bar(comp_df, x='Metric', y='Rate (%)', title=f"6‑Month Comparison ({latest_sem['label']})",
-                             color='Metric', color_discrete_map={'Hospital':'#1f77b4','National':'#ff7f0e'})
-            fig_bar.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_bar, use_container_width=True)
-
-            # Expected vs observed for the latest 6‑month period
+        def _calculate_national_complication_averages_for_overlay(comp_df: pd.DataFrame) -> pd.DataFrame:
             try:
-                latest_mask = (hosp_sem['year'] == sem_key[0]) & (hosp_sem['half'] == sem_key[1])
-                latest_row = hosp_sem[latest_mask].iloc[0]
-                hosp_events = float(latest_row['events'])
-                hosp_total = float(latest_row['total']) if 'total' in latest_row else float(latest_row['procedures_count'])
-                expected_events = hosp_total * (nat_val / 100.0)
-                excess = hosp_events - expected_events
-                ex1, ex2, ex3 = st.columns(3)
-                ex1.metric("Latest 6‑mo complications", f"{int(hosp_events):,}")
-                ex2.metric("Expected at nat. rate", f"{expected_events:.1f}")
-                ex3.metric("Excess (±)", f"{excess:+.1f}")
+                if comp_df is None or comp_df.empty or 'quarter_date' not in comp_df.columns:
+                    return pd.DataFrame()
+                nat = (
+                    comp_df.groupby('quarter_date')
+                    .agg({'complications_count': 'sum', 'procedures_count': 'sum'})
+                    .reset_index()
+                )
+                nat['national_rate'] = (nat['complications_count'] / nat['procedures_count'] * 100)
+                return nat
             except Exception:
-                pass
-        
+                return pd.DataFrame()
+
+        national_avg_data = _calculate_national_complication_averages_for_overlay(complications)
+
         # 12‑month rolling complication rate for this hospital
         try:
             st.markdown("#### Hospital 12‑month Rolling Complication Rate")
