@@ -1233,101 +1233,130 @@ with tab_complications:
             pass
 
         # Removed Quarterly Rate vs National chart due to unreliable hospital quarterly data
+        # Move Clavien section up (before LOS), per feedback
         try:
-            st.markdown("#### Length of Stay within 90 days after surgery")
+            st.markdown("#### Clavien–Dindo Complication Categories (90 days)")
 
-            # Filter LOS-90 for selected hospital
-            los_src = los_90.copy()
-            if not los_src.empty and 'hospital_id' in los_src.columns:
-                los_src['hospital_id'] = los_src['hospital_id'].astype(str)
-                hos_los = los_src[los_src['hospital_id'] == str(selected_hospital_id)].copy()
-                if not hos_los.empty:
-                    if 'year' in hos_los.columns:
-                        hos_los['year'] = pd.to_numeric(hos_los['year'], errors='coerce')
+            # Filter Clavien for selected hospital
+            cl_src = clavien.copy()
+            if not cl_src.empty and 'hospital_id' in cl_src.columns:
+                cl_src['hospital_id'] = cl_src['hospital_id'].astype(str)
+                hos_cl = cl_src[cl_src['hospital_id'] == str(selected_hospital_id)].copy()
+                if not hos_cl.empty:
+                    # Ensure numeric year
+                    if 'year' in hos_cl.columns:
+                        hos_cl['year'] = pd.to_numeric(hos_cl['year'], errors='coerce')
 
                     # Toggle: 2025 only vs 2020–2025 aggregate
                     try:
-                        los_2025_only = st.toggle("Show 2025 only (data through July)", value=False, key="los90_toggle")
+                        show_2025_only = st.toggle("Show 2025 only (data through July)", value=False)
                     except Exception:
-                        los_2025_only = st.checkbox("Show 2025 only (data through July)", value=False, key="los90_toggle")
+                        show_2025_only = st.checkbox("Show 2025 only (data through July)", value=False)
 
-                    if los_2025_only and 'year' in hos_los.columns:
-                        view_los = hos_los[hos_los['year'] == 2025].copy()
-                        los_title_suffix = "2025 (YTD)"
-                        los_caption = "Note: 2025 includes data through July."
+                    if show_2025_only and 'year' in hos_cl.columns:
+                        view_df = hos_cl[hos_cl['year'] == 2025].copy()
+                        title_suffix = "2025 (YTD)"
+                        caption = "Note: 2025 includes data through July."
                     else:
-                        if 'year' in hos_los.columns:
-                            view_los = hos_los[(hos_los['year'] >= 2020) & (hos_los['year'] <= 2025)].copy()
+                        # Aggregate across 2020–2025 inclusive
+                        if 'year' in hos_cl.columns:
+                            view_df = hos_cl[(hos_cl['year'] >= 2020) & (hos_cl['year'] <= 2025)].copy()
                         else:
-                            view_los = hos_los.copy()
-                        los_title_suffix = "2020–2025"
-                        los_caption = None
+                            view_df = hos_cl.copy()
+                        title_suffix = "2020–2025"
+                        caption = None
 
-                    # Map categories to required buckets: 0 day, 1-3, 4-6, >6
-                    cat_map = {
-                        '(0,3]': '1-3 days',
-                        '(3,6]': '4-6 days',
-                        '(6,480]': '>6 days',
-                        '(6,225]': '>6 days',
-                        '(0,3] ': '1-3 days',
-                        '(3,6] ': '4-6 days',
-                        '(6,480] ': '>6 days',
-                    }
-                    if 'category' in view_los.columns:
-                        view_los['bucket'] = view_los['category'].map(cat_map).fillna(view_los['category'])
+                    # Map categories: 0 means Clavien 0–2; 3=reoperation; 4=ICU; 5=death
+                    label_map = {0: 'Clavien 0–2', 3: 'Reoperation', 4: 'ICU stay', 5: 'Death'}
+                    if 'clavien_category' in view_df.columns:
+                        view_df['label'] = view_df['clavien_category'].map(label_map).fillna(view_df['clavien_category'].astype(str))
                     else:
-                        view_los['bucket'] = ''
+                        view_df['label'] = ''
 
-                    # Aggregate counts by bucket and by year to estimate 0-day per year, then sum
-                    disp_template = pd.DataFrame({'bucket': ['0 day', '1-3 days', '4-6 days', '>6 days'], 'count': [0, 0, 0, 0]})
-                    per_year = []
-                    if 'year' in view_los.columns and 'count' in view_los.columns:
-                        for y, ydf in view_los.groupby('year'):
-                            agg = ydf.groupby('bucket', as_index=False)['count'].sum()
-                            row = disp_template.copy()
-                            for _, r in agg.iterrows():
-                                if r['bucket'] in row['bucket'].values:
-                                    row.loc[row['bucket'] == r['bucket'], 'count'] = int(r['count'])
-                            # infer zero-day if total present
-                            zero_day = None
-                            if 'total' in ydf.columns:
-                                total_val = pd.to_numeric(ydf['total'], errors='coerce').dropna().max()
-                                known = pd.to_numeric(row[row['bucket'] != '0 day']['count'], errors='coerce').sum()
-                                if pd.notna(total_val):
-                                    z = total_val - known
-                                    if z >= 0:
-                                        zero_day = int(z)
-                            if zero_day is not None:
-                                row.loc[row['bucket'] == '0 day', 'count'] = zero_day
-                            per_year.append(row)
-                    if per_year:
-                        disp_df = pd.concat(per_year).groupby('bucket', as_index=False)['count'].sum()
-                    else:
-                        disp_df = disp_template.copy()
+                    # === Summary panel (Hospital vs National, grades 3–5) ===
+                    def _sum_unique_totals(df: pd.DataFrame, id_col: str) -> int:
+                        if 'year' in df.columns and 'total' in df.columns:
+                            try:
+                                grouped = df.groupby([id_col, 'year'], as_index=False)['total'].max()
+                                return int(pd.to_numeric(grouped['total'], errors='coerce').fillna(0).sum())
+                            except Exception:
+                                return int(pd.to_numeric(df['total'], errors='coerce').fillna(0).sum())
+                        return int(pd.to_numeric(df.get('total', 0), errors='coerce').fillna(0).sum())
 
-                    total_disp = int(pd.to_numeric(disp_df['count'], errors='coerce').sum())
-                    disp_df['percentage'] = disp_df['count'].apply(lambda v: (v / total_disp * 100.0) if total_disp > 0 else 0.0)
+                    # Hospital severe (3–5)
+                    hosp_period_df = view_df.copy()
+                    hosp_total = _sum_unique_totals(hosp_period_df, 'hospital_id')
+                    hosp_grade_counts = hosp_period_df[hosp_period_df.get('clavien_category').isin([3,4,5])].groupby('clavien_category', as_index=False)['count'].sum()
+                    hosp_overall_events = int(pd.to_numeric(hosp_grade_counts['count'], errors='coerce').fillna(0).sum()) if not hosp_grade_counts.empty else 0
+                    hosp_overall_rate = (hosp_overall_events / hosp_total * 100.0) if hosp_total > 0 else 0.0
 
-                    # Plot with headroom
-                    fig_los90 = px.bar(
-                        disp_df, x='bucket', y='percentage', text='count',
-                        title=f"90‑day LOS distribution ({los_title_suffix})",
-                        color='bucket', color_discrete_sequence=['#3b82f6','#22c55e','#f59e0b','#ef4444']
-                    )
-                    fig_los90.update_layout(height=380, xaxis_title='Category', yaxis_title='Share (%)', showlegend=False,
-                        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-                        margin=dict(t=60, r=20, b=60, l=50))
-                    fig_los90.update_yaxes(range=[0, max(100, float(disp_df['percentage'].max() or 0) * 1.15)])
-                    fig_los90.update_traces(texttemplate='%{text:,}', textposition='outside', cliponaxis=False)
-                    st.plotly_chart(fig_los90, use_container_width=True)
-                    if los_caption:
-                        st.caption(los_caption)
+                    # National severe (3–5) for same period
+                    nat_period_df = clavien.copy()
+                    if 'year' in nat_period_df.columns and 'year' in hosp_period_df.columns:
+                        years_set = sorted(hosp_period_df['year'].dropna().unique().tolist())
+                        nat_period_df['year'] = pd.to_numeric(nat_period_df['year'], errors='coerce')
+                        nat_period_df = nat_period_df[nat_period_df['year'].isin(years_set)]
+                    nat_total = _sum_unique_totals(nat_period_df, 'hospital_id')
+                    nat_grade_counts = nat_period_df[nat_period_df.get('clavien_category').isin([3,4,5])].groupby('clavien_category', as_index=False)['count'].sum()
+                    nat_overall_events = int(pd.to_numeric(nat_grade_counts['count'], errors='coerce').fillna(0).sum()) if not nat_grade_counts.empty else 0
+                    nat_overall_rate = (nat_overall_events / nat_total * 100.0) if nat_total > 0 else 0.0
+
+                    # Relative delta vs national
+                    rel_delta = None
+                    try:
+                        rel_delta = ((hosp_overall_rate - nat_overall_rate) / nat_overall_rate * 100.0) if nat_overall_rate > 0 else None
+                    except Exception:
+                        rel_delta = None
+
+                    st.markdown("##### Severe complications — Clavien–Dindo grades 3–5")
+                    # Card-style top row with spacing and center label
+                    m1, m_mid, m3 = st.columns([1.2, 1, 1.2])
+                    with m1:
+                        st.markdown("<div class='nv-card'>" 
+                                    + "<div class='nv-metric-title'>Hospital (overall)</div>"
+                                    + f"<div class='nv-metric-value'>{hosp_overall_rate:.1f}%</div>"
+                                    + (f"<div style='text-align:center;margin-top:6px;'><span class='nv-pill {('red' if (rel_delta or 0)>0 else 'green')}'>{('↑' if (rel_delta or 0)>0 else '↓')} {abs(rel_delta):.0f}% vs National</span></div>" if rel_delta is not None else "")
+                                    + "</div>", unsafe_allow_html=True)
+                    with m_mid:
+                        st.markdown("<div class='nv-center-label'>Overall complication rate</div>", unsafe_allow_html=True)
+                    with m3:
+                        st.markdown("<div class='nv-card'>" 
+                                    + "<div class='nv-metric-title'>National benchmark</div>"
+                                    + f"<div class='nv-metric-value'>{nat_overall_rate:.1f}%</div>"
+                                    + "</div>", unsafe_allow_html=True)
+                    if caption:
+                        st.caption(caption)
+
+                    st.markdown("<div class='nv-row-gap'></div>", unsafe_allow_html=True)
+
+                    # Detail cards grid: three columns (grade, hospital, national)
+                    def _grade_rate(g: int, src: pd.DataFrame, total: int) -> float:
+                        try:
+                            c = int(pd.to_numeric(src[src.get('clavien_category') == g]['count'], errors='coerce').fillna(0).sum())
+                            return (c / total * 100.0) if total > 0 else 0.0
+                        except Exception:
+                            return 0.0
+
+                    h1, h2, h3 = st.columns([1, 1, 1])
+                    h1.markdown("**Clavien grade**")
+                    h2.markdown("**Hospital**")
+                    h3.markdown("**National benchmark**")
+                    for g in [3,4,5]:
+                        r_h = _grade_rate(g, hosp_period_df, hosp_total)
+                        r_n = _grade_rate(g, nat_period_df, nat_total)
+                        better = r_h <= r_n
+                        arrow = "↑" if not better else "↓"
+                        pill_class = 'red' if not better else 'green'
+                        c1, c2, c3 = st.columns([1, 1, 1])
+                        c1.markdown(f"<div class='nv-card small' style='text-align:center;'><b>{g}</b></div>", unsafe_allow_html=True)
+                        c2.markdown(f"<div class='nv-card small' style='text-align:center;'><span style='font-weight:700'>{r_h:.1f}%</span> <span class='nv-pill {pill_class}' style='margin-left:8px'>{arrow}</span></div>", unsafe_allow_html=True)
+                        c3.markdown(f"<div class='nv-card small' style='text-align:center;'>{r_n:.1f}%</div>", unsafe_allow_html=True)
                 else:
-                    st.info("No LOS‑90 data available for this hospital.")
+                    st.info("No Clavien data available for this hospital.")
             else:
-                st.info("No LOS‑90 dataset available.")
+                st.info("No Clavien dataset available.")
         except Exception as e:
-            st.warning(f"LOS‑90 section unavailable: {e}")
+            st.warning(f"Clavien section unavailable: {e}")
 
         try:
             st.markdown("#### Clavien–Dindo Complication Categories (90 days)")
