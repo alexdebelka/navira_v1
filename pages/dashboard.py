@@ -1182,6 +1182,70 @@ with tab_complications:
 
         national_avg_data = _calculate_national_complication_averages_for_overlay(complications)
 
+        # Length of stay distribution (recreated as 100% stacked bar)
+        try:
+            st.markdown("#### Length of Stay (days) — distribution by year")
+            df_los = los_90.copy()
+            if not df_los.empty and all(c in df_los.columns for c in ['finessGeoDP','annee','duree_90_cat','PCT']):
+                # Normalize types
+                df_los['finessGeoDP'] = df_los['finessGeoDP'].astype(str).str.strip()
+                hos_los = df_los[df_los['finessGeoDP'] == str(selected_hospital_id)].copy()
+                if not hos_los.empty:
+                    # Map categories to friendly labels matching requested buckets
+                    cat_map = {
+                        '[-1,0]': '0',
+                        '(0,3]': '1–3',
+                        '(3,6]': '4–6',
+                        '(6,480]': '≥7'
+                    }
+                    hos_los['bucket'] = hos_los['duree_90_cat'].map(cat_map).fillna(hos_los['duree_90_cat'])
+                    hos_los['annee'] = pd.to_numeric(hos_los['annee'], errors='coerce')
+                    hos_los['PCT'] = pd.to_numeric(hos_los['PCT'], errors='coerce').fillna(0)
+                    # Keep desired order and ensure all buckets exist for each year
+                    bucket_order = ['0','1–3','4–6','≥7']
+                    years = sorted(hos_los['annee'].dropna().unique().astype(int).tolist())
+                    if years:
+                        idx = pd.MultiIndex.from_product([years, bucket_order], names=['annee','bucket'])
+                        hos_los_idx = hos_los.set_index(['annee','bucket'])
+                        hos_los_full = hos_los_idx.reindex(idx).reset_index()
+                        hos_los_full['PCT'] = pd.to_numeric(hos_los_full['PCT'], errors='coerce').fillna(0)
+                        # Build stacked 100% bars
+                        COLORS = {
+                            '0': '#4b2e83',    # purple
+                            '1–3': '#2b6cb0',  # blue
+                            '4–6': '#2FBF71',  # green
+                            '≥7': '#f2c94c'    # yellow
+                        }
+                        fig_los = px.bar(
+                            hos_los_full,
+                            x='annee',
+                            y='PCT',
+                            color='bucket',
+                            category_orders={'bucket': bucket_order},
+                            color_discrete_map=COLORS,
+                            barmode='stack',
+                            title='Length of stay distribution by year (share %)' 
+                        )
+                        fig_los.update_layout(
+                            height=320,
+                            yaxis_title='% of stays',
+                            xaxis_title='Year',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)'
+                        )
+                        fig_los.update_yaxes(range=[0, 100])
+                        # Clean hover template
+                        fig_los.update_traces(hovertemplate='Year: %{x}<br>%{fullData.name}: %{y:.0f}%<extra></extra>')
+                        st.plotly_chart(fig_los, use_container_width=True)
+                    else:
+                        st.info('No LOS years available for this hospital.')
+                else:
+                    st.info('No length of stay data found for this hospital.')
+            else:
+                st.info('Length of stay dataset unavailable.')
+        except Exception:
+            pass
+
         # 12‑month rolling complication rate for this hospital
         try:
             st.markdown("#### Hospital 12‑month Rolling Complication Rate")
