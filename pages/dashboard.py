@@ -874,13 +874,17 @@ with tab_activity:
         # Combined chart: Total Surgeries line + Procedure Mix bars
         st.markdown("#### Hospital: Total Surgeries & Procedure Mix")
         
-        # Get procedure data for the combined chart
+        # Load monthly volume data for more granular visualization
+        monthly_vol = _load_monthly_volumes()
+        
+        # Get procedure data for the combined chart - Filter out 2020
         proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
         hosp_year = selected_hospital_all_data[['annee','total_procedures_year']].dropna()
+        hosp_year = hosp_year[hosp_year['annee'] > 2020]  # Remove 2020 data
         
         if not hosp_year.empty and proc_codes:
-            # Create procedure mix data
-            proc_df = selected_hospital_all_data[['annee']+proc_codes].copy()
+            # Create procedure mix data from annual data
+            proc_df = selected_hospital_all_data[selected_hospital_all_data['annee'] > 2020][['annee']+proc_codes].copy()
             proc_long = []
             for _, r in proc_df.iterrows():
                 total = max(1, sum(r[c] for c in proc_codes))
@@ -907,7 +911,7 @@ with tab_activity:
                         opacity=0.7
                     ))
                 
-                # Add line chart for total surgeries (on secondary y-axis)
+                # Add line chart for total surgeries using annual data (on secondary y-axis)
                 hosp_year_clean = hosp_year.dropna()
                 fig.add_trace(go.Scatter(
                     x=hosp_year_clean['annee'],
@@ -921,6 +925,7 @@ with tab_activity:
                 ))
                 
                 # Update layout with dual y-axes
+                max_y2 = max(hosp_year_clean['total_procedures_year']) * 1.1 if not hosp_year_clean.empty else 100
                 fig.update_layout(
                     height=400,
                     plot_bgcolor='rgba(0,0,0,0)',
@@ -937,7 +942,7 @@ with tab_activity:
                         title='Total Surgeries Count',
                         side='right',
                         overlaying='y',
-                        range=[0, max(hosp_year_clean['total_procedures_year']) * 1.1]
+                        range=[0, max_y2]
                     ),
                     legend=dict(
                         orientation="h",
@@ -960,7 +965,7 @@ with tab_activity:
                 
                 # Add summary metrics below the chart
                 st.markdown("**Chart Explanation:**")
-                st.markdown("- **Colored bars** show the percentage share of each procedure type per year")
+                st.markdown("- **Colored bars** show the percentage share of each procedure type per year (2021-2025)")
                 st.markdown("- **Dark red line** shows the total number of surgeries performed per year")
                 st.markdown("- **Left y-axis** shows procedure share percentages")
                 st.markdown("- **Right y-axis** shows total surgery counts")
@@ -970,9 +975,12 @@ with tab_activity:
         st.markdown("#### National: Average Surgeries & Procedure Mix")
         
         if national_averages and proc_codes:
+            # Filter years_window to exclude 2020
+            years_window_filtered = [y for y in years_window if y > 2020]
+            
             # Create national trend data
             nat_data = []
-            for year in years_window:
+            for year in years_window_filtered:
                 year_data = annual[annual['annee'] == year]
                 if not year_data.empty:
                     avg_procedures = year_data['total_procedures_year'].mean()
@@ -980,7 +988,7 @@ with tab_activity:
             
             # Create national procedure mix data
             nat_proc_data = []
-            for year in years_window:
+            for year in years_window_filtered:
                 year_data = annual[annual['annee'] == year]
                 if not year_data.empty:
                     total_sleeve = year_data['SLE'].sum() if 'SLE' in year_data.columns else 0
@@ -1025,6 +1033,7 @@ with tab_activity:
                 ))
                 
                 # Update layout with dual y-axes
+                max_nat_y2 = max(nat_df['Avg Procedures']) * 1.1 if not nat_df.empty else 100
                 fig_nat.update_layout(
                     height=400,
                     plot_bgcolor='rgba(0,0,0,0)',
@@ -1041,7 +1050,7 @@ with tab_activity:
                         title='Average Surgeries per Hospital',
                         side='right',
                         overlaying='y',
-                        range=[0, max(nat_df['Avg Procedures']) * 1.1]
+                        range=[0, max_nat_y2]
                     ),
                     legend=dict(
                         orientation="h",

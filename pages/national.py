@@ -993,8 +993,8 @@ with col1:
             time_period = "2024"
             tooltip_text = "Stacked area shows the procedure mix for 2024 (single‑year view). The segments represent the percentage share of Sleeve, Gastric Bypass, and Other procedures, totaling 100%."
         else:
-            time_period = "2020–2024"
-            tooltip_text = "Stacked area shows annual shares of Sleeve, Gastric Bypass, and Other across eligible hospitals. Each year sums to 100%."
+            time_period = "2021–2024"
+            tooltip_text = "Stacked area shows annual shares of Sleeve, Gastric Bypass, and Other across eligible hospitals (2021-2024, excluding 2020). Each year sums to 100%."
         
         st.markdown(
             f"""
@@ -1022,7 +1022,8 @@ with col1:
             if toggle_2024_only:
                 years_to_process = [2024]
             else:
-                years_to_process = sorted(df[year_col].unique())
+                # Exclude 2020 from years
+                years_to_process = sorted([y for y in df[year_col].unique() if y > 2020])
             
             for year in years_to_process:
                 yearly = df[df[year_col] == year]
