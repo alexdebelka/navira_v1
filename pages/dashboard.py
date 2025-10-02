@@ -1330,6 +1330,86 @@ with tab_complications:
                     else:
                         view_df['label'] = ''
 
+                    # === Summary panel (Hospital vs National, grades 3–5) ===
+                    def _sum_unique_totals(df: pd.DataFrame, id_col: str) -> int:
+                        if 'year' in df.columns and 'total' in df.columns:
+                            try:
+                                grouped = df.groupby([id_col, 'year'], as_index=False)['total'].max()
+                                return int(pd.to_numeric(grouped['total'], errors='coerce').fillna(0).sum())
+                            except Exception:
+                                return int(pd.to_numeric(df['total'], errors='coerce').fillna(0).sum())
+                        return int(pd.to_numeric(df.get('total', 0), errors='coerce').fillna(0).sum())
+
+                    # Hospital severe (3–5)
+                    hosp_period_df = view_df.copy()
+                    hosp_total = _sum_unique_totals(hosp_period_df, 'hospital_id')
+                    hosp_grade_counts = hosp_period_df[hosp_period_df.get('clavien_category').isin([3,4,5])].groupby('clavien_category', as_index=False)['count'].sum()
+                    hosp_overall_events = int(pd.to_numeric(hosp_grade_counts['count'], errors='coerce').fillna(0).sum()) if not hosp_grade_counts.empty else 0
+                    hosp_overall_rate = (hosp_overall_events / hosp_total * 100.0) if hosp_total > 0 else 0.0
+
+                    # National severe (3–5) for same period
+                    nat_period_df = clavien.copy()
+                    if 'year' in nat_period_df.columns and 'year' in hosp_period_df.columns:
+                        years_set = sorted(hosp_period_df['year'].dropna().unique().tolist())
+                        nat_period_df['year'] = pd.to_numeric(nat_period_df['year'], errors='coerce')
+                        nat_period_df = nat_period_df[nat_period_df['year'].isin(years_set)]
+                    nat_total = _sum_unique_totals(nat_period_df, 'hospital_id')
+                    nat_grade_counts = nat_period_df[nat_period_df.get('clavien_category').isin([3,4,5])].groupby('clavien_category', as_index=False)['count'].sum()
+                    nat_overall_events = int(pd.to_numeric(nat_grade_counts['count'], errors='coerce').fillna(0).sum()) if not nat_grade_counts.empty else 0
+                    nat_overall_rate = (nat_overall_events / nat_total * 100.0) if nat_total > 0 else 0.0
+
+                    # Relative delta vs national
+                    rel_delta = None
+                    try:
+                        rel_delta = ((hosp_overall_rate - nat_overall_rate) / nat_overall_rate * 100.0) if nat_overall_rate > 0 else None
+                    except Exception:
+                        rel_delta = None
+
+                    st.markdown("##### Severe complications — Clavien–Dindo grades 3–5")
+                    # Top metric row
+                    m1, m2, m3 = st.columns([1, 1, 1])
+                    with m1:
+                        delta_txt = None
+                        if rel_delta is not None:
+                            arrow = "↑" if rel_delta > 0 else ("↓" if rel_delta < 0 else "→")
+                            delta_txt = f"{arrow} {rel_delta:+.0f}% vs National"
+                        st.metric("Hospital (overall)", f"{hosp_overall_rate:.1f}%", delta=delta_txt)
+                    with m2:
+                        st.markdown("<div style='text-align:center;font-weight:600;'>Overall complication rate</div>", unsafe_allow_html=True)
+                    with m3:
+                        st.metric("National benchmark", f"{nat_overall_rate:.1f}%")
+                    if caption:
+                        st.caption(caption)
+
+                    # Detail rows for grades 3, 4, 5
+                    def _grade_rate(g: int, src: pd.DataFrame, total: int) -> float:
+                        try:
+                            c = int(pd.to_numeric(src[src.get('clavien_category') == g]['count'], errors='coerce').fillna(0).sum())
+                            return (c / total * 100.0) if total > 0 else 0.0
+                        except Exception:
+                            return 0.0
+
+                    rows = []
+                    for g in [3,4,5]:
+                        rows.append({
+                            'grade': g,
+                            'h_rate': _grade_rate(g, hosp_period_df, hosp_total),
+                            'n_rate': _grade_rate(g, nat_period_df, nat_total),
+                        })
+                    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+                    h1, h2, h3 = st.columns([1, 1, 1])
+                    h1.markdown("**Clavien grade**")
+                    h2.markdown("**Hospital**")
+                    h3.markdown("**National benchmark**")
+                    for r in rows:
+                        c1, c2, c3 = st.columns([1, 1, 1])
+                        c1.markdown(f"{r['grade']}")
+                        better = r['h_rate'] <= r['n_rate']
+                        arrow = "⬇️" if not better else "⬆️"
+                        color = "#ef4444" if not better else "#22c55e"
+                        c2.markdown(f"<span>{r['h_rate']:.1f}%</span> <span style='color:{color};font-size:16px;'>{arrow}</span>", unsafe_allow_html=True)
+                        c3.markdown(f"{r['n_rate']:.1f}%")
+
                     # Aggregate counts across selected period
                     if 'count' in view_df.columns:
                         cl_agg = view_df.groupby('label', as_index=False)['count'].sum()
