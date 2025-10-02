@@ -1621,7 +1621,7 @@ with tab_complications:
 
     # Removed Revisions by Procedure Type (2024) deep-dive per request
 
-if not st.session_state.get('_limited_user'):
+if show_geography:
     with tab_geo:
         st.subheader("Recruitment Zone and Competitors (Top-5 Choropleths)")
         
