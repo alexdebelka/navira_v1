@@ -883,16 +883,49 @@ with tab_activity:
         hosp_year = hosp_year[hosp_year['annee'] > 2020]  # Remove 2020 data
         
         if not hosp_year.empty and proc_codes:
-            # Create procedure mix data from annual data
-            proc_df = selected_hospital_all_data[selected_hospital_all_data['annee'] > 2020][['annee']+proc_codes].copy()
-            proc_long = []
-            for _, r in proc_df.iterrows():
-                total = max(1, sum(r[c] for c in proc_codes))
-                sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
-                other = total - sleeve - bypass
-                for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
-                    proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
-            pl = pd.DataFrame(proc_long)
+            # Use monthly volume data if available, otherwise fall back to annual data
+            if not monthly_vol.empty and 'finessGeoDP' in monthly_vol.columns and 'baria_t' in monthly_vol.columns:
+                hosp_monthly_vol = monthly_vol[monthly_vol['finessGeoDP'] == str(selected_hospital_id)].copy()
+                hosp_monthly_vol = hosp_monthly_vol[hosp_monthly_vol['annee'] > 2020]  # Filter out 2020
+                
+                if not hosp_monthly_vol.empty:
+                    # Aggregate monthly data by year and procedure type
+                    proc_long = []
+                    for year in sorted(hosp_monthly_vol['annee'].unique()):
+                        year_data = hosp_monthly_vol[hosp_monthly_vol['annee'] == year]
+                        # Map baria_t codes to our display names
+                        sleeve_total = year_data[year_data['baria_t'] == 'SLE']['TOT_year_tcn'].iloc[0] if not year_data[year_data['baria_t'] == 'SLE'].empty else 0
+                        bypass_total = year_data[year_data['baria_t'] == 'BPG']['TOT_year_tcn'].iloc[0] if not year_data[year_data['baria_t'] == 'BPG'].empty else 0
+                        # Other procedures
+                        other_codes = year_data[~year_data['baria_t'].isin(['SLE', 'BPG'])]
+                        other_total = other_codes['TOT_year_tcn'].sum() if not other_codes.empty else 0
+                        
+                        total = max(1, sleeve_total + bypass_total + other_total)
+                        for label, val in [("Sleeve", sleeve_total), ("Gastric Bypass", bypass_total), ("Other", other_total)]:
+                            proc_long.append({'annee': int(year), 'Procedures': label, 'Share': val / total * 100})
+                    pl = pd.DataFrame(proc_long)
+                else:
+                    # Fallback to annual data
+                    proc_df = selected_hospital_all_data[selected_hospital_all_data['annee'] > 2020][['annee']+proc_codes].copy()
+                    proc_long = []
+                    for _, r in proc_df.iterrows():
+                        total = max(1, sum(r[c] for c in proc_codes))
+                        sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
+                        other = total - sleeve - bypass
+                        for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
+                            proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
+                    pl = pd.DataFrame(proc_long)
+            else:
+                # Fallback to annual data
+                proc_df = selected_hospital_all_data[selected_hospital_all_data['annee'] > 2020][['annee']+proc_codes].copy()
+                proc_long = []
+                for _, r in proc_df.iterrows():
+                    total = max(1, sum(r[c] for c in proc_codes))
+                    sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
+                    other = total - sleeve - bypass
+                    for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
+                        proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
+                pl = pd.DataFrame(proc_long)
             
             if not pl.empty:
                 # Create the combined chart
