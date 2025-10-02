@@ -1179,19 +1179,34 @@ with tab_complications:
         try:
             st.markdown("#### Length of Stay within 90 days after surgery")
 
-            # Filter LOS-90 for selected hospital and latest year available
+            # Filter LOS-90 for selected hospital
             los_src = los_90.copy()
             if not los_src.empty and 'hospital_id' in los_src.columns:
                 los_src['hospital_id'] = los_src['hospital_id'].astype(str)
                 hos_los = los_src[los_src['hospital_id'] == str(selected_hospital_id)].copy()
                 if not hos_los.empty:
-                    # Pick most recent year
                     if 'year' in hos_los.columns:
-                        recent_year = int(hos_los['year'].dropna().max())
-                        hos_los = hos_los[hos_los['year'] == recent_year]
-                    # Aggregate categories to required buckets: 0 day, 1-3, 4-6, >6
-                    # Map existing categories: (0,3] ~ 1-3; (3,6] ~ 4-6; (6,480] ~ >6; (0,3] can include 0 if separate zero-day not provided
-                    # If explicit 0-day not available, infer as max(0, total - sum(count where category != '0'))
+                        hos_los['year'] = pd.to_numeric(hos_los['year'], errors='coerce')
+
+                    # Toggle: 2025 only vs 2020–2025 aggregate
+                    try:
+                        los_2025_only = st.toggle("Show 2025 only (data through July)", value=False, key="los90_toggle")
+                    except Exception:
+                        los_2025_only = st.checkbox("Show 2025 only (data through July)", value=False, key="los90_toggle")
+
+                    if los_2025_only and 'year' in hos_los.columns:
+                        view_los = hos_los[hos_los['year'] == 2025].copy()
+                        los_title_suffix = "2025 (YTD)"
+                        los_caption = "Note: 2025 includes data through July."
+                    else:
+                        if 'year' in hos_los.columns:
+                            view_los = hos_los[(hos_los['year'] >= 2020) & (hos_los['year'] <= 2025)].copy()
+                        else:
+                            view_los = hos_los.copy()
+                        los_title_suffix = "2020–2025"
+                        los_caption = None
+
+                    # Map categories to required buckets: 0 day, 1-3, 4-6, >6
                     cat_map = {
                         '(0,3]': '1-3 days',
                         '(3,6]': '4-6 days',
@@ -1201,47 +1216,55 @@ with tab_complications:
                         '(3,6] ': '4-6 days',
                         '(6,480] ': '>6 days',
                     }
-                    if 'category' in hos_los.columns:
-                        hos_los['bucket'] = hos_los['category'].map(cat_map).fillna(hos_los['category'])
+                    if 'category' in view_los.columns:
+                        view_los['bucket'] = view_los['category'].map(cat_map).fillna(view_los['category'])
                     else:
-                        hos_los['bucket'] = ''
+                        view_los['bucket'] = ''
 
-                    # Sum counts by bucket
-                    if 'count' in hos_los.columns:
-                        agg = hos_los.groupby('bucket', as_index=False)['count'].sum()
+                    # Aggregate counts by bucket and by year to estimate 0-day per year, then sum
+                    disp_template = pd.DataFrame({'bucket': ['0 day', '1-3 days', '4-6 days', '>6 days'], 'count': [0, 0, 0, 0]})
+                    per_year = []
+                    if 'year' in view_los.columns and 'count' in view_los.columns:
+                        for y, ydf in view_los.groupby('year'):
+                            agg = ydf.groupby('bucket', as_index=False)['count'].sum()
+                            row = disp_template.copy()
+                            for _, r in agg.iterrows():
+                                if r['bucket'] in row['bucket'].values:
+                                    row.loc[row['bucket'] == r['bucket'], 'count'] = int(r['count'])
+                            # infer zero-day if total present
+                            zero_day = None
+                            if 'total' in ydf.columns:
+                                total_val = pd.to_numeric(ydf['total'], errors='coerce').dropna().max()
+                                known = pd.to_numeric(row[row['bucket'] != '0 day']['count'], errors='coerce').sum()
+                                if pd.notna(total_val):
+                                    z = total_val - known
+                                    if z >= 0:
+                                        zero_day = int(z)
+                            if zero_day is not None:
+                                row.loc[row['bucket'] == '0 day', 'count'] = zero_day
+                            per_year.append(row)
+                    if per_year:
+                        disp_df = pd.concat(per_year).groupby('bucket', as_index=False)['count'].sum()
                     else:
-                        agg = pd.DataFrame()
+                        disp_df = disp_template.copy()
 
-                    # Compute 0-day if possible
-                    zero_day_count = None
-                    if not agg.empty and 'total' in hos_los.columns:
-                        total_val = pd.to_numeric(hos_los['total'], errors='coerce').dropna().max()
-                        summed_known = pd.to_numeric(agg['count'], errors='coerce').sum()
-                        if pd.notna(total_val):
-                            z = total_val - summed_known
-                            if z >= 0:
-                                zero_day_count = int(z)
-                    # Build final order and percentages
-                    display_order = ['0 day', '1-3 days', '4-6 days', '>6 days']
-                    disp_df = pd.DataFrame({'bucket': display_order, 'count': [0, 0, 0, 0]})
-                    for i, row in agg.iterrows():
-                        if row['bucket'] in disp_df['bucket'].values:
-                            disp_df.loc[disp_df['bucket'] == row['bucket'], 'count'] = int(row['count'])
-                    if zero_day_count is not None:
-                        disp_df.loc[disp_df['bucket'] == '0 day', 'count'] = int(zero_day_count)
                     total_disp = int(pd.to_numeric(disp_df['count'], errors='coerce').sum())
                     disp_df['percentage'] = disp_df['count'].apply(lambda v: (v / total_disp * 100.0) if total_disp > 0 else 0.0)
 
-                    # Plot
+                    # Plot with headroom
                     fig_los90 = px.bar(
                         disp_df, x='bucket', y='percentage', text='count',
-                        title=f"90‑day LOS distribution (year {recent_year})",
+                        title=f"90‑day LOS distribution ({los_title_suffix})",
                         color='bucket', color_discrete_sequence=['#3b82f6','#22c55e','#f59e0b','#ef4444']
                     )
-                    fig_los90.update_layout(height=340, xaxis_title='Category', yaxis_title='Share (%)', showlegend=False,
-                        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                    fig_los90.update_traces(texttemplate='%{text:,}', textposition='outside')
+                    fig_los90.update_layout(height=380, xaxis_title='Category', yaxis_title='Share (%)', showlegend=False,
+                        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                        margin=dict(t=60, r=20, b=60, l=50))
+                    fig_los90.update_yaxes(range=[0, max(100, float(disp_df['percentage'].max() or 0) * 1.15)])
+                    fig_los90.update_traces(texttemplate='%{text:,}', textposition='outside', cliponaxis=False)
                     st.plotly_chart(fig_los90, use_container_width=True)
+                    if los_caption:
+                        st.caption(los_caption)
                 else:
                     st.info("No LOS‑90 data available for this hospital.")
             else:
@@ -1309,9 +1332,11 @@ with tab_complications:
                         title=f"Clavien categories ({title_suffix})",
                         color='label', color_discrete_sequence=['#16a34a','#f59e0b','#ef4444','#7c3aed']
                     )
-                    fig_clav.update_layout(height=340, xaxis_title='Category', yaxis_title='Share (%)', showlegend=False,
-                        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                    fig_clav.update_traces(texttemplate='%{text:,}', textposition='outside')
+                    fig_clav.update_layout(height=380, xaxis_title='Category', yaxis_title='Share (%)', showlegend=False,
+                        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                        margin=dict(t=60, r=20, b=60, l=50))
+                    fig_clav.update_yaxes(range=[0, max(100, float(cl_disp['percentage'].max() or 0) * 1.15)])
+                    fig_clav.update_traces(texttemplate='%{text:,}', textposition='outside', cliponaxis=False)
                     st.plotly_chart(fig_clav, use_container_width=True)
                     if caption:
                         st.caption(caption)
