@@ -988,6 +988,18 @@ with tab_activity:
 with tab_complications:
     st.subheader("Complications")
     hosp_comp = _get_hospital_complications(complications, str(selected_hospital_id)).sort_values('quarter_date')
+    # Global note if 2025 data is present (YTD)
+    has_2025_data = False
+    try:
+        if 'quarter_date' in hosp_comp.columns:
+            yrs = hosp_comp['quarter_date'].dropna().dt.year
+            has_2025_data = bool((yrs == 2025).any())
+        elif 'year' in hosp_comp.columns:
+            has_2025_data = bool((pd.to_numeric(hosp_comp['year'], errors='coerce') == 2025).any())
+    except Exception:
+        has_2025_data = False
+    if has_2025_data:
+        st.caption("Note: 2025 complication data includes records through July.")
     if not hosp_comp.empty:
         tot_proc = int(hosp_comp['procedures_count'].sum())
         tot_comp = int(hosp_comp['complications_count'].sum())
@@ -1045,11 +1057,15 @@ with tab_complications:
             with l1:
                 st.metric("Hospital 6‑month rate", f"{float(latest_sem['rate_pct']):.1f}%")
             with l2:
-                st.metric("National 6‑month rate", f"{nat_val:.1f}%")
+                nat_metric_label = "National 6‑month rate (YTD)" if int(latest_sem['year']) == 2025 else "National 6‑month rate"
+                st.metric(nat_metric_label, f"{nat_val:.1f}%")
+            if int(latest_sem['year']) == 2025:
+                st.caption("Note: 2025 data includes records through July.")
 
             # Bar comparison for the latest semester
+            nat_bar_label = 'National (YTD)' if int(latest_sem['year']) == 2025 else 'National'
             comp_df = pd.DataFrame({
-                'Metric': ['Hospital','National'],
+                'Metric': ['Hospital', nat_bar_label],
                 'Rate (%)': [float(latest_sem['rate_pct']), nat_val]
             })
             fig_bar = px.bar(comp_df, x='Metric', y='Rate (%)', title=f"6‑Month Comparison ({latest_sem['label']})",
@@ -1075,6 +1091,8 @@ with tab_complications:
         # 12‑month rolling complication rate for this hospital
         try:
             st.markdown("#### Hospital 12‑month Rolling Complication Rate")
+            if has_2025_data:
+                st.caption("Note: If present, 2025 data includes records through July.")
 
             @st.cache_data(show_spinner=False)
             def _load_external_rolling_csv(path: str = "data/22_complication_trimestre.csv") -> pd.DataFrame:
@@ -1151,11 +1169,12 @@ with tab_complications:
                     # Optional national overlay from earlier calc
                     try:
                         if 'national_avg_data' in locals() and not national_avg_data.empty and 'national_rate' in national_avg_data.columns:
+                            roll_nat_name = 'National Average (YTD)' if has_2025_data else 'National Average'
                             fig_roll.add_trace(go.Scatter(
                                 x=national_avg_data['quarter_date'],
                                 y=national_avg_data['national_rate'],
                                 mode='lines',
-                                name='National Average',
+                                name=roll_nat_name,
                                 line=dict(color='#1f77b4', width=2, dash='dash')
                             ))
                     except Exception:
@@ -1432,10 +1451,11 @@ with tab_complications:
                                         cache_version="v1"
                                     )
                                     if not km_curve_nat.empty:
+                                        km_nat_title = "National Complication Rate Over Time (KM, YTD)" if has_2025_data else "National Complication Rate Over Time (KM)"
                                         fig_km_nat = create_km_chart(
                                             curve_df=km_curve_nat,
                                             page_id="national_cmp",
-                                            title="National Complication Rate Over Time (KM)",
+                                            title=km_nat_title,
                                             yaxis_title='Complication Rate (%)',
                                             xaxis_title='6‑month interval',
                                             height=400,
@@ -1454,6 +1474,9 @@ with tab_complications:
                                 st.plotly_chart(fig_km_nat, use_container_width=True, key="km_national_cmp_v2")
                             else:
                                 st.info("National KM curve unavailable.")
+
+                        if has_2025_data:
+                            st.caption("Note: 2025 data includes records through July.")
 
                         with st.expander('Method (approximation)'):
                             st.markdown("This curve approximates a Kaplan–Meier survival function using aggregate 6‑month intervals. For each interval, hazard = events / total procedures, and survival multiplies (1 − hazard) across intervals. It uses hospital‑ and national‑level aggregates (not patient‑level times).")
