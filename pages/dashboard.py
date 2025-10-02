@@ -931,18 +931,41 @@ with tab_activity:
                 # Create the combined chart
                 fig = go.Figure()
                 
-                # Add stacked bar chart for procedure mix
-                colors = {'Sleeve': '#ffae91', 'Gastric Bypass': '#60a5fa', 'Other': '#fbbf24'}
+                # Add stacked bar chart for procedure mix with different colors for 2025
+                colors_regular = {'Sleeve': '#ffae91', 'Gastric Bypass': '#60a5fa', 'Other': '#fbbf24'}
+                colors_2025 = {'Sleeve': '#ff6b35', 'Gastric Bypass': '#1e40af', 'Other': '#d97706'}  # Darker/more saturated for 2025
+                
                 for procedure in pl['Procedures'].unique():
                     data = pl[pl['Procedures'] == procedure]
-                    fig.add_trace(go.Bar(
-                        x=data['annee'],
-                        y=data['Share'],
-                        name=procedure,
-                        marker_color=colors.get(procedure, '#cccccc'),
-                        yaxis='y',
-                        opacity=0.7
-                    ))
+                    # Split data into 2025 and non-2025
+                    data_before_2025 = data[data['annee'] < 2025]
+                    data_2025 = data[data['annee'] == 2025]
+                    
+                    # Add bars for years before 2025
+                    if not data_before_2025.empty:
+                        fig.add_trace(go.Bar(
+                            x=data_before_2025['annee'],
+                            y=data_before_2025['Share'],
+                            name=procedure,
+                            marker_color=colors_regular.get(procedure, '#cccccc'),
+                            yaxis='y',
+                            opacity=0.7,
+                            legendgroup=procedure,
+                            showlegend=True
+                        ))
+                    
+                    # Add bars for 2025 with different color
+                    if not data_2025.empty:
+                        fig.add_trace(go.Bar(
+                            x=data_2025['annee'],
+                            y=data_2025['Share'],
+                            name=f"{procedure} (2025 YTD)",
+                            marker_color=colors_2025.get(procedure, '#888888'),
+                            yaxis='y',
+                            opacity=0.85,
+                            legendgroup=procedure,
+                            showlegend=True
+                        ))
                 
                 # Add line chart for total surgeries using annual data (on secondary y-axis)
                 hosp_year_clean = hosp_year.dropna()
@@ -999,9 +1022,12 @@ with tab_activity:
                 # Add summary metrics below the chart
                 st.markdown("**Chart Explanation:**")
                 st.markdown("- **Colored bars** show the percentage share of each procedure type per year (2021-2025)")
+                st.markdown("- **Darker/saturated colors** represent 2025 data (Year-to-Date through July)")
                 st.markdown("- **Dark red line** shows the total number of surgeries performed per year")
                 st.markdown("- **Left y-axis** shows procedure share percentages")
                 st.markdown("- **Right y-axis** shows total surgery counts")
+                if 2025 in pl['annee'].values:
+                    st.info("📅 **Note:** 2025 data is year-to-date through July only.")
     
     with col2:
         # Combined chart: National Average Surgeries line + National Procedure Mix bars
@@ -1040,18 +1066,41 @@ with tab_activity:
                 # Create the combined national chart
                 fig_nat = go.Figure()
                 
-                # Add stacked bar chart for national procedure mix
-                colors = {'Sleeve': '#ffae91', 'Gastric Bypass': '#60a5fa', 'Other': '#fbbf24'}
+                # Add stacked bar chart for national procedure mix with different colors for 2025
+                colors_regular = {'Sleeve': '#ffae91', 'Gastric Bypass': '#60a5fa', 'Other': '#fbbf24'}
+                colors_2025 = {'Sleeve': '#ff6b35', 'Gastric Bypass': '#1e40af', 'Other': '#d97706'}  # Darker/more saturated for 2025
+                
                 for procedure in nat_proc_df['Procedures'].unique():
                     data = nat_proc_df[nat_proc_df['Procedures'] == procedure]
-                    fig_nat.add_trace(go.Bar(
-                        x=data['Year'],
-                        y=data['Share'],
-                        name=procedure,
-                        marker_color=colors.get(procedure, '#cccccc'),
-                        yaxis='y',
-                        opacity=0.7
-                    ))
+                    # Split data into 2025 and non-2025
+                    data_before_2025 = data[data['Year'] < 2025]
+                    data_2025 = data[data['Year'] == 2025]
+                    
+                    # Add bars for years before 2025
+                    if not data_before_2025.empty:
+                        fig_nat.add_trace(go.Bar(
+                            x=data_before_2025['Year'],
+                            y=data_before_2025['Share'],
+                            name=procedure,
+                            marker_color=colors_regular.get(procedure, '#cccccc'),
+                            yaxis='y',
+                            opacity=0.7,
+                            legendgroup=procedure,
+                            showlegend=True
+                        ))
+                    
+                    # Add bars for 2025 with different color
+                    if not data_2025.empty:
+                        fig_nat.add_trace(go.Bar(
+                            x=data_2025['Year'],
+                            y=data_2025['Share'],
+                            name=f"{procedure} (2025 YTD)",
+                            marker_color=colors_2025.get(procedure, '#888888'),
+                            yaxis='y',
+                            opacity=0.85,
+                            legendgroup=procedure,
+                            showlegend=True
+                        ))
                 
                 # Add line chart for national average surgeries (on secondary y-axis)
                 fig_nat.add_trace(go.Scatter(
@@ -1106,10 +1155,13 @@ with tab_activity:
                 
                 # Add summary metrics below the chart
                 st.markdown("**Chart Explanation:**")
-                st.markdown("- **Colored bars** show the national percentage share of each procedure type per year")
+                st.markdown("- **Colored bars** show the national percentage share of each procedure type per year (2021-2025)")
+                st.markdown("- **Darker/saturated colors** represent 2025 data (Year-to-Date through July)")
                 st.markdown("- **Dark red line** shows the national average surgeries per hospital per year")
                 st.markdown("- **Left y-axis** shows procedure share percentages")
                 st.markdown("- **Right y-axis** shows average surgery counts")
+                if 2025 in nat_proc_df['Year'].values:
+                    st.info("📅 **Note:** 2025 data is year-to-date through July only.")
     # Procedure share (3 buckets)
     proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
     if proc_codes:
