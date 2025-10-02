@@ -1281,7 +1281,7 @@ with tab_complications:
                     if 'finessgeodp' in df.columns:
                         df['finessgeodp'] = df['finessgeodp'].astype(str).str.strip()
                     return df
-                except Exception:
+                    except Exception:
                     return pd.DataFrame()
 
             ext = _load_external_rolling_csv()
@@ -1349,7 +1349,7 @@ with tab_complications:
                                 name=roll_nat_name,
                                 line=dict(color='#1f77b4', width=2, dash='dash')
                             ))
-                    except Exception:
+                        except Exception:
                         pass
 
             fig_roll.update_layout(

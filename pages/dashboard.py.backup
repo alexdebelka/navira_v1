@@ -1255,7 +1255,9 @@ with tab_complications:
                         st.plotly_chart(fig_los, use_container_width=True)
                     else:
                         st.info('No LOS years available for this hospital.')
+                        else:
                     st.info('No length of stay data found for this hospital.')
+                    else:
                 st.info('Length of stay dataset unavailable.')
         except Exception:
             pass
@@ -1281,7 +1283,7 @@ with tab_complications:
                     if 'finessgeodp' in df.columns:
                         df['finessgeodp'] = df['finessgeodp'].astype(str).str.strip()
                     return df
-                except Exception:
+                    except Exception:
                     return pd.DataFrame()
 
             ext = _load_external_rolling_csv()
@@ -1349,7 +1351,7 @@ with tab_complications:
                                 name=roll_nat_name,
                                 line=dict(color='#1f77b4', width=2, dash='dash')
                             ))
-                    except Exception:
+                        except Exception:
                         pass
 
             fig_roll.update_layout(
