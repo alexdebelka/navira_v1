@@ -1186,13 +1186,23 @@ with tab_complications:
         try:
             st.markdown("#### Length of Stay (days) — distribution by year")
             df_los = los_90.copy()
-            # Fallback to CSV if parquet bundle didn't include LOS
-            if (df_los is None or df_los.empty):
-                try:
-                    df_los = pd.read_csv('data/export_TAB_LOS_HOP_90.csv')
-                except Exception:
+            required_cols = ['finessGeoDP','annee','duree_90_cat','PCT']
+            # Fallback to CSV if parquet bundle is empty OR missing required columns
+            needs_fallback = (df_los is None or df_los.empty or any(c not in df_los.columns for c in required_cols))
+            if needs_fallback:
+                loaded = False
+                for sep in [',',';']:
+                    try:
+                        tmp = pd.read_csv('data/export_TAB_LOS_HOP_90.csv', sep=sep)
+                        if not tmp.empty and all(c in tmp.columns for c in required_cols):
+                            df_los = tmp
+                            loaded = True
+                            break
+                    except Exception:
+                        continue
+                if not loaded:
                     df_los = pd.DataFrame()
-            if not df_los.empty and all(c in df_los.columns for c in ['finessGeoDP','annee','duree_90_cat','PCT']):
+            if not df_los.empty and all(c in df_los.columns for c in required_cols):
                 # Normalize types
                 df_los['finessGeoDP'] = df_los['finessGeoDP'].astype(str).str.strip()
                 hos_los = df_los[df_los['finessGeoDP'] == str(selected_hospital_id)].copy()
@@ -1245,9 +1255,9 @@ with tab_complications:
                         st.plotly_chart(fig_los, use_container_width=True)
                     else:
                         st.info('No LOS years available for this hospital.')
-                else:
+                        else:
                     st.info('No length of stay data found for this hospital.')
-            else:
+                    else:
                 st.info('Length of stay dataset unavailable.')
         except Exception:
             pass
@@ -1273,7 +1283,7 @@ with tab_complications:
                     if 'finessgeodp' in df.columns:
                         df['finessgeodp'] = df['finessgeodp'].astype(str).str.strip()
                     return df
-                except Exception:
+                    except Exception:
                     return pd.DataFrame()
 
             ext = _load_external_rolling_csv()
@@ -1341,7 +1351,7 @@ with tab_complications:
                                 name=roll_nat_name,
                                 line=dict(color='#1f77b4', width=2, dash='dash')
                             ))
-                    except Exception:
+                        except Exception:
                         pass
 
             fig_roll.update_layout(
@@ -1445,9 +1455,9 @@ with tab_complications:
                         overlay_fig = create_multi_km_chart(
                             curves_dict=curves_to_plot,
                             title=overlay_title,
-                            yaxis_title='Complication Rate (%)',
-                            xaxis_title='6‑month interval',
-                            height=400,
+                                            yaxis_title='Complication Rate (%)',
+                                            xaxis_title='6‑month interval',
+                                            height=400,
                             colors=['#1f77b4', '#d62728']
                         )
                         st.plotly_chart(overlay_fig, use_container_width=True, key=f"km_overlay_{selected_hospital_id}_v2")
