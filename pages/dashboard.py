@@ -1615,6 +1615,133 @@ with tab_activity:
     except Exception as e:
         st.warning(f"Could not load monthly volume data: {e}")
     
+    # --- Procedure Casemix (Donut charts) ---
+    try:
+        st.markdown("### Procedure casemix")
+        mode = st.radio(
+            "View",
+            ["2021–2025", "Last 12 months"],
+            index=0,
+            horizontal=True,
+            key=f"casemix_mode_{selected_hospital_id}"
+        )
+
+        # Helper: get group ids
+        def _extract_region_from_details(row) -> str | None:
+            try:
+                for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                    if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                        return str(row[key]).strip()
+            except Exception:
+                return None
+            return None
+
+        region_val = _extract_region_from_details(selected_hospital_details)
+        ids_all = establishments['id'].astype(str).unique().tolist() if 'id' in establishments.columns else []
+        ids_reg = (
+            establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_val)]['id'].astype(str).unique().tolist()
+            if region_val is not None and 'id' in establishments.columns else []
+        )
+        # Same category
+        try:
+            status_val = str(selected_hospital_details.get('statut', '')).strip()
+            def _flag(v):
+                try:
+                    return int(v) if pd.notna(v) else 0
+                except Exception:
+                    return 0
+            uni = _flag(selected_hospital_details.get('university', 0))
+            soffco = _flag(selected_hospital_details.get('LAB_SOFFCO', 0))
+            cso_val = _flag(selected_hospital_details.get('cso', 0))
+            est_cat = establishments.copy()
+            for c in ['university','LAB_SOFFCO','cso']:
+                if c not in est_cat.columns:
+                    est_cat[c] = 0
+            ids_cat = est_cat[
+                (est_cat.get('statut','').astype(str).str.strip() == status_val)
+                & (est_cat['university'].fillna(0).astype(int) == uni)
+                & (est_cat['LAB_SOFFCO'].fillna(0).astype(int) == soffco)
+                & (est_cat['cso'].fillna(0).astype(int) == cso_val)
+            ]['id'].astype(str).unique().tolist()
+        except Exception:
+            ids_cat = []
+
+        PROC_COLORS = {'Sleeve': '#1f77b4', 'Gastric Bypass': '#ff7f0e', 'Other': '#2ca02c'}
+
+        @st.cache_data(show_spinner=False)
+        def _load_monthly_for_casemix(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.csv") -> pd.DataFrame:
+            try:
+                df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int, 'mois': int})
+                df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
+                df['date'] = pd.to_datetime(df['annee'].astype(str) + '-' + df['mois'].astype(str).str.zfill(2) + '-01')
+                return df
+            except Exception:
+                return pd.DataFrame()
+
+        def _casemix_period(ids: list[str] | None) -> dict:
+            # Aggregate from annual (2021–2025)
+            df = annual.copy()
+            if ids:
+                df = df[df['id'].astype(str).isin([str(i) for i in ids])]
+            df = df[(df.get('annee', 0) >= 2021) & (df.get('annee', 0) <= 2025)]
+            if df.empty:
+                return {'Sleeve': 0, 'Gastric Bypass': 0, 'Other': 0}
+            sleeve = int(pd.to_numeric(df.get('SLE', 0), errors='coerce').fillna(0).sum()) if 'SLE' in df.columns else 0
+            bypass = int(pd.to_numeric(df.get('BPG', 0), errors='coerce').fillna(0).sum()) if 'BPG' in df.columns else 0
+            other = 0
+            for c in [c for c in df.columns if c in BARIATRIC_PROCEDURE_NAMES and c not in ['SLE','BPG']]:
+                other += int(pd.to_numeric(df[c], errors='coerce').fillna(0).sum())
+            return {'Sleeve': sleeve, 'Gastric Bypass': bypass, 'Other': other}
+
+        def _casemix_last12(ids: list[str] | None) -> dict:
+            mv = _load_monthly_for_casemix()
+            if mv.empty:
+                return _casemix_period(ids)
+            if ids:
+                mv = mv[mv['finessGeoDP'].isin([str(i) for i in ids])]
+            if mv.empty:
+                return _casemix_period(ids)
+            max_date = mv['date'].max()
+            start = (max_date - pd.DateOffset(months=11)).normalize()
+            m12 = mv[(mv['date'] >= start) & (mv['date'] <= max_date)].copy()
+            if m12.empty:
+                return _casemix_period(ids)
+            def _sum_code(code: str) -> float:
+                sub = m12[m12.get('baria_t') == code]
+                return float(pd.to_numeric(sub.get('TOT_month_tcn', 0), errors='coerce').fillna(0).sum())
+            sleeve = _sum_code('SLE')
+            bypass = _sum_code('BPG')
+            other = float(pd.to_numeric(m12[~m12['baria_t'].isin(['SLE','BPG'])].get('TOT_month_tcn', 0), errors='coerce').fillna(0).sum())
+            return {'Sleeve': sleeve, 'Gastric Bypass': bypass, 'Other': other}
+
+        def _plot_donut(title: str, data: dict):
+            total = sum(data.values())
+            if total <= 0:
+                st.info(f"No data for {title}.")
+                return
+            dfp = pd.DataFrame({'Procedure': list(data.keys()), 'Count': list(data.values())})
+            figp = px.pie(dfp, values='Count', names='Procedure', hole=0.55, color='Procedure', color_discrete_map=PROC_COLORS)
+            figp.update_traces(textposition='inside', textinfo='percent+label')
+            figp.update_layout(title=title, height=260, showlegend=False, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(figp, use_container_width=True)
+
+        use_last12 = (mode == "Last 12 months")
+        # Compute sets
+        cas_h = _casemix_last12([selected_hospital_id]) if use_last12 else _casemix_period([selected_hospital_id])
+        cas_n = _casemix_last12(ids_all) if use_last12 else _casemix_period(ids_all)
+        cas_r = _casemix_last12(ids_reg) if use_last12 else _casemix_period(ids_reg)
+        cas_c = _casemix_last12(ids_cat) if use_last12 else _casemix_period(ids_cat)
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: _plot_donut('Hospital', cas_h)
+        with c2: _plot_donut('National', cas_n)
+        with c3: _plot_donut('Regional', cas_r)
+        with c4: _plot_donut('Same category', cas_c)
+        if use_last12:
+            st.caption("Last 12 months based on monthly data; if unavailable, falls back to 2021–2025 aggregate.")
+    except Exception as e:
+        st.caption(f"Casemix section unavailable: {e}")
+
     # Procedure share (3 buckets)
     proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
     if proc_codes:
