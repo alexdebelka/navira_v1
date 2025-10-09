@@ -1500,8 +1500,14 @@ with tab_activity:
             x_pos = list(range(1, len(grp) + 1))
             colors = ['#FF8C00' if str(i) == str(selected_hospital_id) else '#5DA5DA' for i in grp['id']]
             fig_ll = go.Figure()
-            fig_ll.add_trace(go.Bar(x=x_pos, y=grp['total'], marker_color=colors, width=0.25, name=''))
-            fig_ll.add_trace(go.Scatter(x=x_pos, y=grp['total'], mode='markers', marker=dict(color=colors, size=6), showlegend=False, hovertemplate='%{text}<br>Procedures: %{y:,}<extra></extra>', text=grp['name']))
+            # Stems
+            for xi, yi, col in zip(x_pos, grp['total'], colors):
+                fig_ll.add_trace(go.Scatter(x=[xi, xi], y=[0, yi], mode='lines', line=dict(color=col, width=2), showlegend=False, hoverinfo='skip'))
+            # Heads
+            fig_ll.add_trace(go.Scatter(x=x_pos, y=grp['total'], mode='markers', marker=dict(color=colors, size=8), showlegend=False, hovertemplate='%{text}<br>Procedures: %{y:,}<extra></extra>', text=grp['name']))
+            # Pseudo-legend using dummy markers
+            fig_ll.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(color='#FF8C00', size=8), name='Selected hospital'))
+            fig_ll.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(color='#5DA5DA', size=8), name='Other hospitals'))
             fig_ll.update_layout(height=360, xaxis_title='Hospitals', yaxis_title='Number of procedures', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(showticklabels=False))
             st.plotly_chart(fig_ll, use_container_width=True)
             if year_candidate == 2025:
