@@ -36,6 +36,16 @@ st.set_page_config(
     layout="wide"
 )
 
+# Build/version indicator to verify redeploys
+try:
+    _build_id = None
+    with open('deploy_trigger.txt', 'r') as _f:
+        _build_id = _f.read().strip()[:64]
+    if _build_id:
+        st.caption(f"Build: {_build_id}")
+except Exception:
+    _build_id = None
+
 # --- Cache Control ---
 if st.button("♻️ Clear cache"):
     try:
@@ -244,7 +254,7 @@ st.markdown("### Summary")
 
 # Helper to load monthly data for YoY estimate (YTD)
 @st.cache_data(show_spinner=False)
-def _load_monthly_volumes_summary(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.csv") -> pd.DataFrame:
+def _load_monthly_volumes_summary(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.csv", cache_buster: str = "") -> pd.DataFrame:
     try:
         df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int, 'mois': int})
         df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
@@ -254,7 +264,7 @@ def _load_monthly_volumes_summary(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.
 
 # Read VDA file that includes ongoing year (e.g., 2025) totals and approach split
 @st.cache_data(show_spinner=False)
-def _load_vda_year_totals_summary(path: str = "data/export_TAB_VDA_HOP.csv") -> pd.DataFrame:
+def _load_vda_year_totals_summary(path: str = "data/export_TAB_VDA_HOP.csv", cache_buster: str = "") -> pd.DataFrame:
     try:
         df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int})
         df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
@@ -284,7 +294,7 @@ ongoing_year_display = int(ongoing_year)
 # Expected trend (YoY YTD vs same months last year)
 yoy_text = "—"
 try:
-    mv = _load_monthly_volumes_summary()
+    mv = _load_monthly_volumes_summary(cache_buster=str(_build_id or ""))
     if not mv.empty:
         hosp_mv = mv[mv['finessGeoDP'] == str(selected_hospital_id)]
         if not hosp_mv.empty and (ongoing_year in hosp_mv['annee'].unique()) and ((ongoing_year-1) in hosp_mv['annee'].unique()):
@@ -299,7 +309,7 @@ except Exception:
 
 # Override ongoing year metrics using VDA (includes 2025)
 try:
-    vda = _load_vda_year_totals_summary()
+    vda = _load_vda_year_totals_summary(cache_buster=str(_build_id or ""))
     if not vda.empty:
         hosp_vda = vda[vda['finessGeoDP'] == str(selected_hospital_id)].copy()
         if not hosp_vda.empty:
