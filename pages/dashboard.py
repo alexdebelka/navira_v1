@@ -1604,7 +1604,7 @@ with tab_activity:
             # Others (dots)
             fig_sc.add_trace(go.Scatter(
                 x=others['_sleeve_pct'], y=others['_bypass_pct'], mode='markers',
-                marker=dict(color='#222', size=6, opacity=0.7),
+                marker=dict(color='#60a5fa', size=6, opacity=0.7),
                 name='Other hospitals',
                 hovertemplate='%{text}<br>Sleeve: %{x:.0f}%<br>Bypass: %{y:.0f}%<extra></extra>',
                 text=others['name']
