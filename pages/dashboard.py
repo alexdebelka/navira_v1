@@ -1317,6 +1317,36 @@ with tab_activity:
             i for i in cat_ids
         ] if 'cat_ids' in locals() else []
 
+        # Helper: Augment avg-per-year DataFrame with 2025 YTD from VDA when parquet lacks 2025
+        def _augment_avg_with_vda(avg_df: pd.DataFrame, ids: list[str]) -> pd.DataFrame:
+            try:
+                vda_df = _load_vda_year_totals_summary()
+                if vda_df.empty or not ids:
+                    return avg_df
+                sub = vda_df[vda_df['finessGeoDP'].astype(str).isin([str(i) for i in ids])]
+                if sub.empty:
+                    return avg_df
+                per_hosp_year = sub.groupby(['finessGeoDP','annee'], as_index=False)['TOT'].max()
+                avg_by_year = per_hosp_year.groupby('annee', as_index=False)['TOT'].mean().rename(columns={'TOT':'avg'})
+                if (avg_by_year['annee'] == 2025).any():
+                    v2025 = float(avg_by_year[avg_by_year['annee'] == 2025]['avg'].iloc[0])
+                    # Insert or update 2025 row
+                    if (avg_df['annee'] == 2025).any():
+                        avg_df.loc[avg_df['annee'] == 2025, 'avg'] = v2025
+                    else:
+                        avg_df = pd.concat([avg_df, pd.DataFrame({'annee':[2025], 'avg':[v2025]})], ignore_index=True)
+                return avg_df.sort_values('annee')
+            except Exception:
+                return avg_df
+
+        # Apply augmentation
+        if not nat_avg.empty:
+            nat_avg = _augment_avg_with_vda(nat_avg, all_ids)
+        if not reg_avg.empty:
+            reg_avg = _augment_avg_with_vda(reg_avg, reg_ids)
+        if not cat_avg.empty:
+            cat_avg = _augment_avg_with_vda(cat_avg, est_cat_ids)
+
         c_nat, c_reg, c_cat = st.columns(3)
         with c_nat:
             if not nat_avg.empty:
