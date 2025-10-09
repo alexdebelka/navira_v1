@@ -252,6 +252,20 @@ def _load_monthly_volumes_summary(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.
     except Exception:
         return pd.DataFrame()
 
+# Read VDA file that includes ongoing year (e.g., 2025) totals and approach split
+@st.cache_data(show_spinner=False)
+def _load_vda_year_totals_summary(path: str = "data/export_TAB_VDA_HOP.csv") -> pd.DataFrame:
+    try:
+        df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int})
+        df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
+        # Ensure numeric
+        for c in ['VOL','TOT','PCT']:
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors='coerce')
+        return df
+    except Exception:
+        return pd.DataFrame()
+
 # Core aggregates
 total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
 total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
@@ -265,6 +279,7 @@ period_total = int(pd.to_numeric(period_21_24.get('total_procedures_year', 0), e
 # Ongoing year total
 ongoing_year = int(latest_year_activity)
 ongoing_total = int(pd.to_numeric(selected_hospital_all_data[selected_hospital_all_data['annee'] == ongoing_year].get('total_procedures_year', 0), errors='coerce').fillna(0).sum())
+ongoing_year_display = int(ongoing_year)
 
 # Expected trend (YoY YTD vs same months last year)
 yoy_text = "—"
@@ -279,6 +294,25 @@ try:
             if prev > 0:
                 yoy = (cur / prev - 1.0) * 100.0
                 yoy_text = f"{yoy:+.0f}%"
+except Exception:
+    pass
+
+# Override ongoing year metrics using VDA (includes 2025)
+try:
+    vda = _load_vda_year_totals_summary()
+    if not vda.empty:
+        hosp_vda = vda[vda['finessGeoDP'] == str(selected_hospital_id)].copy()
+        if not hosp_vda.empty:
+            # Aggregate to year totals using TOT (once per year; take max to avoid duplicates across approaches)
+            year_totals = hosp_vda.groupby('annee', as_index=False)['TOT'].max().dropna()
+            if (year_totals['annee'] == 2025).any():
+                ongoing_year_display = 2025
+                ongoing_total = int(pd.to_numeric(year_totals[year_totals['annee'] == 2025]['TOT'], errors='coerce').fillna(0).iloc[0])
+                if (year_totals['annee'] == 2024).any():
+                    prev_total = float(pd.to_numeric(year_totals[year_totals['annee'] == 2024]['TOT'], errors='coerce').fillna(0).iloc[0])
+                    if prev_total > 0:
+                        yoy = (ongoing_total / prev_total - 1.0) * 100.0
+                        yoy_text = f"{yoy:+.0f}%"
 except Exception:
     pass
 
@@ -302,9 +336,9 @@ with left:
 with m1:
     st.metric(label="Nb procedures (2021–2024)", value=f"{period_total:,}")
 with m2:
-    st.metric(label=f"Nb procedures ongoing year ({ongoing_year})", value=f"{ongoing_total:,}")
+    st.metric(label=f"Nb procedures ongoing year ({ongoing_year_display})", value=f"{ongoing_total:,}")
 with m3:
-    st.metric(label=f"Expected trend for ongoing year ({ongoing_year})", value=yoy_text)
+    st.metric(label=f"Expected trend for ongoing year ({ongoing_year_display})", value=yoy_text)
 
 # Second row: spacer under labels + donut, single-year robotic share bar, and two bubbles
 spacer, c_donut, c_robot, c_rates = st.columns([1.3, 1.2, 1.2, 1.5])
