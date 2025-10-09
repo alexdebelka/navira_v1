@@ -316,6 +316,21 @@ try:
 except Exception:
     pass
 
+# Prefer YTD trend using monthly data: compare 2025 YTD to 2024 YTD through same month
+try:
+    mv_pref = _load_monthly_volumes_summary()
+    if not mv_pref.empty:
+        mv_h = mv_pref[mv_pref['finessGeoDP'] == str(selected_hospital_id)]
+        if not mv_h.empty and (2025 in mv_h['annee'].unique()) and (2024 in mv_h['annee'].unique()):
+            m_cut = int(pd.to_numeric(mv_h[mv_h['annee'] == 2025]['mois'], errors='coerce').max())
+            cur = pd.to_numeric(mv_h[(mv_h['annee'] == 2025) & (mv_h['mois'] <= m_cut)]['TOT_month'], errors='coerce').fillna(0).sum()
+            prev = pd.to_numeric(mv_h[(mv_h['annee'] == 2024) & (mv_h['mois'] <= m_cut)]['TOT_month'], errors='coerce').fillna(0).sum()
+            if prev > 0:
+                yoy_monthly = (cur / prev - 1.0) * 100.0
+                yoy_text = f"{yoy_monthly:+.0f}%"
+except Exception:
+    pass
+
 # First row: Left labels + three headline metrics
 left, m1, m2, m3 = st.columns([1.3, 1, 1, 1.05])
 with left:
