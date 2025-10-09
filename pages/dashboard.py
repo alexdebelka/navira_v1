@@ -267,8 +267,8 @@ def _load_vda_year_totals_summary(path: str = "data/export_TAB_VDA_HOP.csv") -> 
         return pd.DataFrame()
 
 # Core aggregates
-total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
-total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
+    total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
+    total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
 hospital_revision_pct = (total_rev_hospital / total_proc_hospital) * 100 if total_proc_hospital > 0 else 0.0
 
 # Period totals (2021–2024)
@@ -1157,6 +1157,40 @@ with tab_activity:
                 if 2025 in nat_proc_df['Year'].values:
                     st.info("📅 **Note:** 2025 data is year-to-date through July only.")
     
+    # --- Big hospital chart: Number of procedures per year ---
+    try:
+        st.markdown("#### Hospital — Number of procedures per year")
+        # Build yearly totals for the selected hospital (2021+)
+        hosp_year_counts = (
+            selected_hospital_all_data[['annee','total_procedures_year']]
+            .dropna().copy()
+        )
+        hosp_year_counts = hosp_year_counts[hosp_year_counts['annee'] >= 2021]
+        if not hosp_year_counts.empty:
+            years = hosp_year_counts['annee'].astype(int).tolist()
+            vals = hosp_year_counts['total_procedures_year'].tolist()
+            colors = []
+            for y in years:
+                if y == 2025:
+                    colors.append('#1f4e79')  # darker blue for YTD 2025
+                else:
+                    colors.append('#4e79a7')  # regular blue
+            b1, b2 = st.columns([4, 1])
+            with b1:
+                fig_h_big = go.Figure(go.Bar(x=years, y=vals, marker_color=colors))
+                fig_h_big.update_layout(height=340, xaxis_title='Year', yaxis_title='Number of procedures', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                fig_h_big.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
+                st.plotly_chart(fig_h_big, use_container_width=True)
+            with b2:
+                # Reuse previously computed yoy_text (2025 YTD vs 2024 from monthly data if available)
+                if 'yoy_text' in locals() or 'yoy_text' in globals():
+                    st.markdown(f"<div class='nv-bubble teal' style='width:120px;height:120px;font-size:1.8rem'>{yoy_text}</div>", unsafe_allow_html=True)
+                    st.caption('2025 YTD (until July)')
+        else:
+            st.info('No annual totals available to plot.')
+    except Exception:
+        pass
+
     # --- National, Regional, Same-Category comparisons (average surgeries per hospital) ---
     try:
         st.markdown("#### National, Regional and Similar-Category Comparisons")
@@ -1309,7 +1343,7 @@ with tab_activity:
                 st.info('No matching category group could be formed for this hospital.')
     except Exception as e:
         st.caption(f"Comparison charts unavailable: {e}")
-
+    
     # Monthly procedure volume trends
     try:
         @st.cache_data(show_spinner=False)
