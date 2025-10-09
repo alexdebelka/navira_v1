@@ -1157,6 +1157,159 @@ with tab_activity:
                 if 2025 in nat_proc_df['Year'].values:
                     st.info("📅 **Note:** 2025 data is year-to-date through July only.")
     
+    # --- National, Regional, Same-Category comparisons (average surgeries per hospital) ---
+    try:
+        st.markdown("#### National, Regional and Similar-Category Comparisons")
+
+        # Helper to extract region value from establishment details
+        def _extract_region_from_details(row) -> str | None:
+            try:
+                for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                    if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                        return str(row[key]).strip()
+            except Exception:
+                return None
+            return None
+
+        # Build base annual dataframe with eligibility filter similar to national
+        annual_base = annual.copy()
+        if 'total_procedures_year' in annual_base.columns:
+            annual_base = annual_base[annual_base['total_procedures_year'] >= 25]
+
+        # Resolve region for the selected hospital
+        region_value = _extract_region_from_details(selected_hospital_details)
+
+        # Compute National avg per year (reuse if available)
+        nat_avg = (
+            annual_base.groupby('annee', as_index=False)['total_procedures_year']
+            .mean().rename(columns={'total_procedures_year': 'avg'})
+        ) if 'total_procedures_year' in annual_base.columns else pd.DataFrame()
+
+        # Compute Regional avg per year
+        if region_value is not None:
+            # Join establishments' region to annual if missing
+            if 'lib_reg' not in annual_base.columns and 'region' not in annual_base.columns and 'code_reg' not in annual_base.columns:
+                reg_map = establishments[['id'] + [c for c in ['lib_reg','region','code_reg','region_name'] if c in establishments.columns]].copy()
+                annual_base = annual_base.merge(reg_map, left_on='id', right_on='id', how='left')
+            # Build boolean mask across possible region columns
+            reg_cols = [c for c in ['lib_reg','region','code_reg','region_name'] if c in annual_base.columns]
+            reg_mask = False
+            for c in reg_cols:
+                reg_mask = reg_mask | (annual_base[c].astype(str).str.strip() == str(region_value))
+            regional_df = annual_base[reg_mask]
+            reg_avg = (
+                regional_df.groupby('annee', as_index=False)['total_procedures_year']
+                .mean().rename(columns={'total_procedures_year': 'avg'})
+            ) if not regional_df.empty else pd.DataFrame()
+        else:
+            reg_avg = pd.DataFrame()
+
+        # Compute Same-category avg per year (status + labels match)
+        try:
+            status_val = str(selected_hospital_details.get('statut', '')).strip()
+            def _flag(v):
+                try:
+                    return int(v) if pd.notna(v) else 0
+                except Exception:
+                    return 0
+            uni = _flag(selected_hospital_details.get('university', 0))
+            soffco = _flag(selected_hospital_details.get('LAB_SOFFCO', 0))
+            cso_val = _flag(selected_hospital_details.get('cso', 0))
+            est_cat = establishments.copy()
+            for c in ['university','LAB_SOFFCO','cso']:
+                if c not in est_cat.columns:
+                    est_cat[c] = 0
+            cat_ids = est_cat[
+                (est_cat.get('statut','').astype(str).str.strip() == status_val)
+                & (est_cat['university'].fillna(0).astype(int) == uni)
+                & (est_cat['LAB_SOFFCO'].fillna(0).astype(int) == soffco)
+                & (est_cat['cso'].fillna(0).astype(int) == cso_val)
+            ]['id'].astype(str).unique().tolist()
+            cat_df = annual_base[annual_base['id'].astype(str).isin(cat_ids)] if cat_ids else pd.DataFrame()
+            cat_avg = (
+                cat_df.groupby('annee', as_index=False)['total_procedures_year']
+                .mean().rename(columns={'total_procedures_year': 'avg'})
+            ) if not cat_df.empty else pd.DataFrame()
+        except Exception:
+            cat_avg = pd.DataFrame()
+
+        # Helper: YoY bubble from VDA for a set of ids (average per hospital)
+        def _yoy_bubble_for_group(id_list: list[str]) -> str | None:
+            try:
+                vda_df = _load_vda_year_totals_summary()
+                if vda_df.empty or not id_list:
+                    return None
+                sub = vda_df[vda_df['finessGeoDP'].astype(str).isin([str(i) for i in id_list])]
+                if sub.empty:
+                    return None
+                per_hosp_year = sub.groupby(['finessGeoDP','annee'], as_index=False)['TOT'].max()
+                avg_by_year = per_hosp_year.groupby('annee', as_index=False)['TOT'].mean()
+                v2024 = float(avg_by_year[avg_by_year['annee'] == 2024]['TOT'].iloc[0]) if (avg_by_year['annee'] == 2024).any() else None
+                v2025 = float(avg_by_year[avg_by_year['annee'] == 2025]['TOT'].iloc[0]) if (avg_by_year['annee'] == 2025).any() else None
+                if v2024 and v2025 is not None and v2024 > 0:
+                    return f"{((v2025 / v2024 - 1.0) * 100.0):+.0f}%"
+            except Exception:
+                return None
+            return None
+
+        # Collect ids for groups
+        all_ids = establishments['id'].astype(str).unique().tolist() if 'id' in establishments.columns else []
+        reg_ids = (
+            establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_value)]['id'].astype(str).unique().tolist()
+            if region_value is not None and 'id' in establishments.columns else []
+        )
+        est_cat_ids = [
+            i for i in cat_ids
+        ] if 'cat_ids' in locals() else []
+
+        c_nat, c_reg, c_cat = st.columns(3)
+        with c_nat:
+            if not nat_avg.empty:
+                s1, s2 = st.columns([4, 1])
+                with s1:
+                    fig_nat_small = px.bar(nat_avg, x='annee', y='avg', title='National — Avg surgeries per hospital', color_discrete_sequence=['#E9A23B'])
+                    fig_nat_small.update_layout(height=260, xaxis_title='Year', yaxis_title='Avg surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_nat_small, use_container_width=True)
+                with s2:
+                    val = _yoy_bubble_for_group(all_ids)
+                    if val is not None:
+                        st.markdown(f"<div class='nv-bubble teal' style='width:110px;height:110px;font-size:1.5rem'>{val}</div>", unsafe_allow_html=True)
+                        st.caption('2025 YTD (until July)')
+            else:
+                st.info('National data unavailable.')
+
+        with c_reg:
+            if not reg_avg.empty:
+                s1, s2 = st.columns([4, 1])
+                with s1:
+                    fig_reg = px.bar(reg_avg, x='annee', y='avg', title='Regional — Avg surgeries per hospital', color_discrete_sequence=['#4ECDC4'])
+                    fig_reg.update_layout(height=260, xaxis_title='Year', yaxis_title='Avg surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_reg, use_container_width=True)
+                with s2:
+                    val = _yoy_bubble_for_group(reg_ids)
+                    if val is not None:
+                        st.markdown(f"<div class='nv-bubble purple' style='width:110px;height:110px;font-size:1.5rem'>{val}</div>", unsafe_allow_html=True)
+                        st.caption('2025 YTD (until July)')
+            else:
+                st.info('Regional data unavailable for this hospital.')
+
+        with c_cat:
+            if not cat_avg.empty:
+                s1, s2 = st.columns([4, 1])
+                with s1:
+                    fig_cat = px.bar(cat_avg, x='annee', y='avg', title='Same category — Avg surgeries per hospital', color_discrete_sequence=['#A78BFA'])
+                    fig_cat.update_layout(height=260, xaxis_title='Year', yaxis_title='Avg surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_cat, use_container_width=True)
+                with s2:
+                    val = _yoy_bubble_for_group(est_cat_ids)
+                    if val is not None:
+                        st.markdown(f"<div class='nv-bubble teal' style='width:110px;height:110px;font-size:1.5rem'>{val}</div>", unsafe_allow_html=True)
+                        st.caption('2025 YTD (until July)')
+            else:
+                st.info('No matching category group could be formed for this hospital.')
+    except Exception as e:
+        st.caption(f"Comparison charts unavailable: {e}")
+
     # Monthly procedure volume trends
     try:
         @st.cache_data(show_spinner=False)
