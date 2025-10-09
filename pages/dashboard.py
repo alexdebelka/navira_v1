@@ -349,7 +349,7 @@ with left:
         st.warning("➖ No Health Ministry Centre Label")
 
 with m1:
-    st.metric(label="Nb procedures (2021–2024)", value=f"{period_total:,}")
+    st.metric(label="Number procedures (2021–2024)", value=f"{period_total:,}")
 with m2:
     _suffix = f"{ongoing_year_display}"
     if ongoing_year_display == 2025:
