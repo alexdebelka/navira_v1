@@ -1480,13 +1480,23 @@ with tab_activity:
                 out = out[out['id'].astype(str).isin([str(i) for i in ids])]
             return out
 
-        year_candidate = 2025
-        grp2025 = _get_group_year_totals(2025, id_filter)
-        if grp2025.empty:
-            year_candidate = 2024
-            grp = _get_group_year_totals(2024, id_filter)
-        else:
-            grp = grp2025
+        # Choose the latest year with the largest coverage (hospitals with data)
+        candidate_years = [2025, 2024, 2023, 2022, 2021]
+        best_year = None
+        best_grp = pd.DataFrame()
+        for y in candidate_years:
+            g = _get_group_year_totals(y, id_filter)
+            g = g.copy()
+            g['total'] = pd.to_numeric(g.get('total', 0), errors='coerce').fillna(0)
+            g = g[g['total'] > 0]
+            if best_year is None or len(g) > len(best_grp):
+                best_year = y
+                best_grp = g
+            # stop early if we already have a large set
+            if len(best_grp) >= 200:
+                break
+        year_candidate = best_year if best_year is not None else 2024
+        grp = best_grp
 
         grp = grp.copy()
         grp['total'] = pd.to_numeric(grp['total'], errors='coerce').fillna(0)
@@ -1495,8 +1505,9 @@ with tab_activity:
             names_map = establishments.set_index('id')['name'].to_dict() if 'name' in establishments.columns else {}
             grp['name'] = grp['id'].map(lambda i: names_map.get(i, str(i)))
             grp = grp.sort_values('total').reset_index(drop=True)
-            N = min(40, len(grp))
-            grp = grp.tail(N)
+            # Optional limit for readability
+            max_hosp = st.slider("Max hospitals to display", 10, max(10, len(grp)), len(grp), key=f"lollipop_limit_{scope}")
+            grp = grp.tail(max_hosp)
             x_pos = list(range(1, len(grp) + 1))
             colors = ['#FF8C00' if str(i) == str(selected_hospital_id) else '#5DA5DA' for i in grp['id']]
             fig_ll = go.Figure()
