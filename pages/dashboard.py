@@ -1528,6 +1528,107 @@ with tab_activity:
     except Exception as e:
         st.caption(f"Lollipop chart unavailable: {e}")
     
+    # --- Scatter: Sleeve vs Bypass share (%) ---
+    try:
+        st.markdown("#### Sleeve & Bypass share (%)")
+
+        # Build grouping ids (national, regional, same status across France)
+        def _extract_region_from_details(row) -> str | None:
+            try:
+                for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                    if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                        return str(row[key]).strip()
+            except Exception:
+                return None
+            return None
+
+        region_val3 = _extract_region_from_details(selected_hospital_details)
+        ids_all3 = establishments['id'].astype(str).unique().tolist() if 'id' in establishments.columns else []
+        ids_reg3 = (
+            establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_val3)]['id'].astype(str).unique().tolist()
+            if region_val3 is not None and 'id' in establishments.columns else []
+        )
+        status_val3 = str(selected_hospital_details.get('statut', '')).strip()
+        ids_status3 = (
+            establishments[establishments.get('statut','').astype(str).str.strip() == status_val3]['id'].astype(str).unique().tolist()
+            if 'statut' in establishments.columns else []
+        )
+
+        scope_sc = st.radio("Compare against", ["National", "Regional", "Same status"], horizontal=True, index=0, key=f"scatter_scope_{selected_hospital_id}")
+        if scope_sc == "Regional":
+            ids_scope = ids_reg3
+        elif scope_sc == "Same status":
+            ids_scope = ids_status3
+        else:
+            ids_scope = ids_all3
+
+        # Choose year with best coverage in annual data
+        candidates = [2025, 2024, 2023, 2022, 2021]
+        best_year_sc = None
+        best_df = pd.DataFrame()
+        proc_cols = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in annual.columns]
+        for y in candidates:
+            dfy = annual[annual.get('annee') == y].copy()
+            if ids_scope:
+                dfy = dfy[dfy['id'].astype(str).isin([str(i) for i in ids_scope])]
+            if dfy.empty:
+                continue
+            # Keep only hospitals with any procedures
+            totals = dfy[proc_cols].sum(axis=1) if proc_cols else pd.Series([0]*len(dfy))
+            dfy = dfy.assign(_total=totals)
+            dfy = dfy[dfy['_total'] > 0]
+            if best_year_sc is None or len(dfy) > len(best_df):
+                best_year_sc = y
+                best_df = dfy
+        if best_df.empty:
+            st.info('No data to compute sleeve/bypass shares for the selected scope.')
+        else:
+            # Compute shares
+            cols_present = [c for c in ['SLE','BPG'] if c in best_df.columns]
+            for c in ['SLE','BPG']:
+                if c not in best_df.columns:
+                    best_df[c] = 0
+            best_df['_total_all'] = best_df[proc_cols].sum(axis=1)
+            best_df = best_df[best_df['_total_all'] > 0]
+            best_df['_sleeve_pct'] = best_df['SLE'] / best_df['_total_all'] * 100.0
+            best_df['_bypass_pct'] = best_df['BPG'] / best_df['_total_all'] * 100.0
+            # Selected hospital point
+            sel = best_df[best_df['id'].astype(str) == str(selected_hospital_id)].copy()
+            others = best_df[best_df['id'].astype(str) != str(selected_hospital_id)].copy()
+            # Names for hover
+            name_map = establishments.set_index('id')['name'].to_dict() if 'name' in establishments.columns else {}
+            others['name'] = others['id'].map(lambda i: name_map.get(i, str(i)))
+            sel['name'] = sel['id'].map(lambda i: name_map.get(i, str(i)))
+
+            fig_sc = go.Figure()
+            # Others (dots)
+            fig_sc.add_trace(go.Scatter(
+                x=others['_sleeve_pct'], y=others['_bypass_pct'], mode='markers',
+                marker=dict(color='#222', size=6, opacity=0.7),
+                name='Other hospitals',
+                hovertemplate='%{text}<br>Sleeve: %{x:.0f}%<br>Bypass: %{y:.0f}%<extra></extra>',
+                text=others['name']
+            ))
+            # Selected hospital (highlight)
+            if not sel.empty:
+                fig_sc.add_trace(go.Scatter(
+                    x=sel['_sleeve_pct'], y=sel['_bypass_pct'], mode='markers',
+                    marker=dict(color='#FF8C00', size=10, line=dict(color='white', width=1)),
+                    name='Selected hospital',
+                    hovertemplate='%{text}<br>Sleeve: %{x:.0f}%<br>Bypass: %{y:.0f}%<extra></extra>',
+                    text=sel['name']
+                ))
+            fig_sc.update_layout(
+                height=380,
+                xaxis_title='Sleeve rate (%)', yaxis_title='Bypass rate (%)',
+                xaxis=dict(range=[0, 100]), yaxis=dict(range=[0, 100]),
+                plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+            )
+            st.plotly_chart(fig_sc, use_container_width=True)
+            st.caption(f"Year used: {best_year_sc}")
+    except Exception as e:
+        st.caption(f"Scatter unavailable: {e}")
+
     # Monthly procedure volume trends
     try:
         @st.cache_data(show_spinner=False)
