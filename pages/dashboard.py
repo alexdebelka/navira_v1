@@ -1198,8 +1198,9 @@ with tab_activity:
                     colors.append('#4e79a7')  # regular blue
             b1, b2 = st.columns([4, 1])
             with b1:
-                fig_h_big = go.Figure(go.Bar(x=years, y=vals, marker_color=colors))
-                fig_h_big.update_layout(height=340, xaxis_title='Year', yaxis_title='Number of procedures', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                years_str = [str(y) for y in years]
+                fig_h_big = go.Figure(go.Bar(x=years_str, y=vals, marker_color=colors))
+                fig_h_big.update_layout(height=340, xaxis_title='Year', yaxis_title='Number of procedures', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(type='category'))
                 fig_h_big.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                 st.plotly_chart(fig_h_big, use_container_width=True)
             with b2:
@@ -1352,8 +1353,10 @@ with tab_activity:
             if not nat_avg.empty:
                 s1, s2 = st.columns([4, 1])
                 with s1:
-                    fig_nat_small = px.bar(nat_avg, x='annee', y='avg', title='National — Avg surgeries per hospital', color_discrete_sequence=['#E9A23B'])
-                    fig_nat_small.update_layout(height=260, xaxis_title='Year', yaxis_title='Avg surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    nat_avg_plot = nat_avg[nat_avg['annee'] >= 2021].copy()
+                    nat_avg_plot['annee'] = nat_avg_plot['annee'].astype(int).astype(str)
+                    fig_nat_small = px.bar(nat_avg_plot, x='annee', y='avg', title='National — Avg surgeries per hospital', color_discrete_sequence=['#E9A23B'])
+                    fig_nat_small.update_layout(height=260, xaxis_title='Year', yaxis_title='Avg surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(type='category'))
                     st.plotly_chart(fig_nat_small, use_container_width=True)
                 with s2:
                     val = _yoy_bubble_for_group(all_ids)
@@ -1367,8 +1370,10 @@ with tab_activity:
             if not reg_avg.empty:
                 s1, s2 = st.columns([4, 1])
                 with s1:
-                    fig_reg = px.bar(reg_avg, x='annee', y='avg', title='Regional — Avg surgeries per hospital', color_discrete_sequence=['#4ECDC4'])
-                    fig_reg.update_layout(height=260, xaxis_title='Year', yaxis_title='Avg surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    reg_avg_plot = reg_avg[reg_avg['annee'] >= 2021].copy()
+                    reg_avg_plot['annee'] = reg_avg_plot['annee'].astype(int).astype(str)
+                    fig_reg = px.bar(reg_avg_plot, x='annee', y='avg', title='Regional — Avg surgeries per hospital', color_discrete_sequence=['#4ECDC4'])
+                    fig_reg.update_layout(height=260, xaxis_title='Year', yaxis_title='Avg surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(type='category'))
                     st.plotly_chart(fig_reg, use_container_width=True)
                 with s2:
                     val = _yoy_bubble_for_group(reg_ids)
@@ -1382,8 +1387,10 @@ with tab_activity:
             if not cat_avg.empty:
                 s1, s2 = st.columns([4, 1])
                 with s1:
-                    fig_cat = px.bar(cat_avg, x='annee', y='avg', title='Same category — Avg surgeries per hospital', color_discrete_sequence=['#A78BFA'])
-                    fig_cat.update_layout(height=260, xaxis_title='Year', yaxis_title='Avg surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    cat_avg_plot = cat_avg[cat_avg['annee'] >= 2021].copy()
+                    cat_avg_plot['annee'] = cat_avg_plot['annee'].astype(int).astype(str)
+                    fig_cat = px.bar(cat_avg_plot, x='annee', y='avg', title='Same category — Avg surgeries per hospital', color_discrete_sequence=['#A78BFA'])
+                    fig_cat.update_layout(height=260, xaxis_title='Year', yaxis_title='Avg surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(type='category'))
                     st.plotly_chart(fig_cat, use_container_width=True)
                 with s2:
                     val = _yoy_bubble_for_group(est_cat_ids)
