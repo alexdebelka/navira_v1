@@ -1166,6 +1166,27 @@ with tab_activity:
             .dropna().copy()
         )
         hosp_year_counts = hosp_year_counts[hosp_year_counts['annee'] >= 2021]
+        # If 2025 (or any year) is missing from parquet, augment from VDA CSV (YTD)
+        try:
+            vda_h = _load_vda_year_totals_summary()
+            if not vda_h.empty:
+                vda_h = vda_h[vda_h['finessGeoDP'] == str(selected_hospital_id)]
+                if not vda_h.empty:
+                    add_rows = (
+                        vda_h.groupby('annee', as_index=False)['TOT']
+                        .max().rename(columns={'TOT':'total_procedures_year'})
+                    )
+                    add_rows = add_rows[add_rows['annee'] >= 2021]
+                    for _, r in add_rows.iterrows():
+                        yr = int(r['annee'])
+                        if hosp_year_counts[hosp_year_counts['annee'] == yr].empty:
+                            hosp_year_counts = pd.concat([
+                                hosp_year_counts,
+                                pd.DataFrame({'annee':[yr], 'total_procedures_year':[float(r['total_procedures_year'])]})
+                            ], ignore_index=True)
+        except Exception:
+            pass
+        hosp_year_counts = hosp_year_counts.sort_values('annee')
         if not hosp_year_counts.empty:
             years = hosp_year_counts['annee'].astype(int).tolist()
             vals = hosp_year_counts['total_procedures_year'].tolist()
