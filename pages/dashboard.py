@@ -1402,6 +1402,105 @@ with tab_activity:
     except Exception as e:
         st.caption(f"Comparison charts unavailable: {e}")
     
+    # --- Lollipop chart: distribution across hospitals (highlight selected) ---
+    try:
+        st.markdown("#### Lollipop — Number of procedures per hospital (latest year)")
+
+        def _extract_region_from_details(row) -> str | None:
+            try:
+                for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                    if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                        return str(row[key]).strip()
+            except Exception:
+                return None
+            return None
+
+        region_value2 = _extract_region_from_details(selected_hospital_details)
+        ids_all = establishments['id'].astype(str).unique().tolist() if 'id' in establishments.columns else []
+        ids_reg = (
+            establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_value2)]['id'].astype(str).unique().tolist()
+            if region_value2 is not None and 'id' in establishments.columns else []
+        )
+        try:
+            status_val2 = str(selected_hospital_details.get('statut', '')).strip()
+            def _flag(v):
+                try:
+                    return int(v) if pd.notna(v) else 0
+                except Exception:
+                    return 0
+            uni2 = _flag(selected_hospital_details.get('university', 0))
+            soffco2 = _flag(selected_hospital_details.get('LAB_SOFFCO', 0))
+            cso2 = _flag(selected_hospital_details.get('cso', 0))
+            est_cat2 = establishments.copy()
+            for c in ['university','LAB_SOFFCO','cso']:
+                if c not in est_cat2.columns:
+                    est_cat2[c] = 0
+            ids_cat = est_cat2[
+                (est_cat2.get('statut','').astype(str).str.strip() == status_val2)
+                & (est_cat2['university'].fillna(0).astype(int) == uni2)
+                & (est_cat2['LAB_SOFFCO'].fillna(0).astype(int) == soffco2)
+                & (est_cat2['cso'].fillna(0).astype(int) == cso2)
+            ]['id'].astype(str).unique().tolist()
+        except Exception:
+            ids_cat = []
+
+        scope = st.radio("Compare against", ["National", "Regional", "Same category"], horizontal=True, index=0, key=f"lollipop_scope_{selected_hospital_id}")
+        if scope == "Regional":
+            id_filter = ids_reg
+        elif scope == "Same category":
+            id_filter = ids_cat
+        else:
+            id_filter = ids_all
+
+        def _get_group_year_totals(year: int, ids: list[str]) -> pd.DataFrame:
+            df_a = annual[annual['annee'] == year][['id','total_procedures_year']].copy() if 'annee' in annual.columns else pd.DataFrame()
+            if not df_a.empty:
+                df_a['id'] = df_a['id'].astype(str)
+                df_a = df_a.groupby('id', as_index=False)['total_procedures_year'].sum()
+            df_v = _load_vda_year_totals_summary()
+            if not df_v.empty:
+                df_v = df_v[df_v['annee'] == year].groupby('finessGeoDP', as_index=False)['TOT'].max().rename(columns={'finessGeoDP':'id','TOT':'vda_total'})
+                df_v['id'] = df_v['id'].astype(str)
+            merged = pd.merge(df_v, df_a, on='id', how='outer') if (not (df_v is None or df_v.empty)) else df_a
+            if merged is None or merged.empty:
+                return pd.DataFrame(columns=['id','total'])
+            merged['total'] = merged.get('total_procedures_year').fillna(merged.get('vda_total'))
+            out = merged[['id','total']].dropna()
+            if ids:
+                out = out[out['id'].astype(str).isin([str(i) for i in ids])]
+            return out
+
+        year_candidate = 2025
+        grp2025 = _get_group_year_totals(2025, id_filter)
+        if grp2025.empty:
+            year_candidate = 2024
+            grp = _get_group_year_totals(2024, id_filter)
+        else:
+            grp = grp2025
+
+        grp = grp.copy()
+        grp['total'] = pd.to_numeric(grp['total'], errors='coerce').fillna(0)
+        grp = grp[grp['total'] > 0]
+        if not grp.empty:
+            names_map = establishments.set_index('id')['name'].to_dict() if 'name' in establishments.columns else {}
+            grp['name'] = grp['id'].map(lambda i: names_map.get(i, str(i)))
+            grp = grp.sort_values('total').reset_index(drop=True)
+            N = min(40, len(grp))
+            grp = grp.tail(N)
+            x_pos = list(range(1, len(grp) + 1))
+            colors = ['#FF8C00' if str(i) == str(selected_hospital_id) else '#5DA5DA' for i in grp['id']]
+            fig_ll = go.Figure()
+            fig_ll.add_trace(go.Bar(x=x_pos, y=grp['total'], marker_color=colors, width=0.25, name=''))
+            fig_ll.add_trace(go.Scatter(x=x_pos, y=grp['total'], mode='markers', marker=dict(color=colors, size=6), showlegend=False, hovertemplate='%{text}<br>Procedures: %{y:,}<extra></extra>', text=grp['name']))
+            fig_ll.update_layout(height=360, xaxis_title='Hospitals', yaxis_title='Number of procedures', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(showticklabels=False))
+            st.plotly_chart(fig_ll, use_container_width=True)
+            if year_candidate == 2025:
+                st.caption('2025 YTD (until July)')
+        else:
+            st.info('No hospital totals available for this scope.')
+    except Exception as e:
+        st.caption(f"Lollipop chart unavailable: {e}")
+    
     # Monthly procedure volume trends
     try:
         @st.cache_data(show_spinner=False)
