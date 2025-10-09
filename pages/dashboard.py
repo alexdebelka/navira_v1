@@ -267,8 +267,8 @@ def _load_vda_year_totals_summary(path: str = "data/export_TAB_VDA_HOP.csv") -> 
         return pd.DataFrame()
 
 # Core aggregates
-total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
-total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
+    total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
+    total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
 hospital_revision_pct = (total_rev_hospital / total_proc_hospital) * 100 if total_proc_hospital > 0 else 0.0
 
 # Period totals (2021–2024)
@@ -362,7 +362,7 @@ with m3:
     st.metric(label=f"Expected trend for ongoing year ({_suffix_t})", value=yoy_text)
 
 # Second row: spacer under labels + donut, single-year robotic share bar, and two bubbles
-spacer, c_donut, c_robot, c_rates = st.columns([1.3, 1.2, 1.2, 1.5])
+c_donut, c_robot, c_rates = st.columns([1.2, 1.2, 1.5])
 
 with c_donut:
     try:
