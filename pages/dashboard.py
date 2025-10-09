@@ -864,298 +864,298 @@ with tab_activity:
     # Total surgeries and quick mix charts (MOVED TO TOP)
     col1, col2 = st.columns([2, 1])  # Hospital graphs larger (2), National graphs smaller (1)
     
-    with col1:
-        # Combined chart: Total Surgeries line + Procedure Mix bars
-        st.markdown("#### Hospital: Total Surgeries & Procedure Mix")
+    # with col1:
+    #     # Combined chart: Total Surgeries line + Procedure Mix bars
+    #     st.markdown("#### Hospital: Total Surgeries & Procedure Mix")
         
-        # Load monthly volume data for more granular visualization
-        monthly_vol = _load_monthly_volumes()
+    #     # Load monthly volume data for more granular visualization
+    #     monthly_vol = _load_monthly_volumes()
         
-        # Get procedure data for the combined chart - Filter out 2020
-        proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
-        hosp_year = selected_hospital_all_data[['annee','total_procedures_year']].dropna()
-        hosp_year = hosp_year[hosp_year['annee'] > 2020]  # Remove 2020 data
+    #     # Get procedure data for the combined chart - Filter out 2020
+    #     proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
+    #     hosp_year = selected_hospital_all_data[['annee','total_procedures_year']].dropna()
+    #     hosp_year = hosp_year[hosp_year['annee'] > 2020]  # Remove 2020 data
         
-        if not hosp_year.empty and proc_codes:
-            # Use monthly volume data if available, otherwise fall back to annual data
-            if not monthly_vol.empty and 'finessGeoDP' in monthly_vol.columns and 'baria_t' in monthly_vol.columns:
-                hosp_monthly_vol = monthly_vol[monthly_vol['finessGeoDP'] == str(selected_hospital_id)].copy()
-                hosp_monthly_vol = hosp_monthly_vol[hosp_monthly_vol['annee'] > 2020]  # Filter out 2020
+    #     if not hosp_year.empty and proc_codes:
+    #         # Use monthly volume data if available, otherwise fall back to annual data
+    #         if not monthly_vol.empty and 'finessGeoDP' in monthly_vol.columns and 'baria_t' in monthly_vol.columns:
+    #             hosp_monthly_vol = monthly_vol[monthly_vol['finessGeoDP'] == str(selected_hospital_id)].copy()
+    #             hosp_monthly_vol = hosp_monthly_vol[hosp_monthly_vol['annee'] > 2020]  # Filter out 2020
                 
-                if not hosp_monthly_vol.empty:
-                    # Aggregate monthly data by year and procedure type
-                    proc_long = []
-                    for year in sorted(hosp_monthly_vol['annee'].unique()):
-                        year_data = hosp_monthly_vol[hosp_monthly_vol['annee'] == year]
-                        # Map baria_t codes to our display names
-                        sleeve_total = year_data[year_data['baria_t'] == 'SLE']['TOT_year_tcn'].iloc[0] if not year_data[year_data['baria_t'] == 'SLE'].empty else 0
-                        bypass_total = year_data[year_data['baria_t'] == 'BPG']['TOT_year_tcn'].iloc[0] if not year_data[year_data['baria_t'] == 'BPG'].empty else 0
-                        # Other procedures
-                        other_codes = year_data[~year_data['baria_t'].isin(['SLE', 'BPG'])]
-                        other_total = other_codes['TOT_year_tcn'].sum() if not other_codes.empty else 0
+    #             if not hosp_monthly_vol.empty:
+    #                 # Aggregate monthly data by year and procedure type
+    #                 proc_long = []
+    #                 for year in sorted(hosp_monthly_vol['annee'].unique()):
+    #                     year_data = hosp_monthly_vol[hosp_monthly_vol['annee'] == year]
+    #                     # Map baria_t codes to our display names
+    #                     sleeve_total = year_data[year_data['baria_t'] == 'SLE']['TOT_year_tcn'].iloc[0] if not year_data[year_data['baria_t'] == 'SLE'].empty else 0
+    #                     bypass_total = year_data[year_data['baria_t'] == 'BPG']['TOT_year_tcn'].iloc[0] if not year_data[year_data['baria_t'] == 'BPG'].empty else 0
+    #                     # Other procedures
+    #                     other_codes = year_data[~year_data['baria_t'].isin(['SLE', 'BPG'])]
+    #                     other_total = other_codes['TOT_year_tcn'].sum() if not other_codes.empty else 0
                         
-                        total = max(1, sleeve_total + bypass_total + other_total)
-                        for label, val in [("Sleeve", sleeve_total), ("Gastric Bypass", bypass_total), ("Other", other_total)]:
-                            proc_long.append({'annee': int(year), 'Procedures': label, 'Share': val / total * 100})
-                    pl = pd.DataFrame(proc_long)
-                else:
-                    # Fallback to annual data
-                    proc_df = selected_hospital_all_data[selected_hospital_all_data['annee'] > 2020][['annee']+proc_codes].copy()
-                    proc_long = []
-                    for _, r in proc_df.iterrows():
-                        total = max(1, sum(r[c] for c in proc_codes))
-                        sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
-                        other = total - sleeve - bypass
-                        for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
-                            proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
-                    pl = pd.DataFrame(proc_long)
-            else:
-                # Fallback to annual data
-                proc_df = selected_hospital_all_data[selected_hospital_all_data['annee'] > 2020][['annee']+proc_codes].copy()
-                proc_long = []
-                for _, r in proc_df.iterrows():
-                    total = max(1, sum(r[c] for c in proc_codes))
-                    sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
-                    other = total - sleeve - bypass
-                    for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
-                        proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
-                pl = pd.DataFrame(proc_long)
+    #                     total = max(1, sleeve_total + bypass_total + other_total)
+    #                     for label, val in [("Sleeve", sleeve_total), ("Gastric Bypass", bypass_total), ("Other", other_total)]:
+    #                         proc_long.append({'annee': int(year), 'Procedures': label, 'Share': val / total * 100})
+    #                 pl = pd.DataFrame(proc_long)
+    #             else:
+    #                 # Fallback to annual data
+    #                 proc_df = selected_hospital_all_data[selected_hospital_all_data['annee'] > 2020][['annee']+proc_codes].copy()
+    #                 proc_long = []
+    #                 for _, r in proc_df.iterrows():
+    #                     total = max(1, sum(r[c] for c in proc_codes))
+    #                     sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
+    #                     other = total - sleeve - bypass
+    #                     for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
+    #                         proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
+    #                 pl = pd.DataFrame(proc_long)
+    #         else:
+    #             # Fallback to annual data
+    #             proc_df = selected_hospital_all_data[selected_hospital_all_data['annee'] > 2020][['annee']+proc_codes].copy()
+    #             proc_long = []
+    #             for _, r in proc_df.iterrows():
+    #                 total = max(1, sum(r[c] for c in proc_codes))
+    #                 sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
+    #                 other = total - sleeve - bypass
+    #                 for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
+    #                     proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
+    #             pl = pd.DataFrame(proc_long)
             
-            if not pl.empty:
-                # Create the combined chart
-                fig = go.Figure()
+    #         if not pl.empty:
+    #             # Create the combined chart
+    #             fig = go.Figure()
                 
-                # Add stacked bar chart for procedure mix with different colors for 2025
-                colors_regular = {'Sleeve': '#FF6B6B', 'Gastric Bypass': '#4ECDC4', 'Other': '#FFE66D'}  # Coral, Teal, Yellow
-                colors_2025 = {'Sleeve': '#C92A2A', 'Gastric Bypass': '#0C8599', 'Other': '#E8B923'}  # Darker/more saturated for 2025
+    #             # Add stacked bar chart for procedure mix with different colors for 2025
+    #             colors_regular = {'Sleeve': '#FF6B6B', 'Gastric Bypass': '#4ECDC4', 'Other': '#FFE66D'}  # Coral, Teal, Yellow
+    #             colors_2025 = {'Sleeve': '#C92A2A', 'Gastric Bypass': '#0C8599', 'Other': '#E8B923'}  # Darker/more saturated for 2025
                 
-                for procedure in pl['Procedures'].unique():
-                    data = pl[pl['Procedures'] == procedure]
-                    # Split data into 2025 and non-2025
-                    data_before_2025 = data[data['annee'] < 2025]
-                    data_2025 = data[data['annee'] == 2025]
+    #             for procedure in pl['Procedures'].unique():
+    #                 data = pl[pl['Procedures'] == procedure]
+    #                 # Split data into 2025 and non-2025
+    #                 data_before_2025 = data[data['annee'] < 2025]
+    #                 data_2025 = data[data['annee'] == 2025]
                     
-                    # Add bars for years before 2025
-                    if not data_before_2025.empty:
-                        fig.add_trace(go.Bar(
-                            x=data_before_2025['annee'],
-                            y=data_before_2025['Share'],
-                            name=procedure,
-                            marker_color=colors_regular.get(procedure, '#cccccc'),
-                            yaxis='y',
-                            opacity=0.7,
-                            legendgroup=procedure,
-                            showlegend=True
-                        ))
+    #                 # Add bars for years before 2025
+    #                 if not data_before_2025.empty:
+    #                     fig.add_trace(go.Bar(
+    #                         x=data_before_2025['annee'],
+    #                         y=data_before_2025['Share'],
+    #                         name=procedure,
+    #                         marker_color=colors_regular.get(procedure, '#cccccc'),
+    #                         yaxis='y',
+    #                         opacity=0.7,
+    #                         legendgroup=procedure,
+    #                         showlegend=True
+    #                     ))
                     
-                    # Add bars for 2025 with different color
-                    if not data_2025.empty:
-                        fig.add_trace(go.Bar(
-                            x=data_2025['annee'],
-                            y=data_2025['Share'],
-                            name=f"{procedure} (2025 YTD)",
-                            marker_color=colors_2025.get(procedure, '#888888'),
-                            yaxis='y',
-                            opacity=0.85,
-                            legendgroup=procedure,
-                            showlegend=True
-                        ))
+    #                 # Add bars for 2025 with different color
+    #                 if not data_2025.empty:
+    #                     fig.add_trace(go.Bar(
+    #                         x=data_2025['annee'],
+    #                         y=data_2025['Share'],
+    #                         name=f"{procedure} (2025 YTD)",
+    #                         marker_color=colors_2025.get(procedure, '#888888'),
+    #                         yaxis='y',
+    #                         opacity=0.85,
+    #                         legendgroup=procedure,
+    #                         showlegend=True
+    #                     ))
                 
-                # Add line chart for total surgeries using annual data (on secondary y-axis)
-                hosp_year_clean = hosp_year.dropna()
-                fig.add_trace(go.Scatter(
-                    x=hosp_year_clean['annee'],
-                    y=hosp_year_clean['total_procedures_year'],
-                    mode='lines+markers',
-                    name='Total Surgeries',
-                    line=dict(color='#961316', width=4),
-                    marker=dict(size=8, color='#961316'),
-                    yaxis='y2',
-                    hovertemplate='<b>Total Surgeries</b><br>Year: %{x}<br>Count: %{y}<extra></extra>'
-                ))
+    #             # Add line chart for total surgeries using annual data (on secondary y-axis)
+    #             hosp_year_clean = hosp_year.dropna()
+    #             fig.add_trace(go.Scatter(
+    #                 x=hosp_year_clean['annee'],
+    #                 y=hosp_year_clean['total_procedures_year'],
+    #                 mode='lines+markers',
+    #                 name='Total Surgeries',
+    #                 line=dict(color='#961316', width=4),
+    #                 marker=dict(size=8, color='#961316'),
+    #                 yaxis='y2',
+    #                 hovertemplate='<b>Total Surgeries</b><br>Year: %{x}<br>Count: %{y}<extra></extra>'
+    #             ))
                 
-                # Update layout with dual y-axes
-                max_y2 = max(hosp_year_clean['total_procedures_year']) * 1.1 if not hosp_year_clean.empty else 100
-                fig.update_layout(
-                    height=450,
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    barmode='stack',
-                    title='Total Surgeries & Procedure Mix Overlay',
-                    xaxis_title='Year',
-                    yaxis=dict(
-                        title='Procedure Share (%)',
-                        side='left',
-                        range=[0, 100]
-                    ),
-                    yaxis2=dict(
-                        title='Total Surgeries Count',
-                        side='right',
-                        overlaying='y',
-                        range=[0, max_y2]
-                    ),
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=-0.35,
-                        xanchor="center",
-                        x=0.5
-                    ),
-                    xaxis=dict(automargin=True),
-                    margin=dict(b=140, t=60)
-                )
+    #             # Update layout with dual y-axes
+    #             max_y2 = max(hosp_year_clean['total_procedures_year']) * 1.1 if not hosp_year_clean.empty else 100
+    #             fig.update_layout(
+    #                 height=450,
+    #                 plot_bgcolor='rgba(0,0,0,0)',
+    #                 paper_bgcolor='rgba(0,0,0,0)',
+    #                 barmode='stack',
+    #                 title='Total Surgeries & Procedure Mix Overlay',
+    #                 xaxis_title='Year',
+    #                 yaxis=dict(
+    #                     title='Procedure Share (%)',
+    #                     side='left',
+    #                     range=[0, 100]
+    #                 ),
+    #                 yaxis2=dict(
+    #                     title='Total Surgeries Count',
+    #                     side='right',
+    #                     overlaying='y',
+    #                     range=[0, max_y2]
+    #                 ),
+    #                 legend=dict(
+    #                     orientation="h",
+    #                     yanchor="bottom",
+    #                     y=-0.35,
+    #                     xanchor="center",
+    #                     x=0.5
+    #                 ),
+    #                 xaxis=dict(automargin=True),
+    #                 margin=dict(b=140, t=60)
+    #             )
                 
-                # Update bar hover templates
-                fig.update_traces(
-                    selector=dict(type="bar"),
-                    hovertemplate='<b>%{fullData.name}</b><br>Year: %{x}<br>Share: %{y:.1f}%<extra></extra>'
-                )
+    #             # Update bar hover templates
+    #             fig.update_traces(
+    #                 selector=dict(type="bar"),
+    #                 hovertemplate='<b>%{fullData.name}</b><br>Year: %{x}<br>Share: %{y:.1f}%<extra></extra>'
+    #             )
                 
-                st.plotly_chart(fig, use_container_width=True)
+    #             st.plotly_chart(fig, use_container_width=True)
                 
-                # Add summary metrics below the chart
-                st.markdown("**Chart Explanation:**")
-                st.markdown("- **Colored bars** show the percentage share of each procedure type per year (2021-2025)")
-                st.markdown("- **Darker/saturated colors** represent 2025 data (Year-to-Date through July)")
-                st.markdown("- **Dark red line** shows the total number of surgeries performed per year")
-                st.markdown("- **Left y-axis** shows procedure share percentages")
-                st.markdown("- **Right y-axis** shows total surgery counts")
-                if 2025 in pl['annee'].values:
-                    st.info("📅 **Note:** 2025 data is year-to-date through July only.")
+    #             # Add summary metrics below the chart
+    #             st.markdown("**Chart Explanation:**")
+    #             st.markdown("- **Colored bars** show the percentage share of each procedure type per year (2021-2025)")
+    #             st.markdown("- **Darker/saturated colors** represent 2025 data (Year-to-Date through July)")
+    #             st.markdown("- **Dark red line** shows the total number of surgeries performed per year")
+    #             st.markdown("- **Left y-axis** shows procedure share percentages")
+    #             st.markdown("- **Right y-axis** shows total surgery counts")
+    #             if 2025 in pl['annee'].values:
+    #                 st.info("📅 **Note:** 2025 data is year-to-date through July only.")
     
-    with col2:
-        # Combined chart: National Average Surgeries line + National Procedure Mix bars
-        st.markdown("#### National: Average Surgeries & Procedure Mix")
+    # with col2:
+    #     # Combined chart: National Average Surgeries line + National Procedure Mix bars
+    #     st.markdown("#### National: Average Surgeries & Procedure Mix")
         
-        if national_averages and proc_codes:
-            # Filter years_window to exclude 2020
-            years_window_filtered = [y for y in years_window if y > 2020]
+    #     if national_averages and proc_codes:
+    #         # Filter years_window to exclude 2020
+    #         years_window_filtered = [y for y in years_window if y > 2020]
             
-            # Create national trend data
-            nat_data = []
-            for year in years_window_filtered:
-                year_data = annual[annual['annee'] == year]
-                if not year_data.empty:
-                    avg_procedures = year_data['total_procedures_year'].mean()
-                    nat_data.append({'Year': year, 'Avg Procedures': avg_procedures})
+    #         # Create national trend data
+    #         nat_data = []
+    #         for year in years_window_filtered:
+    #             year_data = annual[annual['annee'] == year]
+    #             if not year_data.empty:
+    #                 avg_procedures = year_data['total_procedures_year'].mean()
+    #                 nat_data.append({'Year': year, 'Avg Procedures': avg_procedures})
             
-            # Create national procedure mix data
-            nat_proc_data = []
-            for year in years_window_filtered:
-                year_data = annual[annual['annee'] == year]
-                if not year_data.empty:
-                    total_sleeve = year_data['SLE'].sum() if 'SLE' in year_data.columns else 0
-                    total_bypass = year_data['BPG'].sum() if 'BPG' in year_data.columns else 0
-                    total_other = year_data[proc_codes].sum().sum() - total_sleeve - total_bypass
-                    total_all = total_sleeve + total_bypass + total_other
+    #         # Create national procedure mix data
+    #         nat_proc_data = []
+    #         for year in years_window_filtered:
+    #             year_data = annual[annual['annee'] == year]
+    #             if not year_data.empty:
+    #                 total_sleeve = year_data['SLE'].sum() if 'SLE' in year_data.columns else 0
+    #                 total_bypass = year_data['BPG'].sum() if 'BPG' in year_data.columns else 0
+    #                 total_other = year_data[proc_codes].sum().sum() - total_sleeve - total_bypass
+    #                 total_all = total_sleeve + total_bypass + total_other
                     
-                    if total_all > 0:
-                        for label, val in [("Sleeve", total_sleeve), ("Gastric Bypass", total_bypass), ("Other", total_other)]:
-                            nat_proc_data.append({'Year': year, 'Procedures': label, 'Share': (val / total_all) * 100})
+    #                 if total_all > 0:
+    #                     for label, val in [("Sleeve", total_sleeve), ("Gastric Bypass", total_bypass), ("Other", total_other)]:
+    #                         nat_proc_data.append({'Year': year, 'Procedures': label, 'Share': (val / total_all) * 100})
             
-            if nat_data and nat_proc_data:
-                nat_df = pd.DataFrame(nat_data)
-                nat_proc_df = pd.DataFrame(nat_proc_data)
+    #         if nat_data and nat_proc_data:
+    #             nat_df = pd.DataFrame(nat_data)
+    #             nat_proc_df = pd.DataFrame(nat_proc_data)
                 
-                # Create the combined national chart
-                fig_nat = go.Figure()
+    #             # Create the combined national chart
+    #             fig_nat = go.Figure()
                 
-                # Add stacked bar chart for national procedure mix with different colors for 2025
-                colors_regular = {'Sleeve': '#FF6B6B', 'Gastric Bypass': '#4ECDC4', 'Other': '#FFE66D'}  # Coral, Teal, Yellow
-                colors_2025 = {'Sleeve': '#C92A2A', 'Gastric Bypass': '#0C8599', 'Other': '#E8B923'}  # Darker/more saturated for 2025
+    #             # Add stacked bar chart for national procedure mix with different colors for 2025
+    #             colors_regular = {'Sleeve': '#FF6B6B', 'Gastric Bypass': '#4ECDC4', 'Other': '#FFE66D'}  # Coral, Teal, Yellow
+    #             colors_2025 = {'Sleeve': '#C92A2A', 'Gastric Bypass': '#0C8599', 'Other': '#E8B923'}  # Darker/more saturated for 2025
                 
-                for procedure in nat_proc_df['Procedures'].unique():
-                    data = nat_proc_df[nat_proc_df['Procedures'] == procedure]
-                    # Split data into 2025 and non-2025
-                    data_before_2025 = data[data['Year'] < 2025]
-                    data_2025 = data[data['Year'] == 2025]
+    #             for procedure in nat_proc_df['Procedures'].unique():
+    #                 data = nat_proc_df[nat_proc_df['Procedures'] == procedure]
+    #                 # Split data into 2025 and non-2025
+    #                 data_before_2025 = data[data['Year'] < 2025]
+    #                 data_2025 = data[data['Year'] == 2025]
                     
-                    # Add bars for years before 2025
-                    if not data_before_2025.empty:
-                        fig_nat.add_trace(go.Bar(
-                            x=data_before_2025['Year'],
-                            y=data_before_2025['Share'],
-                            name=procedure,
-                            marker_color=colors_regular.get(procedure, '#cccccc'),
-                            yaxis='y',
-                            opacity=0.7,
-                            legendgroup=procedure,
-                            showlegend=True
-                        ))
+    #                 # Add bars for years before 2025
+    #                 if not data_before_2025.empty:
+    #                     fig_nat.add_trace(go.Bar(
+    #                         x=data_before_2025['Year'],
+    #                         y=data_before_2025['Share'],
+    #                         name=procedure,
+    #                         marker_color=colors_regular.get(procedure, '#cccccc'),
+    #                         yaxis='y',
+    #                         opacity=0.7,
+    #                         legendgroup=procedure,
+    #                         showlegend=True
+    #                     ))
                     
-                    # Add bars for 2025 with different color
-                    if not data_2025.empty:
-                        fig_nat.add_trace(go.Bar(
-                            x=data_2025['Year'],
-                            y=data_2025['Share'],
-                            name=f"{procedure} (2025 YTD)",
-                            marker_color=colors_2025.get(procedure, '#888888'),
-                            yaxis='y',
-                            opacity=0.85,
-                            legendgroup=procedure,
-                            showlegend=True
-                    ))
+    #                 # Add bars for 2025 with different color
+    #                 if not data_2025.empty:
+    #                     fig_nat.add_trace(go.Bar(
+    #                         x=data_2025['Year'],
+    #                         y=data_2025['Share'],
+    #                         name=f"{procedure} (2025 YTD)",
+    #                         marker_color=colors_2025.get(procedure, '#888888'),
+    #                         yaxis='y',
+    #                         opacity=0.85,
+    #                         legendgroup=procedure,
+    #                         showlegend=True
+    #                 ))
                 
-                # Add line chart for national average surgeries (on secondary y-axis)
-                fig_nat.add_trace(go.Scatter(
-                    x=nat_df['Year'],
-                    y=nat_df['Avg Procedures'],
-                    mode='lines+markers',
-                    name='National Average',
-                    line=dict(color='#961316', width=4),
-                    marker=dict(size=8, color='#961316'),
-                    yaxis='y2',
-                    hovertemplate='<b>National Average</b><br>Year: %{x}<br>Avg Count: %{y:.1f}<extra></extra>'
-                ))
+    #             # Add line chart for national average surgeries (on secondary y-axis)
+    #             fig_nat.add_trace(go.Scatter(
+    #                 x=nat_df['Year'],
+    #                 y=nat_df['Avg Procedures'],
+    #                 mode='lines+markers',
+    #                 name='National Average',
+    #                 line=dict(color='#961316', width=4),
+    #                 marker=dict(size=8, color='#961316'),
+    #                 yaxis='y2',
+    #                 hovertemplate='<b>National Average</b><br>Year: %{x}<br>Avg Count: %{y:.1f}<extra></extra>'
+    #             ))
                 
-                # Update layout with dual y-axes
-                max_nat_y2 = max(nat_df['Avg Procedures']) * 1.1 if not nat_df.empty else 100
-                fig_nat.update_layout(
-                    height=450,
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    barmode='stack',
-                    title='National Average & Procedure Mix Overlay',
-                    xaxis_title='Year',
-                    yaxis=dict(
-                        title='Procedure Share (%)',
-                        side='left',
-                        range=[0, 100]
-                    ),
-                    yaxis2=dict(
-                        title='Average Surgeries per Hospital',
-                        side='right',
-                        overlaying='y',
-                        range=[0, max_nat_y2]
-                    ),
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=-0.35,
-                        xanchor="center",
-                        x=0.5
-                    ),
-                    xaxis=dict(automargin=True),
-                    margin=dict(b=140, t=60)
-                )
+    #             # Update layout with dual y-axes
+    #             max_nat_y2 = max(nat_df['Avg Procedures']) * 1.1 if not nat_df.empty else 100
+    #             fig_nat.update_layout(
+    #                 height=450,
+    #                 plot_bgcolor='rgba(0,0,0,0)',
+    #                 paper_bgcolor='rgba(0,0,0,0)',
+    #                 barmode='stack',
+    #                 title='National Average & Procedure Mix Overlay',
+    #                 xaxis_title='Year',
+    #                 yaxis=dict(
+    #                     title='Procedure Share (%)',
+    #                     side='left',
+    #                     range=[0, 100]
+    #                 ),
+    #                 yaxis2=dict(
+    #                     title='Average Surgeries per Hospital',
+    #                     side='right',
+    #                     overlaying='y',
+    #                     range=[0, max_nat_y2]
+    #                 ),
+    #                 legend=dict(
+    #                     orientation="h",
+    #                     yanchor="bottom",
+    #                     y=-0.35,
+    #                     xanchor="center",
+    #                     x=0.5
+    #                 ),
+    #                 xaxis=dict(automargin=True),
+    #                 margin=dict(b=140, t=60)
+    #             )
                 
-                # Update bar hover templates
-                fig_nat.update_traces(
-                    selector=dict(type="bar"),
-                    hovertemplate='<b>%{fullData.name}</b><br>Year: %{x}<br>Share: %{y:.1f}%<extra></extra>'
-                )
+    #             # Update bar hover templates
+    #             fig_nat.update_traces(
+    #                 selector=dict(type="bar"),
+    #                 hovertemplate='<b>%{fullData.name}</b><br>Year: %{x}<br>Share: %{y:.1f}%<extra></extra>'
+    #             )
                 
-                st.plotly_chart(fig_nat, use_container_width=True)
+    #             st.plotly_chart(fig_nat, use_container_width=True)
                 
-                # Add summary metrics below the chart
-                st.markdown("**Chart Explanation:**")
-                st.markdown("- **Colored bars** show the national percentage share of each procedure type per year (2021-2025)")
-                st.markdown("- **Darker/saturated colors** represent 2025 data (Year-to-Date through July)")
-                st.markdown("- **Dark red line** shows the national average surgeries per hospital per year")
-                st.markdown("- **Left y-axis** shows procedure share percentages")
-                st.markdown("- **Right y-axis** shows average surgery counts")
-                if 2025 in nat_proc_df['Year'].values:
-                    st.info("📅 **Note:** 2025 data is year-to-date through July only.")
+    #             # Add summary metrics below the chart
+    #             st.markdown("**Chart Explanation:**")
+    #             st.markdown("- **Colored bars** show the national percentage share of each procedure type per year (2021-2025)")
+    #             st.markdown("- **Darker/saturated colors** represent 2025 data (Year-to-Date through July)")
+    #             st.markdown("- **Dark red line** shows the national average surgeries per hospital per year")
+    #             st.markdown("- **Left y-axis** shows procedure share percentages")
+    #             st.markdown("- **Right y-axis** shows average surgery counts")
+    #             if 2025 in nat_proc_df['Year'].values:
+    #                 st.info("📅 **Note:** 2025 data is year-to-date through July only.")
     
     # --- Big hospital chart: Number of procedures per year ---
     try:
