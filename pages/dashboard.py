@@ -267,8 +267,8 @@ def _load_vda_year_totals_summary(path: str = "data/export_TAB_VDA_HOP.csv") -> 
         return pd.DataFrame()
 
 # Core aggregates
-total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
-total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
+    total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
+    total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
 hospital_revision_pct = (total_rev_hospital / total_proc_hospital) * 100 if total_proc_hospital > 0 else 0.0
 
 # Period totals (2021–2024)
@@ -351,9 +351,15 @@ with left:
 with m1:
     st.metric(label="Nb procedures (2021–2024)", value=f"{period_total:,}")
 with m2:
-    st.metric(label=f"Nb procedures ongoing year ({ongoing_year_display})", value=f"{ongoing_total:,}")
+    _suffix = f"{ongoing_year_display}"
+    if ongoing_year_display == 2025:
+        _suffix = f"{ongoing_year_display} — until July"
+    st.metric(label=f"Number procedures ongoing year ({_suffix})", value=f"{ongoing_total:,}")
 with m3:
-    st.metric(label=f"Expected trend for ongoing year ({ongoing_year_display})", value=yoy_text)
+    _suffix_t = f"{ongoing_year_display}"
+    if ongoing_year_display == 2025:
+        _suffix_t = f"{ongoing_year_display} — until July"
+    st.metric(label=f"Expected trend for ongoing year ({_suffix_t})", value=yoy_text)
 
 # Second row: spacer under labels + donut, single-year robotic share bar, and two bubbles
 spacer, c_donut, c_robot, c_rates = st.columns([1.3, 1.2, 1.2, 1.5])
