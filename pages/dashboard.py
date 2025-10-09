@@ -1862,48 +1862,38 @@ with tab_activity:
     # Approaches share
     appr_codes = [c for c in SURGICAL_APPROACH_NAMES.keys() if c in selected_hospital_all_data.columns]
     if appr_codes:
-        col1, col2 = st.columns([2, 1])  # Hospital graphs larger (2), National graphs smaller (1)
-        
-        with col1:
-            st.markdown("#### Hospital: Surgical Approaches (share %)")
-            appr_df = selected_hospital_all_data[['annee']+appr_codes].copy()
-            appr_long = []
-            for _, r in appr_df.iterrows():
-                total = max(1, sum(r[c] for c in appr_codes))
-                for code,name in SURGICAL_APPROACH_NAMES.items():
-                    if code in r:
-                        appr_long.append({'annee':int(r['annee']),'Approach':name,'Share':r[code]/total*100})
-            al = pd.DataFrame(appr_long)
-            if not al.empty:
-                APPROACH_COLORS = {'Coelioscopy': '#2E86AB', 'Robotic': '#F7931E', 'Open Surgery': '#A23B72'}
-                fig_bar_h = px.bar(al, x='annee', y='Share', color='Approach', barmode='stack', color_discrete_map=APPROACH_COLORS)
-                fig_bar_h.update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_bar_h, use_container_width=True)
-        
-        with col2:
-            st.markdown("#### National: Surgical Approaches (share %)")
-            # Create national surgical approach data
-            nat_appr_data = []
-            for year in years_window:
-                year_data = annual[annual['annee'] == year]
-                if not year_data.empty:
-                    total_robotic = year_data['ROB'].sum() if 'ROB' in year_data.columns else 0
-                    total_coelio = year_data['COE'].sum() if 'COE' in year_data.columns else 0
-                    total_open = year_data['LAP'].sum() if 'LAP' in year_data.columns else 0
-                    total_all = total_robotic + total_coelio + total_open
-                    
-                    if total_all > 0:
-                        for code, name in SURGICAL_APPROACH_NAMES.items():
-                            if code in year_data.columns:
-                                total_val = year_data[code].sum()
-                                nat_appr_data.append({'Year': year, 'Approach': name, 'Share': (total_val / total_all) * 100})
-            
-            if nat_appr_data:
-                nat_appr_df = pd.DataFrame(nat_appr_data)
-                APPROACH_COLORS = {'Coelioscopy': '#2E86AB', 'Robotic': '#F7931E', 'Open Surgery': '#A23B72'}
-                fig_bar_n = px.bar(nat_appr_df, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=APPROACH_COLORS)
-                fig_bar_n.update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_bar_n, use_container_width=True)
+        # Hospital chart alone (full width)
+        st.markdown("#### Hospital: Surgical Approaches (share %)")
+        appr_df = selected_hospital_all_data[['annee']+appr_codes].copy()
+        appr_long = []
+        for _, r in appr_df.iterrows():
+            total = max(1, sum(r[c] for c in appr_codes))
+            for code,name in SURGICAL_APPROACH_NAMES.items():
+                if code in r:
+                    appr_long.append({'annee':int(r['annee']),'Approach':name,'Share':r[code]/total*100})
+        al = pd.DataFrame(appr_long)
+        if not al.empty:
+            APPROACH_COLORS = {'Coelioscopy': '#2E86AB', 'Robotic': '#F7931E', 'Open Surgery': '#A23B72'}
+            fig_bar_h = px.bar(al, x='annee', y='Share', color='Approach', barmode='stack', color_discrete_map=APPROACH_COLORS)
+            fig_bar_h.update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_bar_h, use_container_width=True)
+
+        # Build National dataset
+        st.markdown("")
+        nat_appr_data = []
+        for year in years_window:
+            year_data = annual[annual['annee'] == year]
+            if not year_data.empty:
+                total_robotic = year_data['ROB'].sum() if 'ROB' in year_data.columns else 0
+                total_coelio = year_data['COE'].sum() if 'COE' in year_data.columns else 0
+                total_open = year_data['LAP'].sum() if 'LAP' in year_data.columns else 0
+                total_all = total_robotic + total_coelio + total_open
+                if total_all > 0:
+                    for code, name in SURGICAL_APPROACH_NAMES.items():
+                        if code in year_data.columns:
+                            total_val = year_data[code].sum()
+                            nat_appr_data.append({'Year': year, 'Approach': name, 'Share': (total_val / total_all) * 100})
+        nat_appr_df = pd.DataFrame(nat_appr_data) if nat_appr_data else pd.DataFrame()
 
         # --- Regional and Same-category approaches (share %) ---
         try:
@@ -1950,22 +1940,36 @@ with tab_activity:
             reg_share = _approach_share_for_ids(ids_reg)
             cat_share = _approach_share_for_ids(ids_cat)
 
-            if not reg_share.empty or not cat_share.empty:
-                c_reg, c_cat = st.columns(2)
-                APPROACH_COLORS = {'Coelioscopy': '#2E86AB', 'Robotic': '#F7931E', 'Open Surgery': '#A23B72'}
-                with c_reg:
+            if not nat_appr_df.empty or not reg_share.empty or not cat_share.empty:
+                col_nat, col_reg, col_cat = st.columns(3)
+                # Distinct color palettes per chart (as per your picture)
+                COLORS_NAT = {'Coelioscopy': '#d08b3e', 'Robotic': '#e6a86a', 'Open Surgery': '#a8652b'}
+                COLORS_REG = {'Coelioscopy': '#4F9D69', 'Robotic': '#7DC07A', 'Open Surgery': '#2B6E4F'}
+                COLORS_CAT = {'Coelioscopy': '#B388EB', 'Robotic': '#D0A3FF', 'Open Surgery': '#8E61C6'}
+
+                with col_nat:
+                    st.markdown("#### National: Surgical Approaches (share %)")
+                    if not nat_appr_df.empty:
+                        fig_nat3 = px.bar(nat_appr_df, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=COLORS_NAT)
+                        fig_nat3.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig_nat3, use_container_width=True)
+                    else:
+                        st.info('No national approach data.')
+
+                with col_reg:
                     st.markdown("#### Regional: Surgical Approaches (share %)")
                     if not reg_share.empty:
-                        fig_r = px.bar(reg_share, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=APPROACH_COLORS)
-                        fig_r.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                        fig_r = px.bar(reg_share, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=COLORS_REG)
+                        fig_r.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                         st.plotly_chart(fig_r, use_container_width=True)
                     else:
                         st.info('No regional approach data.')
-                with c_cat:
+
+                with col_cat:
                     st.markdown("#### Same category: Surgical Approaches (share %)")
                     if not cat_share.empty:
-                        fig_c = px.bar(cat_share, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=APPROACH_COLORS)
-                        fig_c.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                        fig_c = px.bar(cat_share, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=COLORS_CAT)
+                        fig_c.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                         st.plotly_chart(fig_c, use_container_width=True)
                     else:
                         st.info('No same-category approach data.')
