@@ -1904,6 +1904,73 @@ with tab_activity:
                 fig_bar_n = px.bar(nat_appr_df, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=APPROACH_COLORS)
                 fig_bar_n.update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig_bar_n, use_container_width=True)
+
+        # --- Regional and Same-category approaches (share %) ---
+        try:
+            # Build id groups
+            def _extract_region_from_details(row) -> str | None:
+                try:
+                    for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                        if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                            return str(row[key]).strip()
+                except Exception:
+                    return None
+                return None
+
+            region_value_a = _extract_region_from_details(selected_hospital_details)
+            ids_reg = (
+                establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_value_a)]['id'].astype(str).unique().tolist()
+                if region_value_a is not None and 'id' in establishments.columns else []
+            )
+            status_val_a = str(selected_hospital_details.get('statut', '')).strip()
+            ids_cat = (
+                establishments[establishments.get('statut','').astype(str).str.strip() == status_val_a]['id'].astype(str).unique().tolist()
+                if 'statut' in establishments.columns else []
+            )
+
+            def _approach_share_for_ids(id_list: list[str]) -> pd.DataFrame:
+                if not id_list:
+                    return pd.DataFrame()
+                df = annual[annual['id'].astype(str).isin([str(i) for i in id_list])].copy()
+                if df.empty:
+                    return pd.DataFrame()
+                shares = []
+                for year in sorted(df['annee'].dropna().unique().tolist()):
+                    yd = df[df['annee'] == year]
+                    r = float(yd.get('ROB', 0).sum()) if 'ROB' in yd.columns else 0.0
+                    c = float(yd.get('COE', 0).sum()) if 'COE' in yd.columns else 0.0
+                    o = float(yd.get('LAP', 0).sum()) if 'LAP' in yd.columns else 0.0
+                    tot = r + c + o
+                    if tot > 0:
+                        shares.append({'Year': int(year), 'Approach': 'Robotic', 'Share': r / tot * 100})
+                        shares.append({'Year': int(year), 'Approach': 'Coelioscopy', 'Share': c / tot * 100})
+                        shares.append({'Year': int(year), 'Approach': 'Open Surgery', 'Share': o / tot * 100})
+                return pd.DataFrame(shares)
+
+            reg_share = _approach_share_for_ids(ids_reg)
+            cat_share = _approach_share_for_ids(ids_cat)
+
+            if not reg_share.empty or not cat_share.empty:
+                c_reg, c_cat = st.columns(2)
+                APPROACH_COLORS = {'Coelioscopy': '#2E86AB', 'Robotic': '#F7931E', 'Open Surgery': '#A23B72'}
+                with c_reg:
+                    st.markdown("#### Regional: Surgical Approaches (share %)")
+                    if not reg_share.empty:
+                        fig_r = px.bar(reg_share, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=APPROACH_COLORS)
+                        fig_r.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig_r, use_container_width=True)
+                    else:
+                        st.info('No regional approach data.')
+                with c_cat:
+                    st.markdown("#### Same category: Surgical Approaches (share %)")
+                    if not cat_share.empty:
+                        fig_c = px.bar(cat_share, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=APPROACH_COLORS)
+                        fig_c.update_layout(height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig_c, use_container_width=True)
+                    else:
+                        st.info('No same-category approach data.')
+        except Exception as e:
+            st.caption(f"Approach breakdown unavailable: {e}")
     
 
 
