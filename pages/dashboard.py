@@ -74,6 +74,11 @@ st.markdown("""
         .nv-pill.green { background:#16a34a; }
         .nv-pill.red { background:#ef4444; }
         .nv-row-gap { height: 10px; }
+        /* Round percentage bubbles */
+        .nv-bubble { width: 140px; height: 140px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 2rem; color: #fff; margin: 8px auto; }
+        .nv-bubble.teal { background:#0b7285; }
+        .nv-bubble.purple { background:#7e22ce; }
+        .nv-bubble-label { text-align:center; font-weight:600; margin-top:6px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -233,132 +238,153 @@ col2.markdown(f"**Status:** {selected_hospital_details['statut']}")
 if 'Distance (km)' in selected_hospital_details:
     col3.markdown(f"**Distance:** {selected_hospital_details['Distance (km)']:.1f} km")
 st.markdown("---")
-metric_col1, metric_col2 = st.columns(2)
-with metric_col1:
-    st.markdown(f"#### 📊 Summary (2020–{latest_year_activity}{ytd_suffix})")
-    total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
-    total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
-    hospital_revision_pct = (total_rev_hospital / total_proc_hospital) * 100 if total_proc_hospital > 0 else 0
-    # National reference values from session
-    avg_total_proc = national_averages.get('total_procedures_period', 0)
-    national_revision_pct = national_averages.get('revision_pct_avg', 0)
-    delta_total = total_proc_hospital - avg_total_proc
-    m1, m2 = st.columns(2)
-    with m1:
-        st.metric(
-            label="Hospital Total Surgeries",
-            value=f"{int(round(total_proc_hospital)):,}",
-            delta=f"{int(round(delta_total)):+,} vs National",
-            delta_color="normal"
-        )
-        st.metric(
-            label="Hospital Revision Surgeries",
-            value=f"{int(round(total_rev_hospital)):,}",
-            delta=f"{hospital_revision_pct:.1f}% of total",
-            delta_color="normal"
-        )
-    with m2:
-        volume_vs_nat_pct = (total_proc_hospital / avg_total_proc * 100) if avg_total_proc > 0 else 0
-        st.metric(
-            label="Volume vs National Avg",
-            value=f"{volume_vs_nat_pct:.0f}%"
-        )
-        # st.metric(
-        #     label="National Avg Revision %",
-        #     value=f"{national_revision_pct:.1f}%"
-        # )
 
-    # Procedure mix pie chart (2020–latest)
+# --- New SUMMARY (layout inspired by slide) ---
+st.markdown("### Summary")
+
+# Helper to load monthly data for YoY estimate (YTD)
+@st.cache_data(show_spinner=False)
+def _load_monthly_volumes_summary(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.csv") -> pd.DataFrame:
     try:
-        proc_cols_present = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
-        sleeve_total = int(selected_hospital_all_data.get('SLE', pd.Series(dtype=float)).sum()) if 'SLE' in proc_cols_present else 0
-        bypass_total = int(selected_hospital_all_data.get('BPG', pd.Series(dtype=float)).sum()) if 'BPG' in proc_cols_present else 0
-        other_codes = [c for c in proc_cols_present if c not in ['SLE', 'BPG']]
-        other_total = int(selected_hospital_all_data[other_codes].sum().sum()) if other_codes else 0
-        
-        # Create procedure mix data for pie chart
-        procedure_data = []
-        if sleeve_total > 0:
-            procedure_data.append({'Procedure': 'Sleeve Gastrectomy', 'Count': sleeve_total, 'Color': '#1f77b4'})
-        if bypass_total > 0:
-            procedure_data.append({'Procedure': 'Gastric Bypass', 'Count': bypass_total, 'Color': '#ff7f0e'})
-        if other_total > 0:
-            procedure_data.append({'Procedure': 'Other Procedures', 'Count': other_total, 'Color': '#2ca02c'})
-        
-        if procedure_data:
-            st.markdown("##### Procedure Mix Distribution")
-            df_procedures = pd.DataFrame(procedure_data)
-            
-            # Create pie chart with improved styling
-            fig = px.pie(df_procedures, 
-                        values='Count', 
-                        names='Procedure',
-                        color_discrete_sequence=['#1f77b4', '#ff7f0e', '#2ca02c'],
-                        hole=0.4)  # Donut chart for modern look
-            
-            # Improve chart styling
-            fig.update_traces(
-                textposition='inside', 
-                textinfo='percent+label',
-                hovertemplate='<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>'
-            )
-            
-            fig.update_layout(
-                height=350,
-                margin=dict(l=20, r=20, t=40, b=20),
-                showlegend=True,
-                legend=dict(
-                    orientation="v",
-                    yanchor="middle",
-                    y=0.5,
-                    xanchor="left",
-                    x=1.02
-                ),
-                font=dict(size=12),
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)'
-            )
-            
-            # Display the pie chart
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Add summary metrics below the chart
-            total_procedures = sleeve_total + bypass_total + other_total
-            if total_procedures > 0:
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Sleeve Gastrectomy", f"{sleeve_total:,}", f"{(sleeve_total/total_procedures*100):.1f}%")
-                with col2:
-                    st.metric("Gastric Bypass", f"{bypass_total:,}", f"{(bypass_total/total_procedures*100):.1f}%")
-                with col3:
-                    st.metric("Other Procedures", f"{other_total:,}", f"{(other_total/total_procedures*100):.1f}%")
-        else:
-            st.info("No procedure data available for this hospital.")
-            
-    except Exception as e:
-        st.warning(f"Unable to display procedure mix: {str(e)}")
-with metric_col2:
+        df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int, 'mois': int})
+        df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+# Core aggregates
+total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
+total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
+hospital_revision_pct = (total_rev_hospital / total_proc_hospital) * 100 if total_proc_hospital > 0 else 0.0
+
+# Period totals (2021–2024)
+_period_mask = (selected_hospital_all_data.get('annee', pd.Series(dtype=float)) >= 2021) & (selected_hospital_all_data.get('annee', pd.Series(dtype=float)) <= 2024)
+period_21_24 = selected_hospital_all_data[_period_mask]
+period_total = int(pd.to_numeric(period_21_24.get('total_procedures_year', 0), errors='coerce').fillna(0).sum())
+
+# Ongoing year total
+ongoing_year = int(latest_year_activity)
+ongoing_total = int(pd.to_numeric(selected_hospital_all_data[selected_hospital_all_data['annee'] == ongoing_year].get('total_procedures_year', 0), errors='coerce').fillna(0).sum())
+
+# Expected trend (YoY YTD vs same months last year)
+yoy_text = "—"
+try:
+    mv = _load_monthly_volumes_summary()
+    if not mv.empty:
+        hosp_mv = mv[mv['finessGeoDP'] == str(selected_hospital_id)]
+        if not hosp_mv.empty and (ongoing_year in hosp_mv['annee'].unique()) and ((ongoing_year-1) in hosp_mv['annee'].unique()):
+            last_m = int(hosp_mv[hosp_mv['annee'] == ongoing_year]['mois'].max())
+            cur = pd.to_numeric(hosp_mv[(hosp_mv['annee'] == ongoing_year) & (hosp_mv['mois'] <= last_m)]['TOT_month'], errors='coerce').fillna(0).sum()
+            prev = pd.to_numeric(hosp_mv[(hosp_mv['annee'] == ongoing_year-1) & (hosp_mv['mois'] <= last_m)]['TOT_month'], errors='coerce').fillna(0).sum()
+            if prev > 0:
+                yoy = (cur / prev - 1.0) * 100.0
+                yoy_text = f"{yoy:+.0f}%"
+except Exception:
+    pass
+
+# First row: Left labels + three headline metrics
+left, m1, m2, m3 = st.columns([1.3, 1, 1, 1.05])
+with left:
     st.markdown("#### Labels & Affiliations")
-    if selected_hospital_details.get('university') == 1: st.success("🎓 University Hospital")
-    else: st.warning("➖ No University Affiliation")
-    if selected_hospital_details.get('LAB_SOFFCO') == 1: st.success("✅ Centre of Excellence (SOFFCO)")
-    else: st.warning("➖ No SOFFCO Centre Label")
-    if selected_hospital_details.get('cso') == 1: st.success("✅ Centre of Excellence (Health Ministry)")
-    else: st.warning("➖ No Health Ministry Centre Label")
-    
-    # Robotic share trend chart moved from Annual Statistics
-    if 'ROB' in selected_hospital_all_data.columns:
-        rob_df = selected_hospital_all_data[['annee', 'ROB', 'total_procedures_year']].dropna()
-        if not rob_df.empty:
-            rob_df = rob_df.assign(rob_pct=lambda d: (d['ROB'] / d['total_procedures_year'] * 100))
-            spark2 = px.line(rob_df, x='annee', y='rob_pct', markers=True)
-            spark2.update_layout(height=120, margin=dict(l=20, r=20, t=10, b=10),
-                                 xaxis_title=None, yaxis_title=None, plot_bgcolor='rgba(0,0,0,0)',
-                                 paper_bgcolor='rgba(0,0,0,0)')
-            spark2.update_xaxes(showgrid=False)
-            spark2.update_yaxes(showgrid=False)
-            st.markdown("##### Robotic Share Trend (%)")
-            st.plotly_chart(spark2, use_container_width=True)
+    if selected_hospital_details.get('university') == 1:
+        st.success("🎓 University Hospital")
+    else:
+        st.warning("➖ No University Affiliation")
+    if selected_hospital_details.get('LAB_SOFFCO') == 1:
+        st.success("✅ Centre of Excellence (SOFFCO)")
+    else:
+        st.warning("➖ No SOFFCO Centre Label")
+    if selected_hospital_details.get('cso') == 1:
+        st.success("✅ Centre of Excellence (Health Ministry)")
+    else:
+        st.warning("➖ No Health Ministry Centre Label")
+
+with m1:
+    st.metric(label="Nb procedures (2021–2024)", value=f"{period_total:,}")
+with m2:
+    st.metric(label=f"Nb procedures ongoing year ({ongoing_year})", value=f"{ongoing_total:,}")
+with m3:
+    st.metric(label=f"Expected trend for ongoing year ({ongoing_year})", value=yoy_text)
+
+# Second row: spacer under labels + donut, single-year robotic share bar, and two bubbles
+spacer, c_donut, c_robot, c_rates = st.columns([1.3, 1.2, 1.2, 1.5])
+
+with c_donut:
+    try:
+        st.markdown("##### Type of procedures")
+        proc_cols_present = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
+        # Use 2021–2024 window to match headline period
+        dfp = selected_hospital_all_data[(selected_hospital_all_data['annee'] >= 2021) & (selected_hospital_all_data['annee'] <= 2024)]
+        sleeve_total = int(pd.to_numeric(dfp.get('SLE', 0), errors='coerce').fillna(0).sum()) if 'SLE' in proc_cols_present else 0
+        bypass_total = int(pd.to_numeric(dfp.get('BPG', 0), errors='coerce').fillna(0).sum()) if 'BPG' in proc_cols_present else 0
+        other_codes = [c for c in proc_cols_present if c not in ['SLE', 'BPG']]
+        other_total = int(pd.to_numeric(dfp[other_codes].sum().sum(), errors='coerce')) if other_codes else 0
+        data_rows = []
+        if sleeve_total > 0: data_rows.append({'Procedure': 'Sleeve', 'Count': sleeve_total})
+        if bypass_total > 0: data_rows.append({'Procedure': 'Gastric Bypass', 'Count': bypass_total})
+        if other_total > 0: data_rows.append({'Procedure': 'Other', 'Count': other_total})
+        if data_rows:
+            d = pd.DataFrame(data_rows)
+            fig = px.pie(d, values='Count', names='Procedure', hole=0.45, color='Procedure', color_discrete_map={'Sleeve':'#1f77b4','Gastric Bypass':'#ff7f0e','Other':'#2ca02c'})
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            fig.update_layout(height=240, margin=dict(l=10, r=10, t=10, b=10), showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No procedure data available.")
+    except Exception:
+        st.info("Procedure mix unavailable.")
+
+with c_robot:
+    try:
+        st.markdown("##### Robotic share")
+        bar_year = 2024 if is_ytd_2025 else latest_year_activity
+        row = selected_hospital_all_data[selected_hospital_all_data['annee'] == bar_year]
+        if not row.empty:
+            v_lap = float(pd.to_numeric(row.get('LAP', 0), errors='coerce').fillna(0).sum())
+            v_coe = float(pd.to_numeric(row.get('COE', 0), errors='coerce').fillna(0).sum())
+            v_rob = float(pd.to_numeric(row.get('ROB', 0), errors='coerce').fillna(0).sum())
+            total = max(1.0, v_lap + v_coe + v_rob)
+            df_bar = pd.DataFrame({
+                'Year': [str(bar_year)]*3,
+                'Approach': ['Open Surgery','Coelioscopy','Robotic'],
+                'Share': [v_lap/total*100, v_coe/total*100, v_rob/total*100]
+            })
+            figb = px.bar(df_bar, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map={'Open Surgery':'#A23B72','Coelioscopy':'#2E86AB','Robotic':'#F7931E'})
+            figb.update_layout(height=240, yaxis=dict(range=[0,100], title=''), xaxis_title=None, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            figb.update_traces(hovertemplate='Approach: %{fullData.name}<br>%{y:.1f}%<extra></extra>')
+            st.plotly_chart(figb, use_container_width=True)
+        else:
+            st.info("No approach data for selected year.")
+    except Exception:
+        st.info("Robotic share unavailable.")
+
+with c_rates:
+    try:
+        r1, r2 = st.columns(2)
+        with r1:
+            st.markdown(f"<div class='nv-bubble teal'>{hospital_revision_pct:.0f}%</div>", unsafe_allow_html=True)
+            st.markdown("<div class='nv-bubble-label'>Revisional rate</div>", unsafe_allow_html=True)
+        with r2:
+            comp_df = _get_hospital_complications(complications, str(selected_hospital_id))
+            comp_rate = None
+            if not comp_df.empty:
+                if 'quarter_date' in comp_df.columns:
+                    comp_df = comp_df.dropna(subset=['quarter_date']).copy()
+                    comp_df['year'] = comp_df['quarter_date'].dt.year
+                if 'year' in comp_df.columns:
+                    sub = comp_df[(comp_df['year'] >= 2021) & (comp_df['year'] <= 2024)]
+                else:
+                    sub = comp_df
+                if {'complications_count','procedures_count'}.issubset(set(sub.columns)):
+                    num = pd.to_numeric(sub['complications_count'], errors='coerce').fillna(0).sum()
+                    den = pd.to_numeric(sub['procedures_count'], errors='coerce').fillna(0).sum()
+                    if den > 0:
+                        comp_rate = float(num/den*100.0)
+            pct = f"{comp_rate:.1f}%" if comp_rate is not None else "N/A"
+            st.markdown(f"<div class='nv-bubble purple'>{pct}</div>", unsafe_allow_html=True)
+            st.markdown("<div class='nv-bubble-label'>Complication rate</div>", unsafe_allow_html=True)
+    except Exception:
+        pass
 
 
 # --- New Tabbed Layout: Activity, Complications, Geography ---
