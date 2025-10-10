@@ -3013,6 +3013,62 @@ with tab_complications:
                         # Clean hover template
                         fig_los.update_traces(hovertemplate='Year: %{x}<br>%{fullData.name}: %{y:.0f}%<extra></extra>')
                         st.plotly_chart(fig_los, use_container_width=True)
+
+                        # Mini charts for National, Regional, Same category
+                        def _los_share_for_ids(df_all: pd.DataFrame, ids: list[str] | None) -> pd.DataFrame:
+                            d = df_all.copy()
+                            if ids:
+                                d = d[d['finessGeoDP'].astype(str).isin([str(i) for i in ids])]
+                            if d.empty:
+                                return pd.DataFrame()
+                            tmp = d.copy()
+                            tmp['bucket'] = tmp['duree_90_cat'].map(cat_map).fillna(tmp['duree_90_cat'])
+                            tmp['PCT'] = pd.to_numeric(tmp['PCT'], errors='coerce').fillna(0)
+                            g = tmp.groupby(['annee','bucket'], as_index=False)['PCT'].mean()
+                            return g
+
+                        # Build id lists
+                        def _extract_region_from_details(row) -> str | None:
+                            try:
+                                for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                                    if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                                        return str(row[key]).strip()
+                            except Exception:
+                                return None
+                            return None
+
+                        reg_val_l = _extract_region_from_details(selected_hospital_details)
+                        ids_all_l = establishments['id'].astype(str).unique().tolist() if 'id' in establishments.columns else []
+                        ids_reg_l = (
+                            establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(reg_val_l)]['id'].astype(str).unique().tolist()
+                            if reg_val_l is not None and 'id' in establishments.columns else []
+                        )
+                        status_val_l = str(selected_hospital_details.get('statut', '')).strip()
+                        ids_cat_l = (
+                            establishments[establishments.get('statut','').astype(str).str.strip() == status_val_l]['id'].astype(str).unique().tolist()
+                            if 'statut' in establishments.columns else []
+                        )
+
+                        g_nat = _los_share_for_ids(df_los, ids_all_l)
+                        g_reg = _los_share_for_ids(df_los, ids_reg_l)
+                        g_cat = _los_share_for_ids(df_los, ids_cat_l)
+
+                        c_nat, c_reg, c_cat = st.columns(3)
+                        def _mini(fig_df, title, color_map):
+                            if fig_df is None or fig_df.empty:
+                                st.info(f'No data for {title.lower()}.')
+                                return
+                            figm = px.bar(fig_df, x='annee', y='PCT', color='bucket', barmode='stack', category_orders={'bucket': bucket_order}, color_discrete_map=color_map)
+                            figm.update_layout(height=160, margin=dict(l=10,r=10,t=20,b=10), showlegend=False, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', title=title, title_x=0.5)
+                            figm.update_yaxes(range=[0, 100])
+                            st.plotly_chart(figm, use_container_width=True)
+
+                        with c_nat:
+                            _mini(g_nat, 'National', {'0':'#f2a777','1–3':'#e59a6a','4–6':'#d98c5d','≥7':'#cc7e50'})
+                        with c_reg:
+                            _mini(g_reg, 'Regional', {'0':'#2B6E4F','1–3':'#3C8D63','4–6':'#4FAE7A','≥7':'#7DC07A'})
+                        with c_cat:
+                            _mini(g_cat, 'Same category', {'0':'#8E61C6','1–3':'#A77BD8','4–6':'#C095EA','≥7':'#D0A3FF'})
                     else:
                         st.info('No LOS years available for this hospital.')
                 else:
