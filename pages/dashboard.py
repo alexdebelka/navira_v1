@@ -20,6 +20,7 @@ import plotly.graph_objects as go
 from navira.data_loader import get_dataframes, get_all_dataframes
 from auth_wrapper import add_auth_to_page
 from navigation_utils import handle_navigation_request
+from typing import List, Optional, Tuple, Dict
 handle_navigation_request()
 
 # Identify this page early to avoid redirect loops for limited users
@@ -277,8 +278,8 @@ def _load_vda_year_totals_summary(path: str = "data/export_TAB_VDA_HOP.csv", cac
         return pd.DataFrame()
 
 # Core aggregates
-total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
-total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
+    total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
+    total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
 hospital_revision_pct = (total_rev_hospital / total_proc_hospital) * 100 if total_proc_hospital > 0 else 0.0
 
 # Period totals (2021–2024)
@@ -1628,7 +1629,7 @@ with tab_activity:
             st.caption(f"Year used: {best_year_sc}")
     except Exception as e:
         st.caption(f"Scatter unavailable: {e}")
-
+    
     # Monthly procedure volume trends
     try:
         @st.cache_data(show_spinner=False)
@@ -1854,6 +1855,156 @@ with tab_activity:
     except Exception as e:
         st.caption(f"Casemix section unavailable: {e}")
 
+    # --- Robot share scatter (procedures vs robotic share) ---
+    try:
+        st.markdown("#### Robot share")
+        scope_rb = st.radio(
+            "Compare against",
+            ["National", "Regional", "Same status"],
+            horizontal=True,
+            index=0,
+            key=f"robot_scope_{selected_hospital_id}"
+        )
+        use_2025_rb = st.toggle("Show 2025 (YTD)", value=False, key=f"robot_2025_{selected_hospital_id}")
+
+        def _extract_region_from_details(row) -> str | None:
+            try:
+                for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                    if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                        return str(row[key]).strip()
+            except Exception:
+                return None
+            return None
+
+        # Build scope id sets (same status across all France)
+        region_val_rb = _extract_region_from_details(selected_hospital_details)
+        ids_all_rb = establishments['id'].astype(str).unique().tolist() if 'id' in establishments.columns else []
+        ids_reg_rb = (
+            establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_val_rb)]['id'].astype(str).unique().tolist()
+            if region_val_rb is not None and 'id' in establishments.columns else []
+        )
+        status_val_rb = str(selected_hospital_details.get('statut', '')).strip()
+        ids_status_rb = (
+            establishments[establishments.get('statut','').astype(str).str.strip() == status_val_rb]['id'].astype(str).unique().tolist()
+            if 'statut' in establishments.columns else []
+        )
+
+        if scope_rb == "Regional":
+            ids_scope = ids_reg_rb
+        elif scope_rb == "Same status":
+            ids_scope = ids_status_rb
+        else:
+            ids_scope = ids_all_rb
+
+        # Builders
+        def _robot_share_from_annual(ids: list[str]) -> tuple[pd.DataFrame, int]:
+            df = annual.copy()
+            if ids:
+                df = df[df['id'].astype(str).isin([str(i) for i in ids])]
+            df = df[(df.get('annee', 0) >= 2021) & (df.get('annee', 0) <= 2024)].copy()
+            if df.empty:
+                return pd.DataFrame(), 2024
+            # choose year with most hospitals having valid approach totals and totals>0
+            best_year = None
+            best = pd.DataFrame()
+            for y in [2024, 2023, 2022, 2021]:
+                dy = df[df['annee'] == y].copy()
+                if dy.empty:
+                    continue
+                cols = [c for c in ['ROB','COE','LAP'] if c in dy.columns]
+                if not cols:
+                    continue
+                agg = dy.groupby('id', as_index=False)[cols + (['total_procedures_year'] if 'total_procedures_year' in dy.columns else [])].sum()
+                agg['_approach_tot'] = agg[cols].sum(axis=1)
+                if 'total_procedures_year' not in agg.columns:
+                    agg['total_procedures_year'] = 0
+                agg = agg[(agg['_approach_tot'] > 0)]
+                if best_year is None or len(agg) > len(best):
+                    best_year = y
+                    best = agg
+            if best.empty:
+                return pd.DataFrame(), 2024
+            best['_robot_share'] = (best.get('ROB', 0) / best['_approach_tot']) * 100.0
+            best = best.rename(columns={'id':'hid'}).assign(hid=lambda d: d['hid'].astype(str))
+            return best[['hid','total_procedures_year','_robot_share']], int(best_year or 2024)
+
+        def _robot_share_from_vda_2025(ids: list[str]) -> pd.DataFrame:
+            vda = _load_vda_year_totals_summary()
+            if vda.empty:
+                return pd.DataFrame()
+            sub = vda[vda['annee'] == 2025].copy()
+            if ids:
+                sub = sub[sub['finessGeoDP'].astype(str).isin([str(i) for i in ids])]
+            if sub.empty:
+                return pd.DataFrame()
+            # sum VOL per approach and take max TOT per hospital
+            piv = sub.pivot_table(index='finessGeoDP', columns='vda', values='VOL', aggfunc='sum').fillna(0)
+            piv.columns = [str(c) for c in piv.columns]
+            piv = piv.rename(columns={'COE':'COE', 'LAP':'LAP', 'ROB':'ROB'})
+            tot = sub.groupby('finessGeoDP', as_index=False)['TOT'].max().rename(columns={'finessGeoDP':'hid','TOT':'total_procedures_year'})
+            piv = piv.reset_index().rename(columns={'finessGeoDP':'hid'})
+            merged = tot.merge(piv, on='hid', how='left')
+            for c in ['ROB','COE','LAP']:
+                if c not in merged.columns:
+                    merged[c] = 0
+            merged['_approach_tot'] = merged[['ROB','COE','LAP']].sum(axis=1)
+            merged['_robot_share'] = (merged['ROB'] / merged['_approach_tot'].replace({0: pd.NA})) * 100.0
+            merged = merged.dropna(subset=['_robot_share'])
+            merged['hid'] = merged['hid'].astype(str)
+            return merged[['hid','total_procedures_year','_robot_share']]
+
+        if use_2025_rb:
+            df_rb = _robot_share_from_vda_2025(ids_scope)
+            year_used = 2025
+        else:
+            df_rb, year_used = _robot_share_from_annual(ids_scope)
+
+        if df_rb is None or df_rb.empty:
+            st.info('No data available to compute robot share for the selected scope.')
+        else:
+            # Attach names and split selected vs others
+            name_map = establishments.set_index('id')['name'].to_dict() if 'name' in establishments.columns else {}
+            df_rb['name'] = df_rb['hid'].map(lambda i: name_map.get(i, str(i)))
+            sel = df_rb[df_rb['hid'] == str(selected_hospital_id)]
+            others = df_rb[df_rb['hid'] != str(selected_hospital_id)]
+            fig_rbs = go.Figure()
+            # others
+            fig_rbs.add_trace(go.Scatter(
+                x=others['total_procedures_year'],
+                y=others['_robot_share'],
+                mode='markers',
+                marker=dict(color='#60a5fa', size=6, opacity=0.75),
+                name='Other hospitals',
+                hovertemplate='%{text}<br>Procedures: %{x:,}<br>Robot share: %{y:.0f}%<extra></extra>',
+                text=others['name']
+            ))
+            # selected
+            if not sel.empty:
+                fig_rbs.add_trace(go.Scatter(
+                    x=sel['total_procedures_year'],
+                    y=sel['_robot_share'],
+                    mode='markers',
+                    marker=dict(color='#FF8C00', size=10, line=dict(color='white', width=1)),
+                    name='Selected hospital',
+                    hovertemplate='%{text}<br>Procedures: %{x:,}<br>Robot share: %{y:.0f}%<extra></extra>',
+                    text=sel['name']
+                ))
+            fig_rbs.update_layout(
+                height=380,
+                xaxis_title='Number of procedures per year (any approach)',
+                yaxis_title='Robot share (%)',
+                yaxis=dict(range=[0, 100]),
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+            st.plotly_chart(fig_rbs, use_container_width=True)
+            if use_2025_rb:
+                st.caption('2025 YTD (until July)')
+            else:
+                st.caption(f'Year used: {year_used}')
+    except Exception as e:
+        st.caption(f"Robot share scatter unavailable: {e}")
+    
     # Procedure share (3 buckets)
     proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
     if proc_codes:
@@ -1863,118 +2014,118 @@ with tab_activity:
     appr_codes = [c for c in SURGICAL_APPROACH_NAMES.keys() if c in selected_hospital_all_data.columns]
     if appr_codes:
         # Hospital chart alone (full width)
-        st.markdown("#### Hospital: Surgical Approaches (share %)")
-        appr_df = selected_hospital_all_data[['annee']+appr_codes].copy()
-        appr_long = []
-        for _, r in appr_df.iterrows():
-            total = max(1, sum(r[c] for c in appr_codes))
-            for code,name in SURGICAL_APPROACH_NAMES.items():
-                if code in r:
-                    appr_long.append({'annee':int(r['annee']),'Approach':name,'Share':r[code]/total*100})
-        al = pd.DataFrame(appr_long)
-        if not al.empty:
-            APPROACH_COLORS = {'Coelioscopy': '#2E86AB', 'Robotic': '#F7931E', 'Open Surgery': '#A23B72'}
-            fig_bar_h = px.bar(al, x='annee', y='Share', color='Approach', barmode='stack', color_discrete_map=APPROACH_COLORS)
-            fig_bar_h.update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_bar_h, use_container_width=True)
-
+            st.markdown("#### Hospital: Surgical Approaches (share %)")
+            appr_df = selected_hospital_all_data[['annee']+appr_codes].copy()
+            appr_long = []
+            for _, r in appr_df.iterrows():
+                total = max(1, sum(r[c] for c in appr_codes))
+                for code,name in SURGICAL_APPROACH_NAMES.items():
+                    if code in r:
+                        appr_long.append({'annee':int(r['annee']),'Approach':name,'Share':r[code]/total*100})
+            al = pd.DataFrame(appr_long)
+            if not al.empty:
+                APPROACH_COLORS = {'Coelioscopy': '#2E86AB', 'Robotic': '#F7931E', 'Open Surgery': '#A23B72'}
+                fig_bar_h = px.bar(al, x='annee', y='Share', color='Approach', barmode='stack', color_discrete_map=APPROACH_COLORS)
+                fig_bar_h.update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_bar_h, use_container_width=True)
+        
         # Build National dataset
-        st.markdown("")
-        nat_appr_data = []
-        for year in years_window:
-            year_data = annual[annual['annee'] == year]
-            if not year_data.empty:
-                total_robotic = year_data['ROB'].sum() if 'ROB' in year_data.columns else 0
-                total_coelio = year_data['COE'].sum() if 'COE' in year_data.columns else 0
-                total_open = year_data['LAP'].sum() if 'LAP' in year_data.columns else 0
-                total_all = total_robotic + total_coelio + total_open
-                if total_all > 0:
-                    for code, name in SURGICAL_APPROACH_NAMES.items():
-                        if code in year_data.columns:
-                            total_val = year_data[code].sum()
-                            nat_appr_data.append({'Year': year, 'Approach': name, 'Share': (total_val / total_all) * 100})
-        nat_appr_df = pd.DataFrame(nat_appr_data) if nat_appr_data else pd.DataFrame()
+            st.markdown("")
+            nat_appr_data = []
+            for year in years_window:
+                year_data = annual[annual['annee'] == year]
+                if not year_data.empty:
+                    total_robotic = year_data['ROB'].sum() if 'ROB' in year_data.columns else 0
+                    total_coelio = year_data['COE'].sum() if 'COE' in year_data.columns else 0
+                    total_open = year_data['LAP'].sum() if 'LAP' in year_data.columns else 0
+                    total_all = total_robotic + total_coelio + total_open
+                    if total_all > 0:
+                        for code, name in SURGICAL_APPROACH_NAMES.items():
+                            if code in year_data.columns:
+                                total_val = year_data[code].sum()
+                                nat_appr_data.append({'Year': year, 'Approach': name, 'Share': (total_val / total_all) * 100})
+            nat_appr_df = pd.DataFrame(nat_appr_data) if nat_appr_data else pd.DataFrame()
 
-        # --- Regional and Same-category approaches (share %) ---
-        try:
-            # Build id groups
-            def _extract_region_from_details(row) -> str | None:
-                try:
-                    for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
-                        if key in row and pd.notna(row[key]) and str(row[key]).strip():
-                            return str(row[key]).strip()
-                except Exception:
+            # --- Regional and Same-category approaches (share %) ---
+            try:
+                # Build id groups
+                def _extract_region_from_details(row) -> str | None:
+                    try:
+                        for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                            if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                                return str(row[key]).strip()
+                    except Exception:
+                        return None
                     return None
-                return None
 
-            region_value_a = _extract_region_from_details(selected_hospital_details)
-            ids_reg = (
-                establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_value_a)]['id'].astype(str).unique().tolist()
-                if region_value_a is not None and 'id' in establishments.columns else []
-            )
-            status_val_a = str(selected_hospital_details.get('statut', '')).strip()
-            ids_cat = (
-                establishments[establishments.get('statut','').astype(str).str.strip() == status_val_a]['id'].astype(str).unique().tolist()
-                if 'statut' in establishments.columns else []
-            )
+                region_value_a = _extract_region_from_details(selected_hospital_details)
+                ids_reg = (
+                    establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_value_a)]['id'].astype(str).unique().tolist()
+                    if region_value_a is not None and 'id' in establishments.columns else []
+                )
+                status_val_a = str(selected_hospital_details.get('statut', '')).strip()
+                ids_cat = (
+                    establishments[establishments.get('statut','').astype(str).str.strip() == status_val_a]['id'].astype(str).unique().tolist()
+                    if 'statut' in establishments.columns else []
+                )
 
-            def _approach_share_for_ids(id_list: list[str]) -> pd.DataFrame:
-                if not id_list:
-                    return pd.DataFrame()
-                df = annual[annual['id'].astype(str).isin([str(i) for i in id_list])].copy()
-                if df.empty:
-                    return pd.DataFrame()
-                shares = []
-                for year in sorted(df['annee'].dropna().unique().tolist()):
-                    yd = df[df['annee'] == year]
-                    r = float(yd.get('ROB', 0).sum()) if 'ROB' in yd.columns else 0.0
-                    c = float(yd.get('COE', 0).sum()) if 'COE' in yd.columns else 0.0
-                    o = float(yd.get('LAP', 0).sum()) if 'LAP' in yd.columns else 0.0
-                    tot = r + c + o
-                    if tot > 0:
-                        shares.append({'Year': int(year), 'Approach': 'Robotic', 'Share': r / tot * 100})
-                        shares.append({'Year': int(year), 'Approach': 'Coelioscopy', 'Share': c / tot * 100})
-                        shares.append({'Year': int(year), 'Approach': 'Open Surgery', 'Share': o / tot * 100})
-                return pd.DataFrame(shares)
+                def _approach_share_for_ids(id_list: list[str]) -> pd.DataFrame:
+                    if not id_list:
+                        return pd.DataFrame()
+                    df = annual[annual['id'].astype(str).isin([str(i) for i in id_list])].copy()
+                    if df.empty:
+                        return pd.DataFrame()
+                    shares = []
+                    for year in sorted(df['annee'].dropna().unique().tolist()):
+                        yd = df[df['annee'] == year]
+                        r = float(yd.get('ROB', 0).sum()) if 'ROB' in yd.columns else 0.0
+                        c = float(yd.get('COE', 0).sum()) if 'COE' in yd.columns else 0.0
+                        o = float(yd.get('LAP', 0).sum()) if 'LAP' in yd.columns else 0.0
+                        tot = r + c + o
+                        if tot > 0:
+                            shares.append({'Year': int(year), 'Approach': 'Robotic', 'Share': r / tot * 100})
+                            shares.append({'Year': int(year), 'Approach': 'Coelioscopy', 'Share': c / tot * 100})
+                            shares.append({'Year': int(year), 'Approach': 'Open Surgery', 'Share': o / tot * 100})
+                    return pd.DataFrame(shares)
 
-            reg_share = _approach_share_for_ids(ids_reg)
-            cat_share = _approach_share_for_ids(ids_cat)
+                reg_share = _approach_share_for_ids(ids_reg)
+                cat_share = _approach_share_for_ids(ids_cat)
 
-            if not nat_appr_df.empty or not reg_share.empty or not cat_share.empty:
-                col_nat, col_reg, col_cat = st.columns(3)
-                # Distinct color palettes per chart (as per your picture)
-                COLORS_NAT = {'Coelioscopy': '#d08b3e', 'Robotic': '#e6a86a', 'Open Surgery': '#a8652b'}
-                COLORS_REG = {'Coelioscopy': '#4F9D69', 'Robotic': '#7DC07A', 'Open Surgery': '#2B6E4F'}
-                COLORS_CAT = {'Coelioscopy': '#B388EB', 'Robotic': '#D0A3FF', 'Open Surgery': '#8E61C6'}
+                if not nat_appr_df.empty or not reg_share.empty or not cat_share.empty:
+                    col_nat, col_reg, col_cat = st.columns(3)
+                    # Distinct color palettes per chart (as per your picture)
+                    COLORS_NAT = {'Coelioscopy': '#d08b3e', 'Robotic': '#e6a86a', 'Open Surgery': '#a8652b'}
+                    COLORS_REG = {'Coelioscopy': '#4F9D69', 'Robotic': '#7DC07A', 'Open Surgery': '#2B6E4F'}
+                    COLORS_CAT = {'Coelioscopy': '#B388EB', 'Robotic': '#D0A3FF', 'Open Surgery': '#8E61C6'}
 
-                with col_nat:
-                    st.markdown("#### National: Surgical Approaches (share %)")
-                    if not nat_appr_df.empty:
-                        fig_nat3 = px.bar(nat_appr_df, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=COLORS_NAT)
-                        fig_nat3.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig_nat3, use_container_width=True)
-                    else:
-                        st.info('No national approach data.')
+                    with col_nat:
+                        st.markdown("#### National: Surgical Approaches (share %)")
+                        if not nat_appr_df.empty:
+                            fig_nat3 = px.bar(nat_appr_df, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=COLORS_NAT)
+                            fig_nat3.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                            st.plotly_chart(fig_nat3, use_container_width=True)
+                        else:
+                            st.info('No national approach data.')
 
-                with col_reg:
-                    st.markdown("#### Regional: Surgical Approaches (share %)")
-                    if not reg_share.empty:
-                        fig_r = px.bar(reg_share, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=COLORS_REG)
-                        fig_r.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig_r, use_container_width=True)
-                    else:
-                        st.info('No regional approach data.')
+                    with col_reg:
+                        st.markdown("#### Regional: Surgical Approaches (share %)")
+                        if not reg_share.empty:
+                            fig_r = px.bar(reg_share, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=COLORS_REG)
+                            fig_r.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                            st.plotly_chart(fig_r, use_container_width=True)
+                        else:
+                            st.info('No regional approach data.')
 
-                with col_cat:
-                    st.markdown("#### Same category: Surgical Approaches (share %)")
-                    if not cat_share.empty:
-                        fig_c = px.bar(cat_share, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=COLORS_CAT)
-                        fig_c.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig_c, use_container_width=True)
-                    else:
-                        st.info('No same-category approach data.')
-        except Exception as e:
-            st.caption(f"Approach breakdown unavailable: {e}")
+                    with col_cat:
+                        st.markdown("#### Same category: Surgical Approaches (share %)")
+                        if not cat_share.empty:
+                            fig_c = px.bar(cat_share, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=COLORS_CAT)
+                            fig_c.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                            st.plotly_chart(fig_c, use_container_width=True)
+                        else:
+                            st.info('No same-category approach data.')
+            except Exception as e:
+                st.caption(f"Approach breakdown unavailable: {e}")
     
 
 
