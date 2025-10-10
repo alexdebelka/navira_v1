@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
+import numpy as np
 import folium
 from folium.plugins import HeatMap
 import os
@@ -2546,6 +2547,120 @@ with tab_complications:
             st.caption("Last 12 months (approx. last 4 quarters)")
     except Exception as e:
         st.caption(f"Overall complication rate unavailable: {e}")
+
+    # --- Funnel plot: complication rate vs volume with control limits ---
+    try:
+        st.markdown("#### Overall complication rate — funnel plot (90 days)")
+        scope_fp = st.radio(
+            "Compare against",
+            ["National", "Regional", "Same status"],
+            horizontal=True,
+            index=0,
+            key=f"funnel_scope_{selected_hospital_id}"
+        )
+
+        # Build scope ids
+        def _extract_region_from_details(row) -> str | None:
+            try:
+                for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                    if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                        return str(row[key]).strip()
+            except Exception:
+                return None
+            return None
+
+        reg_fp = _extract_region_from_details(selected_hospital_details)
+        ids_all_fp = establishments['id'].astype(str).unique().tolist() if 'id' in establishments.columns else []
+        ids_reg_fp = (
+            establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(reg_fp)]['id'].astype(str).unique().tolist()
+            if reg_fp is not None and 'id' in establishments.columns else []
+        )
+        status_fp = str(selected_hospital_details.get('statut', '')).strip()
+        ids_status_fp = (
+            establishments[establishments.get('statut','').astype(str).str.strip() == status_fp]['id'].astype(str).unique().tolist()
+            if 'statut' in establishments.columns else []
+        )
+
+        if scope_fp == "Regional":
+            ids_scope = ids_reg_fp
+        elif scope_fp == "Same status":
+            ids_scope = ids_status_fp
+        else:
+            ids_scope = ids_all_fp
+
+        # Prepare data: sum events and totals over all available quarters
+        comp_df = complications.copy()
+        if comp_df is None or comp_df.empty:
+            st.info('No complications dataset available.')
+        else:
+            comp_df['hospital_id'] = comp_df.get('hospital_id', '').astype(str)
+            for c in ['complications_count','procedures_count']:
+                if c in comp_df.columns:
+                    comp_df[c] = pd.to_numeric(comp_df[c], errors='coerce').fillna(0)
+            if ids_scope:
+                comp_df = comp_df[comp_df['hospital_id'].isin([str(i) for i in ids_scope])]
+            agg = comp_df.groupby('hospital_id', as_index=False).agg(
+                events=('complications_count','sum'),
+                total=('procedures_count','sum')
+            )
+            agg = agg[agg['total'] > 0]
+            if agg.empty:
+                st.info('No valid complications data for funnel plot.')
+            else:
+                agg['rate'] = agg['events'] / agg['total']
+                # Overall mean (pooled)
+                p_bar = float(agg['events'].sum() / agg['total'].sum()) if agg['total'].sum() > 0 else 0.0
+                # Control limits vs volume
+                vol = np.linspace(max(1, agg['total'].min()), agg['total'].max(), 200)
+                se = np.sqrt(p_bar * (1 - p_bar) / vol)
+                z95 = 1.96
+                z99 = 3.09
+                upper95 = p_bar + z95 * se
+                lower95 = p_bar - z95 * se
+                upper99 = p_bar + z99 * se
+                lower99 = p_bar - z99 * se
+                # Clip to [0,1]
+                upper95 = np.clip(upper95, 0, 1); lower95 = np.clip(lower95, 0, 1)
+                upper99 = np.clip(upper99, 0, 1); lower99 = np.clip(lower99, 0, 1)
+
+                name_map = establishments.set_index('id')['name'].to_dict() if 'name' in establishments.columns else {}
+                agg['name'] = agg['hospital_id'].map(lambda i: name_map.get(i, str(i)))
+                sel = agg[agg['hospital_id'] == str(selected_hospital_id)]
+                others = agg[agg['hospital_id'] != str(selected_hospital_id)]
+
+                fig_fp = go.Figure()
+                # Others
+                fig_fp.add_trace(go.Scatter(
+                    x=others['total'], y=others['rate'], mode='markers',
+                    marker=dict(color='#60a5fa', size=6, opacity=0.75), name='Other hospitals',
+                    hovertemplate='%{text}<br>Volume: %{x:,}<br>Rate: %{y:.1%}<extra></extra>', text=others['name']
+                ))
+                # Selected
+                if not sel.empty:
+                    fig_fp.add_trace(go.Scatter(
+                        x=sel['total'], y=sel['rate'], mode='markers',
+                        marker=dict(color='#FF8C00', size=12, line=dict(color='white', width=1)), name='Selected hospital',
+                        hovertemplate='%{text}<br>Volume: %{x:,}<br>Rate: %{y:.1%}<extra></extra>', text=sel['name']
+                    ))
+                # Mean line
+                fig_fp.add_trace(go.Scatter(x=[vol.min(), vol.max()], y=[p_bar, p_bar], mode='lines', line=dict(color='#888', width=1, dash='solid'), name='Mean'))
+                # 95% bounds (dashed)
+                fig_fp.add_trace(go.Scatter(x=vol, y=upper95, mode='lines', line=dict(color='#aaa', width=1, dash='dash'), name='95% CI'))
+                fig_fp.add_trace(go.Scatter(x=vol, y=lower95, mode='lines', line=dict(color='#aaa', width=1, dash='dash'), showlegend=False))
+                # 99% bounds (dotted)
+                fig_fp.add_trace(go.Scatter(x=vol, y=upper99, mode='lines', line=dict(color='#aaa', width=1, dash='dot'), name='99% CI'))
+                fig_fp.add_trace(go.Scatter(x=vol, y=lower99, mode='lines', line=dict(color='#aaa', width=1, dash='dot'), showlegend=False))
+
+                fig_fp.update_layout(
+                    height=420,
+                    xaxis_title='Hospital volume (all techniques)',
+                    yaxis_title='Complication rate', yaxis_tickformat='.0%',
+                    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+                )
+                st.plotly_chart(fig_fp, use_container_width=True)
+                st.caption('Dashed = 95% CI; dotted = 99% CI; solid = overall mean')
+    except Exception as e:
+        st.caption(f"Funnel plot unavailable: {e}")
 
     hosp_comp = _get_hospital_complications(complications, str(selected_hospital_id)).sort_values('quarter_date')
     # Global note if 2025 data is present (YTD)
