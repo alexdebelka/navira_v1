@@ -278,8 +278,8 @@ def _load_vda_year_totals_summary(path: str = "data/export_TAB_VDA_HOP.csv", cac
         return pd.DataFrame()
 
 # Core aggregates
-    total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
-    total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
+total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
+total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
 hospital_revision_pct = (total_rev_hospital / total_proc_hospital) * 100 if total_proc_hospital > 0 else 0.0
 
 # Period totals (2021–2024)
