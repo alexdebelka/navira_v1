@@ -1589,8 +1589,8 @@ with tab_activity:
             best_df = best_df[best_df['_total_all'] > 0]
             best_df['_sleeve_pct'] = best_df['SLE'] / best_df['_total_all'] * 100.0
             best_df['_bypass_pct'] = best_df['BPG'] / best_df['_total_all'] * 100.0
-            # Selected hospital point
-            sel = best_df[best_df['id'].astype(str) == str(selected_hospital_id)].copy()
+            # Selected hospital rows (all years) and others
+            sel_all = best_df[best_df['id'].astype(str) == str(selected_hospital_id)].copy()
             others = best_df[best_df['id'].astype(str) != str(selected_hospital_id)].copy()
             # Names for hover
             name_map = establishments.set_index('id')['name'].to_dict() if 'name' in establishments.columns else {}
@@ -1606,15 +1606,23 @@ with tab_activity:
                 hovertemplate='%{text}<br>Sleeve: %{x:.0f}%<br>Bypass: %{y:.0f}%<extra></extra>',
                 text=others['name']
             ))
-            # Selected hospital (highlight)
-            if not sel.empty:
-                fig_sc.add_trace(go.Scatter(
-                    x=sel['_sleeve_pct'], y=sel['_bypass_pct'], mode='markers',
-                    marker=dict(color='#FF8C00', size=10, line=dict(color='white', width=1)),
-                    name='Selected hospital',
-                    hovertemplate='%{text}<br>Sleeve: %{x:.0f}%<br>Bypass: %{y:.0f}%<extra></extra>',
-                    text=sel['name']
-                ))
+            # Selected hospital (single average point across 2021–2025)
+            if not sel_all.empty:
+                # Volume-weighted average via summed counts
+                total_all = sel_all[proc_cols].sum().sum()
+                sum_sle = float(sel_all.get('SLE', 0).sum()) if 'SLE' in sel_all.columns else 0.0
+                sum_bpg = float(sel_all.get('BPG', 0).sum()) if 'BPG' in sel_all.columns else 0.0
+                if total_all > 0:
+                    x_avg = (sum_sle / total_all) * 100.0
+                    y_avg = (sum_bpg / total_all) * 100.0
+                    name_map = establishments.set_index('id')['name'].to_dict() if 'name' in establishments.columns else {}
+                    sel_name = name_map.get(str(selected_hospital_id), str(selected_hospital_id))
+                    fig_sc.add_trace(go.Scatter(
+                        x=[x_avg], y=[y_avg], mode='markers',
+                        marker=dict(color='#FF8C00', size=12, line=dict(color='white', width=1)),
+                        name='Selected hospital (avg)',
+                        hovertemplate=f'{sel_name}<br>Sleeve: %{{x:.0f}}%<br>Bypass: %{{y:.0f}}%<extra></extra>'
+                    ))
             fig_sc.update_layout(
                 height=380,
                 xaxis_title='Sleeve rate (%)', yaxis_title='Bypass rate (%)',
