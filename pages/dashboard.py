@@ -1567,29 +1567,21 @@ with tab_activity:
         else:
             ids_scope = ids_all3
 
-        # Choose year with best coverage in annual data
-        candidates = [2025, 2024, 2023, 2022, 2021]
-        best_year_sc = None
-        best_df = pd.DataFrame()
-        proc_cols = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in annual.columns]
-        for y in candidates:
-            dfy = annual[annual.get('annee') == y].copy()
+            # Use ALL years 2021–2025 (stacked points), filter scope
+            proc_cols = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in annual.columns]
+            base = annual[(annual.get('annee') >= 2021) & (annual.get('annee') <= 2025)].copy()
             if ids_scope:
-                dfy = dfy[dfy['id'].astype(str).isin([str(i) for i in ids_scope])]
-            if dfy.empty:
-                continue
-            # Keep only hospitals with any procedures
-            totals = dfy[proc_cols].sum(axis=1) if proc_cols else pd.Series([0]*len(dfy))
-            dfy = dfy.assign(_total=totals)
-            dfy = dfy[dfy['_total'] > 0]
-            if best_year_sc is None or len(dfy) > len(best_df):
-                best_year_sc = y
-                best_df = dfy
+                base = base[base['id'].astype(str).isin([str(i) for i in ids_scope])]
+            if base.empty:
+                best_df = pd.DataFrame()
+            else:
+                totals = base[proc_cols].sum(axis=1) if proc_cols else pd.Series([0]*len(base))
+                best_df = base.assign(_total=totals)
+                best_df = best_df[best_df['_total'] > 0]
         if best_df.empty:
             st.info('No data to compute sleeve/bypass shares for the selected scope.')
         else:
             # Compute shares
-            cols_present = [c for c in ['SLE','BPG'] if c in best_df.columns]
             for c in ['SLE','BPG']:
                 if c not in best_df.columns:
                     best_df[c] = 0
@@ -1630,7 +1622,6 @@ with tab_activity:
                 plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
             )
             st.plotly_chart(fig_sc, use_container_width=True)
-            st.caption(f"Year used: {best_year_sc}")
     except Exception as e:
         st.caption(f"Scatter unavailable: {e}")
     
