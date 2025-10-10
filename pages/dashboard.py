@@ -89,6 +89,10 @@ st.markdown("""
         .nv-bubble { width: 100px; height: 100px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.6rem; color: #fff; margin: 6px auto; }
         .nv-bubble.teal { background:#0b7285; }
         .nv-bubble.purple { background:#7e22ce; }
+        .nv-bubble.blue { background:#0b4f6c; }
+        .nv-bubble.peach { background:#f2a777; }
+        .nv-bubble.green { background:#16a34a; }
+        .nv-bubble.pink { background:#d946ef; }
         .nv-bubble-label { text-align:center; font-weight:600; margin-top:6px; }
     </style>
 """, unsafe_allow_html=True)
@@ -2004,6 +2008,89 @@ with tab_activity:
                 st.caption(f'Year used: {year_used}')
     except Exception as e:
         st.caption(f"Robot share scatter unavailable: {e}")
+    
+    # --- Revisional rate (bubble quartet) ---
+    try:
+        st.markdown("### Revisional rate")
+        ytd_rev = st.toggle("Show 2025 only (data through July)", value=False, key=f"rev_toggle_{selected_hospital_id}")
+
+        def _sum_rev_period(ids: list[str] | None) -> tuple[float, float]:
+            # From annual: revision surgeries count/total across 2021–2024
+            df = annual.copy()
+            if ids:
+                df = df[df['id'].astype(str).isin([str(i) for i in ids])]
+            df = df[(df.get('annee', 0) >= 2021) & (df.get('annee', 0) <= 2024)].copy()
+            if df.empty:
+                return 0.0, 0.0
+            rev = float(pd.to_numeric(df.get('revision_surgeries_n', 0), errors='coerce').fillna(0).sum()) if 'revision_surgeries_n' in df.columns else 0.0
+            tot = float(pd.to_numeric(df.get('total_procedures_year', 0), errors='coerce').fillna(0).sum())
+            return rev, tot
+
+        def _sum_rev_2025(ids: list[str] | None) -> tuple[float, float]:
+            # From VDA 2025 (YTD)
+            vda = _load_vda_year_totals_summary()
+            if vda.empty:
+                return 0.0, 0.0
+            d = vda[vda['annee'] == 2025].copy()
+            if ids:
+                d = d[d['finessGeoDP'].astype(str).isin([str(i) for i in ids])]
+            if d.empty:
+                return 0.0, 0.0
+            rev = float(pd.to_numeric(d[d['vda'] == 'REV'].get('VOL', 0), errors='coerce').fillna(0).sum()) if 'vda' in d.columns else 0.0
+            tot = float(pd.to_numeric(d.get('TOT', 0), errors='coerce').fillna(0).groupby(d['finessGeoDP']).max().sum())
+            return rev, tot
+
+        def _pct(rev: float, tot: float) -> float:
+            return (rev / tot * 100.0) if tot and tot > 0 else 0.0
+
+        # Build id groups
+        def _extract_region_from_details(row) -> str | None:
+            try:
+                for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                    if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                        return str(row[key]).strip()
+            except Exception:
+                return None
+            return None
+
+        region_rev = _extract_region_from_details(selected_hospital_details)
+        ids_all_rev = establishments['id'].astype(str).unique().tolist() if 'id' in establishments.columns else []
+        ids_reg_rev = (
+            establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_rev)]['id'].astype(str).unique().tolist()
+            if region_rev is not None and 'id' in establishments.columns else []
+        )
+        status_rev = str(selected_hospital_details.get('statut', '')).strip()
+        ids_cat_rev = (
+            establishments[establishments.get('statut','').astype(str).str.strip() == status_rev]['id'].astype(str).unique().tolist()
+            if 'statut' in establishments.columns else []
+        )
+
+        if ytd_rev:
+            h_rev, h_tot = _sum_rev_2025([selected_hospital_id])
+            n_rev, n_tot = _sum_rev_2025(ids_all_rev)
+            r_rev, r_tot = _sum_rev_2025(ids_reg_rev)
+            c_rev, c_tot = _sum_rev_2025(ids_cat_rev)
+        else:
+            h_rev, h_tot = _sum_rev_period([selected_hospital_id])
+            n_rev, n_tot = _sum_rev_period(ids_all_rev)
+            r_rev, r_tot = _sum_rev_period(ids_reg_rev)
+            c_rev, c_tot = _sum_rev_period(ids_cat_rev)
+
+        cols = st.columns(4)
+        vals = [
+            (cols[0], 'Hospital', _pct(h_rev, h_tot), 'blue'),
+            (cols[1], 'National', _pct(n_rev, n_tot), 'peach'),
+            (cols[2], 'Regional', _pct(r_rev, r_tot), 'green'),
+            (cols[3], 'Same category', _pct(c_rev, c_tot), 'pink'),
+        ]
+        for col, label, pctv, color in vals:
+            with col:
+                st.markdown(f"<div class='nv-bubble {color}' style='width:120px;height:120px;font-size:1.8rem'>{pctv:.0f}%</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='nv-bubble-label'>{label}</div>", unsafe_allow_html=True)
+        if ytd_rev:
+            st.caption('2025 YTD (until July)')
+    except Exception as e:
+        st.caption(f"Revisional rate unavailable: {e}")
     
     # Procedure share (3 buckets)
     proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
