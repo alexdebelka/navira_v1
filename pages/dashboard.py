@@ -3069,6 +3069,119 @@ with tab_complications:
                             _mini(g_reg, 'Regional', {'0':'#2B6E4F','1–3':'#3C8D63','4–6':'#4FAE7A','≥7':'#7DC07A'})
                         with c_cat:
                             _mini(g_cat, 'Same category', {'0':'#8E61C6','1–3':'#A77BD8','4–6':'#C095EA','≥7':'#D0A3FF'})
+
+                        # Bubble panel: average % of patients with LOS ≥7 days (across 2021–2025)
+                        try:
+                            def _avg_ge7(df_group: pd.DataFrame) -> float:
+                                if df_group is None or df_group.empty:
+                                    return 0.0
+                                d = df_group[df_group['bucket'] == '≥7']
+                                if d.empty:
+                                    return 0.0
+                                return float(pd.to_numeric(d['PCT'], errors='coerce').fillna(0).mean())
+
+                            p_h = _avg_ge7(hos_los_full)
+                            p_n = _avg_ge7(g_nat)
+                            p_r = _avg_ge7(g_reg)
+                            p_c = _avg_ge7(g_cat)
+
+                            st.markdown("#### Patients ≥7 days of 90d‑LOS")
+                            b1, b2, b3, b4 = st.columns(4)
+                            with b1:
+                                st.markdown(f"<div class='nv-bubble blue' style='width:110px;height:110px;font-size:1.6rem'>{p_h:.1f}%</div>", unsafe_allow_html=True)
+                                st.markdown("<div class='nv-bubble-label'>Hospital</div>", unsafe_allow_html=True)
+                            with b2:
+                                st.markdown(f"<div class='nv-bubble peach' style='width:110px;height:110px;font-size:1.6rem'>{p_n:.1f}%</div>", unsafe_allow_html=True)
+                                st.markdown("<div class='nv-bubble-label'>National</div>", unsafe_allow_html=True)
+                            with b3:
+                                st.markdown(f"<div class='nv-bubble green' style='width:110px;height:110px;font-size:1.6rem'>{p_r:.1f}%</div>", unsafe_allow_html=True)
+                                st.markdown("<div class='nv-bubble-label'>Regional</div>", unsafe_allow_html=True)
+                            with b4:
+                                st.markdown(f"<div class='nv-bubble pink' style='width:110px;height:110px;font-size:1.6rem'>{p_c:.1f}%</div>", unsafe_allow_html=True)
+                                st.markdown("<div class='nv-bubble-label'>Same category</div>", unsafe_allow_html=True)
+                        except Exception:
+                            pass
+
+                        # Scatter: share of stays ≥7 days vs average annual volume
+                        st.markdown("#### 90d‑LOS — % ≥7 days vs volume")
+                        scope_los_sc = st.radio(
+                            "Compare against",
+                            ["National", "Regional", "Same status"],
+                            horizontal=True,
+                            index=0,
+                            key=f"los_scatter_scope_{selected_hospital_id}"
+                        )
+
+                        # Build scope ids
+                        def _extract_region_from_details(row) -> str | None:
+                            try:
+                                for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                                    if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                                        return str(row[key]).strip()
+                            except Exception:
+                                return None
+                            return None
+
+                        reg_sc = _extract_region_from_details(selected_hospital_details)
+                        ids_all_sc = establishments['id'].astype(str).unique().tolist() if 'id' in establishments.columns else []
+                        ids_reg_sc = (
+                            establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(reg_sc)]['id'].astype(str).unique().tolist()
+                            if reg_sc is not None and 'id' in establishments.columns else []
+                        )
+                        status_sc = str(selected_hospital_details.get('statut', '')).strip()
+                        ids_cat_sc = (
+                            establishments[establishments.get('statut','').astype(str).str.strip() == status_sc]['id'].astype(str).unique().tolist()
+                            if 'statut' in establishments.columns else []
+                        )
+                        if scope_los_sc == "Regional":
+                            ids_scope_sc = ids_reg_sc
+                        elif scope_los_sc == "Same status":
+                            ids_scope_sc = ids_cat_sc
+                        else:
+                            ids_scope_sc = ids_all_sc
+
+                        # Prepare LOS >=7% per hospital averaged across 2021–2025
+                        los_all = df_los.copy()
+                        los_all['annee'] = pd.to_numeric(los_all.get('annee'), errors='coerce')
+                        los_all = los_all[(los_all['annee'] >= 2021) & (los_all['annee'] <= 2025)]
+                        los_all['finessGeoDP'] = los_all['finessGeoDP'].astype(str)
+                        los_all['bucket'] = los_all['duree_90_cat'].map(cat_map).fillna(los_all['duree_90_cat'])
+                        los_all['PCT'] = pd.to_numeric(los_all['PCT'], errors='coerce').fillna(0)
+                        los_ge7 = los_all[los_all['bucket'] == '≥7']
+                        if ids_scope_sc:
+                            los_ge7 = los_ge7[los_ge7['finessGeoDP'].isin([str(i) for i in ids_scope_sc])]
+                        ge7_by_h = los_ge7.groupby('finessGeoDP', as_index=False)['PCT'].mean().rename(columns={'finessGeoDP':'hid','PCT':'ge7_pct'})
+
+                        # Average annual volume from annual (2021–2025)
+                        ann = annual.copy()
+                        ann = ann[(ann.get('annee') >= 2021) & (ann.get('annee') <= 2025)]
+                        ann['id'] = ann['id'].astype(str)
+                        if ids_scope_sc:
+                            ann = ann[ann['id'].isin([str(i) for i in ids_scope_sc])]
+                        vol = ann.groupby('id', as_index=False)['total_procedures_year'].mean().rename(columns={'id':'hid','total_procedures_year':'avg_vol'})
+
+                        merged = ge7_by_h.merge(vol, on='hid', how='inner')
+                        if not merged.empty:
+                            name_map = establishments.set_index('id')['name'].to_dict() if 'name' in establishments.columns else {}
+                            merged['name'] = merged['hid'].map(lambda i: name_map.get(i, str(i)))
+                            sel = merged[merged['hid'] == str(selected_hospital_id)]
+                            oth = merged[merged['hid'] != str(selected_hospital_id)]
+                            fig_los_sc = go.Figure()
+                            fig_los_sc.add_trace(go.Scatter(
+                                x=oth['avg_vol'], y=oth['ge7_pct'], mode='markers',
+                                marker=dict(color='#60a5fa', size=6, opacity=0.75), name='Other hospitals',
+                                hovertemplate='%{text}<br>Avg volume: %{x:.0f}<br>% ≥7 days: %{y:.0f}%<extra></extra>', text=oth['name']
+                            ))
+                            if not sel.empty:
+                                fig_los_sc.add_trace(go.Scatter(
+                                    x=sel['avg_vol'], y=sel['ge7_pct'], mode='markers',
+                                    marker=dict(color='#FF8C00', size=12, line=dict(color='white', width=1)), name='Selected hospital',
+                                    hovertemplate='%{text}<br>Avg volume: %{x:.0f}<br>% ≥7 days: %{y:.0f}%<extra></extra>', text=sel['name']
+                                ))
+                            fig_los_sc.update_layout(height=360, xaxis_title='Number of procedures per year (any approach)', yaxis_title='≥7 day of admission (%)', yaxis=dict(range=[0,100]), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                            st.plotly_chart(fig_los_sc, use_container_width=True)
+                        else:
+                            st.info('No data to build LOS scatter for this scope.')
                     else:
                         st.info('No LOS years available for this hospital.')
                 else:
