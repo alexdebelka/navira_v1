@@ -2249,7 +2249,7 @@ with tab_activity:
                 st.caption('2025 YTD (until July)')
     except Exception as e:
         st.caption(f"Revisional lollipop unavailable: {e}")
-
+    
     # Procedure share (3 buckets)
     proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
     if proc_codes:
@@ -2469,6 +2469,84 @@ with tab_activity:
 
 with tab_complications:
     st.subheader("Complications")
+    # Overall complication rate (90 days) — bubble quartet per design
+    try:
+        st.markdown("### Overall complication rate (90 days)")
+        last12 = st.toggle("Last 12 months", value=False, key=f"comp_rate_last12_{selected_hospital_id}")
+
+        # Ensure datetime and numeric types
+        comp_src = complications.copy()
+        if not comp_src.empty:
+            if 'quarter_date' in comp_src.columns:
+                comp_src['quarter_date'] = pd.to_datetime(comp_src['quarter_date'], errors='coerce')
+            for c in ['complications_count','procedures_count']:
+                if c in comp_src.columns:
+                    comp_src[c] = pd.to_numeric(comp_src[c], errors='coerce')
+
+        def _extract_region_from_details(row) -> str | None:
+            try:
+                for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                    if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                        return str(row[key]).strip()
+            except Exception:
+                return None
+            return None
+
+        region_val_c = _extract_region_from_details(selected_hospital_details)
+        ids_all_c = establishments['id'].astype(str).unique().tolist() if 'id' in establishments.columns else []
+        ids_reg_c = (
+            establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_val_c)]['id'].astype(str).unique().tolist()
+            if region_val_c is not None and 'id' in establishments.columns else []
+        )
+        status_val_c = str(selected_hospital_details.get('statut','')).strip()
+        ids_cat_c = (
+            establishments[establishments.get('statut','').astype(str).str.strip() == status_val_c]['id'].astype(str).unique().tolist()
+            if 'statut' in establishments.columns else []
+        )
+
+        def _rate_for_ids(ids: list[str]) -> float:
+            if comp_src is None or comp_src.empty:
+                return 0.0
+            df = comp_src.copy()
+            if 'hospital_id' in df.columns:
+                df['hospital_id'] = df['hospital_id'].astype(str)
+                if ids:
+                    df = df[df['hospital_id'].isin([str(i) for i in ids])]
+            if df.empty:
+                return 0.0
+            if last12 and 'quarter_date' in df.columns:
+                mx = df['quarter_date'].dropna().max()
+                if pd.notna(mx):
+                    start = (mx - pd.DateOffset(months=11))  # approx 12 months; data is quarterly so covers last 4 quarters
+                    df = df[(df['quarter_date'] >= start) & (df['quarter_date'] <= mx)]
+            # Sum numerator and denominator
+            num = float(pd.to_numeric(df.get('complications_count', 0), errors='coerce').fillna(0).sum())
+            den = float(pd.to_numeric(df.get('procedures_count', 0), errors='coerce').fillna(0).sum())
+            return (num / den * 100.0) if den > 0 else 0.0
+
+        val_h = _rate_for_ids([selected_hospital_id])
+        val_n = _rate_for_ids(ids_all_c)
+        val_r = _rate_for_ids(ids_reg_c)
+        val_s = _rate_for_ids(ids_cat_c)
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.markdown(f"<div class='nv-bubble blue' style='width:120px;height:120px;font-size:1.8rem'>{val_h:.1f}%</div>", unsafe_allow_html=True)
+            st.markdown("<div class='nv-bubble-label'>Hospital</div>", unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"<div class='nv-bubble peach' style='width:120px;height:120px;font-size:1.8rem'>{val_n:.1f}%</div>", unsafe_allow_html=True)
+            st.markdown("<div class='nv-bubble-label'>National</div>", unsafe_allow_html=True)
+        with c3:
+            st.markdown(f"<div class='nv-bubble green' style='width:120px;height:120px;font-size:1.8rem'>{val_r:.1f}%</div>", unsafe_allow_html=True)
+            st.markdown("<div class='nv-bubble-label'>Regional</div>", unsafe_allow_html=True)
+        with c4:
+            st.markdown(f"<div class='nv-bubble pink' style='width:120px;height:120px;font-size:1.8rem'>{val_s:.1f}%</div>", unsafe_allow_html=True)
+            st.markdown("<div class='nv-bubble-label'>Same category</div>", unsafe_allow_html=True)
+        if last12:
+            st.caption("Last 12 months (approx. last 4 quarters)")
+    except Exception as e:
+        st.caption(f"Overall complication rate unavailable: {e}")
+
     hosp_comp = _get_hospital_complications(complications, str(selected_hospital_id)).sort_values('quarter_date')
     # Global note if 2025 data is present (YTD)
     has_2025_data = False
