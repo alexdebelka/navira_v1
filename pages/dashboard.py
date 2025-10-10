@@ -2014,31 +2014,26 @@ with tab_activity:
         st.markdown("### Revisional rate")
         ytd_rev = st.toggle("Show 2025 only (data through July)", value=False, key=f"rev_toggle_{selected_hospital_id}")
 
-        def _sum_rev_period(ids: list[str] | None) -> tuple[float, float]:
-            # From annual: revision surgeries count/total across 2021–2024
-            df = annual.copy()
+        def _sum_rev_from_details(ids: list[str] | None, years: list[int]) -> tuple[float, float]:
+            # Use detailed procedures to compute revisional share robustly
+            df = procedure_details.copy()
+            if df is None or df.empty:
+                return 0.0, 0.0
+            df['hospital_id'] = df['hospital_id'].astype(str)
+            df['year'] = pd.to_numeric(df.get('year'), errors='coerce')
+            df = df[df['year'].isin(years)]
             if ids:
-                df = df[df['id'].astype(str).isin([str(i) for i in ids])]
-            df = df[(df.get('annee', 0) >= 2021) & (df.get('annee', 0) <= 2024)].copy()
-            if df.empty:
+                df = df[df['hospital_id'].isin([str(i) for i in ids])]
+            if df.empty or 'procedure_count' not in df.columns:
                 return 0.0, 0.0
-            rev = float(pd.to_numeric(df.get('revision_surgeries_n', 0), errors='coerce').fillna(0).sum()) if 'revision_surgeries_n' in df.columns else 0.0
-            tot = float(pd.to_numeric(df.get('total_procedures_year', 0), errors='coerce').fillna(0).sum())
-            return rev, tot
-
-        def _sum_rev_2025(ids: list[str] | None) -> tuple[float, float]:
-            # From VDA 2025 (YTD)
-            vda = _load_vda_year_totals_summary()
-            if vda.empty:
-                return 0.0, 0.0
-            d = vda[vda['annee'] == 2025].copy()
-            if ids:
-                d = d[d['finessGeoDP'].astype(str).isin([str(i) for i in ids])]
-            if d.empty:
-                return 0.0, 0.0
-            rev = float(pd.to_numeric(d[d['vda'] == 'REV'].get('VOL', 0), errors='coerce').fillna(0).sum()) if 'vda' in d.columns else 0.0
-            tot = float(pd.to_numeric(d.get('TOT', 0), errors='coerce').fillna(0).groupby(d['finessGeoDP']).max().sum())
-            return rev, tot
+            total = float(pd.to_numeric(df['procedure_count'], errors='coerce').fillna(0).sum())
+            rev = 0.0
+            if 'is_revision' in df.columns:
+                rev = float(pd.to_numeric(df[df['is_revision'] == 1]['procedure_count'], errors='coerce').fillna(0).sum())
+            else:
+                # Fallback: revision not tagged
+                rev = 0.0
+            return rev, total
 
         def _pct(rev: float, tot: float) -> float:
             return (rev / tot * 100.0) if tot and tot > 0 else 0.0
@@ -2066,15 +2061,14 @@ with tab_activity:
         )
 
         if ytd_rev:
-            h_rev, h_tot = _sum_rev_2025([selected_hospital_id])
-            n_rev, n_tot = _sum_rev_2025(ids_all_rev)
-            r_rev, r_tot = _sum_rev_2025(ids_reg_rev)
-            c_rev, c_tot = _sum_rev_2025(ids_cat_rev)
+            years_list = [2025]
         else:
-            h_rev, h_tot = _sum_rev_period([selected_hospital_id])
-            n_rev, n_tot = _sum_rev_period(ids_all_rev)
-            r_rev, r_tot = _sum_rev_period(ids_reg_rev)
-            c_rev, c_tot = _sum_rev_period(ids_cat_rev)
+            years_list = [2021, 2022, 2023, 2024, 2025]
+
+        h_rev, h_tot = _sum_rev_from_details([selected_hospital_id], years_list)
+        n_rev, n_tot = _sum_rev_from_details(ids_all_rev, years_list)
+        r_rev, r_tot = _sum_rev_from_details(ids_reg_rev, years_list)
+        c_rev, c_tot = _sum_rev_from_details(ids_cat_rev, years_list)
 
         cols = st.columns(4)
         vals = [
