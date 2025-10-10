@@ -2035,16 +2035,24 @@ with tab_activity:
             return rev, total
 
         def _sum_rev_from_vda_2025(ids: list[str] | None) -> tuple[float, float]:
+            # Numerator from REDO file, denominator from VDA TOT
+            try:
+                redo = pd.read_csv('data/export_TAB_REDO_HOP.csv', dtype={'finessGeoDP': str, 'annee': int})
+            except Exception:
+                redo = pd.DataFrame()
             vda = _load_vda_year_totals_summary()
-            if vda.empty:
+            if vda.empty or redo.empty:
                 return 0.0, 0.0
+            r = redo[redo['annee'] == 2025].copy()
             d = vda[vda['annee'] == 2025].copy()
             if ids:
-                d = d[d['finessGeoDP'].astype(str).isin([str(i) for i in ids])]
-            if d.empty:
+                ids_s = [str(i) for i in ids]
+                r = r[r['finessGeoDP'].astype(str).isin(ids_s)]
+                d = d[d['finessGeoDP'].astype(str).isin(ids_s)]
+            if r.empty or d.empty:
                 return 0.0, 0.0
-            rev = float(pd.to_numeric(d[d.get('vda') == 'REV'].get('VOL', 0), errors='coerce').fillna(0).sum())
-            # Sum of per-hospital TOT maxima (to avoid double counting across approaches)
+            # revisions are where redo == 1, count in column 'n'
+            rev = float(pd.to_numeric(r[r.get('redo') == 1].get('n', 0), errors='coerce').fillna(0).sum())
             tot = float(pd.to_numeric(d.get('TOT', 0), errors='coerce').fillna(0).groupby(d['finessGeoDP']).max().sum())
             return rev, tot
 
