@@ -2034,6 +2034,20 @@ with tab_activity:
                 rev = 0.0
             return rev, total
 
+        def _sum_rev_from_vda_2025(ids: list[str] | None) -> tuple[float, float]:
+            vda = _load_vda_year_totals_summary()
+            if vda.empty:
+                return 0.0, 0.0
+            d = vda[vda['annee'] == 2025].copy()
+            if ids:
+                d = d[d['finessGeoDP'].astype(str).isin([str(i) for i in ids])]
+            if d.empty:
+                return 0.0, 0.0
+            rev = float(pd.to_numeric(d[d.get('vda') == 'REV'].get('VOL', 0), errors='coerce').fillna(0).sum())
+            # Sum of per-hospital TOT maxima (to avoid double counting across approaches)
+            tot = float(pd.to_numeric(d.get('TOT', 0), errors='coerce').fillna(0).groupby(d['finessGeoDP']).max().sum())
+            return rev, tot
+
         def _pct(rev: float, tot: float) -> float:
             return (rev / tot * 100.0) if tot and tot > 0 else 0.0
 
@@ -2060,14 +2074,18 @@ with tab_activity:
         )
 
         if ytd_rev:
-            years_list = [2025]
+            # Use VDA for 2025 YTD
+            h_rev, h_tot = _sum_rev_from_vda_2025([selected_hospital_id])
+            n_rev, n_tot = _sum_rev_from_vda_2025(ids_all_rev)
+            r_rev, r_tot = _sum_rev_from_vda_2025(ids_reg_rev)
+            c_rev, c_tot = _sum_rev_from_vda_2025(ids_cat_rev)
         else:
-            years_list = [2021, 2022, 2023, 2024, 2025]
-
-        h_rev, h_tot = _sum_rev_from_details([selected_hospital_id], years_list)
-        n_rev, n_tot = _sum_rev_from_details(ids_all_rev, years_list)
-        r_rev, r_tot = _sum_rev_from_details(ids_reg_rev, years_list)
-        c_rev, c_tot = _sum_rev_from_details(ids_cat_rev, years_list)
+            # Aggregate 2021–2024 from detailed procedures
+            years_list = [2021, 2022, 2023, 2024]
+            h_rev, h_tot = _sum_rev_from_details([selected_hospital_id], years_list)
+            n_rev, n_tot = _sum_rev_from_details(ids_all_rev, years_list)
+            r_rev, r_tot = _sum_rev_from_details(ids_reg_rev, years_list)
+            c_rev, c_tot = _sum_rev_from_details(ids_cat_rev, years_list)
 
         cols = st.columns(4)
         vals = [
