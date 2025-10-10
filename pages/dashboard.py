@@ -2662,6 +2662,106 @@ with tab_complications:
     except Exception as e:
         st.caption(f"Funnel plot unavailable: {e}")
 
+    # --- Complication rate by Clavien–Dindo grade (3–5) + Never events ---
+    try:
+        st.markdown("#### Complication rate by Clavien–Dindo grade (90 days)")
+
+        cl_src = clavien.copy()
+        if cl_src is None or cl_src.empty:
+            st.info('No Clavien–Dindo dataset available.')
+        else:
+            cl_src['hospital_id'] = cl_src.get('hospital_id', '').astype(str)
+            cl_src['year'] = pd.to_numeric(cl_src.get('year'), errors='coerce')
+            # Focus on 2021–2025 inclusive
+            cl_src = cl_src[(cl_src['year'] >= 2021) & (cl_src['year'] <= 2025)]
+
+            def _extract_region_from_details(row) -> str | None:
+                try:
+                    for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                        if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                            return str(row[key]).strip()
+                except Exception:
+                    return None
+                return None
+
+            region_val_g = _extract_region_from_details(selected_hospital_details)
+            ids_all_g = establishments['id'].astype(str).unique().tolist() if 'id' in establishments.columns else []
+            ids_reg_g = (
+                establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_val_g)]['id'].astype(str).unique().tolist()
+                if region_val_g is not None and 'id' in establishments.columns else []
+            )
+            status_val_g = str(selected_hospital_details.get('statut', '')).strip()
+            ids_cat_g = (
+                establishments[establishments.get('statut','').astype(str).str.strip() == status_val_g]['id'].astype(str).unique().tolist()
+                if 'statut' in establishments.columns else []
+            )
+
+            def _sum_unique_totals(df: pd.DataFrame, id_col: str) -> float:
+                if 'year' in df.columns and 'total' in df.columns:
+                    try:
+                        grouped = df.groupby([id_col, 'year'], as_index=False)['total'].max()
+                        return float(pd.to_numeric(grouped['total'], errors='coerce').fillna(0).sum())
+                    except Exception:
+                        return float(pd.to_numeric(df.get('total', 0), errors='coerce').fillna(0).sum())
+                return float(pd.to_numeric(df.get('total', 0), errors='coerce').fillna(0).sum())
+
+            def _grade_rates_for_ids(ids: list[str] | None) -> tuple[dict, tuple[int, int]]:
+                df = cl_src.copy()
+                if ids:
+                    df = df[df['hospital_id'].isin([str(i) for i in ids])]
+                if df.empty:
+                    return ({3: 0.0, 4: 0.0, 5: 0.0}, (0, 0))
+                totals = _sum_unique_totals(df, 'hospital_id')
+                out = {}
+                g5_n = 0
+                for g in [3, 4, 5]:
+                    gsum = int(pd.to_numeric(df[df.get('clavien_category') == g].get('count', 0), errors='coerce').fillna(0).sum())
+                    out[g] = (gsum / totals * 100.0) if totals > 0 else 0.0
+                    if g == 5:
+                        g5_n = gsum
+                return out, (g5_n, int(totals))
+
+            # Compute for four groups
+            rates_h, death_h = _grade_rates_for_ids([selected_hospital_id])
+            rates_n, death_n = _grade_rates_for_ids(ids_all_g)
+            rates_r, death_r = _grade_rates_for_ids(ids_reg_g)
+            rates_c, death_c = _grade_rates_for_ids(ids_cat_g)
+
+            # Build grouped bar data
+            rows = []
+            for grade in [3, 4, 5]:
+                rows.append({'Grade': f'grade {grade}', 'Group': 'Hospital', 'Rate': rates_h.get(grade, 0.0)})
+                rows.append({'Grade': f'grade {grade}', 'Group': 'National', 'Rate': rates_n.get(grade, 0.0)})
+                rows.append({'Grade': f'grade {grade}', 'Group': 'Regional', 'Rate': rates_r.get(grade, 0.0)})
+                rows.append({'Grade': f'grade {grade}', 'Group': 'Same status', 'Rate': rates_c.get(grade, 0.0)})
+            df_bar = pd.DataFrame(rows)
+            COLORS = {
+                'Hospital': '#0b4f6c',
+                'National': '#f2a777',
+                'Regional': '#16a34a',
+                'Same status': '#d946ef',
+            }
+            fig_g = px.bar(df_bar, x='Grade', y='Rate', color='Group', barmode='group', color_discrete_map=COLORS)
+            fig_g.update_layout(height=360, yaxis_title='Rate (%)', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            fig_g.update_yaxes(range=[0, max(8, df_bar['Rate'].max()*1.3)])
+            fig_g.update_traces(hovertemplate='%{fullData.name}<br>%{x}: %{y:.1f}%<extra></extra>')
+
+            # Layout: chart on left, never events card on right
+            left, right = st.columns([2, 1])
+            with left:
+                st.plotly_chart(fig_g, use_container_width=True)
+            with right:
+                st.markdown("<div style='font-weight:700;font-size:1.1rem;text-align:center'>Never events (death)</div>", unsafe_allow_html=True)
+                def _fmt(n, d):
+                    pct = (n / d * 100.0) if d > 0 else 0.0
+                    return f"{n:,}/{d:,} ({pct:.1f}%)"
+                st.markdown(f"**Hospital**: {_fmt(*death_h)}")
+                st.markdown(f"**National**: {_fmt(*death_n)}")
+                st.markdown(f"**Regional**: {_fmt(*death_r)}")
+                st.markdown(f"**Same status**: {_fmt(*death_c)}")
+    except Exception as e:
+        st.caption(f"Clavien grade chart unavailable: {e}")
+
     hosp_comp = _get_hospital_complications(complications, str(selected_hospital_id)).sort_values('quarter_date')
     # Global note if 2025 data is present (YTD)
     has_2025_data = False
