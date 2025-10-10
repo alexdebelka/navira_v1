@@ -2111,6 +2111,145 @@ with tab_activity:
     except Exception as e:
         st.caption(f"Revisional rate unavailable: {e}")
     
+    # --- Lollipop: Revisional rate per hospital (latest year with best coverage) ---
+    try:
+        st.markdown("#### Revisional rate — hospitals (latest year)")
+
+        scope_rr = st.radio(
+            "Compare against",
+            ["National", "Regional", "Same category"],
+            horizontal=True,
+            index=0,
+            key=f"lollipop_rev_scope_{selected_hospital_id}"
+        )
+
+        def _extract_region_from_details(row) -> str | None:
+            try:
+                for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                    if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                        return str(row[key]).strip()
+            except Exception:
+                return None
+            return None
+
+        region_rr = _extract_region_from_details(selected_hospital_details)
+        ids_all_rr = establishments['id'].astype(str).unique().tolist() if 'id' in establishments.columns else []
+        ids_reg_rr = (
+            establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_rr)]['id'].astype(str).unique().tolist()
+            if region_rr is not None and 'id' in establishments.columns else []
+        )
+        status_rr = str(selected_hospital_details.get('statut', '')).strip()
+        ids_cat_rr = (
+            establishments[establishments.get('statut','').astype(str).str.strip() == status_rr]['id'].astype(str).unique().tolist()
+            if 'statut' in establishments.columns else []
+        )
+
+        if scope_rr == "Regional":
+            ids_filter = ids_reg_rr
+        elif scope_rr == "Same category":
+            ids_filter = ids_cat_rr
+        else:
+            ids_filter = ids_all_rr
+
+        # Helpers to compute revisional rate per hospital for a given year
+        def _rev_rate_year_2025(ids: list[str]) -> pd.DataFrame:
+            try:
+                redo = pd.read_csv('data/export_TAB_REDO_HOP.csv', dtype={'finessGeoDP': str, 'annee': int})
+            except Exception:
+                redo = pd.DataFrame()
+            vda = _load_vda_year_totals_summary()
+            if redo.empty or vda.empty:
+                return pd.DataFrame(columns=['hid','rate'])
+            r = redo[redo['annee'] == 2025].copy()
+            d = vda[vda['annee'] == 2025].copy()
+            if ids:
+                ids_s = [str(i) for i in ids]
+                r = r[r['finessGeoDP'].astype(str).isin(ids_s)]
+                d = d[d['finessGeoDP'].astype(str).isin(ids_s)]
+            if r.empty or d.empty:
+                return pd.DataFrame(columns=['hid','rate'])
+            rev_by_h = (
+                r[r.get('redo') == 1]
+                .groupby('finessGeoDP', as_index=False)['n']
+                .sum()
+                .rename(columns={'finessGeoDP':'hid','n':'rev'})
+            )
+            tot_by_h = (
+                d.groupby('finessGeoDP', as_index=False)['TOT']
+                .max()
+                .rename(columns={'finessGeoDP':'hid','TOT':'tot'})
+            )
+            g = rev_by_h.merge(tot_by_h, on='hid', how='inner')
+            g['rate'] = (pd.to_numeric(g['rev'], errors='coerce') / pd.to_numeric(g['tot'], errors='coerce')) * 100.0
+            g['hid'] = g['hid'].astype(str)
+            return g[['hid','rate']]
+
+        def _rev_rate_year(ids: list[str], year: int) -> pd.DataFrame:
+            df = procedure_details.copy()
+            if df is None or df.empty:
+                return pd.DataFrame(columns=['hid','rate'])
+            df['hospital_id'] = df['hospital_id'].astype(str)
+            df['year'] = pd.to_numeric(df.get('year'), errors='coerce')
+            df = df[df['year'] == year]
+            if ids:
+                df = df[df['hospital_id'].isin([str(i) for i in ids])]
+            if df.empty or 'procedure_count' not in df.columns:
+                return pd.DataFrame(columns=['hid','rate'])
+            grp = df.groupby('hospital_id', as_index=False).agg(
+                total=('procedure_count','sum'),
+                rev=('is_revision', lambda s: (s == 1).sum() if s.notna().any() else 0)
+            ).rename(columns={'hospital_id':'hid'})
+            grp['rate'] = (pd.to_numeric(grp['rev'], errors='coerce') / pd.to_numeric(grp['total'], errors='coerce')) * 100.0
+            grp['hid'] = grp['hid'].astype(str)
+            return grp[['hid','rate']]
+
+        def _get_rev_rate_for_year(year: int, ids: list[str]) -> pd.DataFrame:
+            if year == 2025:
+                return _rev_rate_year_2025(ids)
+            return _rev_rate_year(ids, year)
+
+        # Pick the year with the most hospitals having data
+        best_year = None
+        best_df = pd.DataFrame()
+        for y in [2025, 2024, 2023, 2022, 2021]:
+            dfy = _get_rev_rate_for_year(y, ids_filter)
+            dfy = dfy.dropna(subset=['rate'])
+            if best_year is None or len(dfy) > len(best_df):
+                best_year = y
+                best_df = dfy
+            if len(best_df) >= 200:
+                break
+
+        if best_df.empty:
+            st.info('No revisional data available for this scope.')
+        else:
+            # Names and sorting
+            name_map = establishments.set_index('id')['name'].to_dict() if 'name' in establishments.columns else {}
+            best_df['name'] = best_df['hid'].map(lambda i: name_map.get(i, str(i)))
+            best_df = best_df.sort_values('rate').reset_index(drop=True)
+            x_pos = list(range(1, len(best_df) + 1))
+            colors = ['#FF8C00' if str(h) == str(selected_hospital_id) else '#5DA5DA' for h in best_df['hid']]
+            limit = st.slider("Max hospitals to display", 10, max(10, len(best_df)), len(best_df), key=f"lollipop_rev_limit_{scope_rr}")
+            plot_df = best_df.tail(limit)
+            x_pos = list(range(1, len(plot_df) + 1))
+            colors = ['#FF8C00' if str(h) == str(selected_hospital_id) else '#5DA5DA' for h in plot_df['hid']]
+
+            fig_ll_rev = go.Figure()
+            # Stems
+            for xi, yi, col in zip(x_pos, plot_df['rate'], colors):
+                fig_ll_rev.add_trace(go.Scatter(x=[xi, xi], y=[0, yi], mode='lines', line=dict(color=col, width=2), showlegend=False, hoverinfo='skip'))
+            # Heads
+            fig_ll_rev.add_trace(go.Scatter(x=x_pos, y=plot_df['rate'], mode='markers', marker=dict(color=colors, size=8), showlegend=False, hovertemplate='%{text}<br>Revisional rate: %{y:.0f}%<extra></extra>', text=plot_df['name']))
+            # Legend
+            fig_ll_rev.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(color='#FF8C00', size=8), name='Selected hospital'))
+            fig_ll_rev.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(color='#5DA5DA', size=8), name='Other hospitals'))
+            fig_ll_rev.update_layout(height=360, xaxis_title='Hospitals', yaxis_title='Revisional rate (%)', yaxis=dict(range=[0,100]), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(showticklabels=False))
+            st.plotly_chart(fig_ll_rev, use_container_width=True)
+            if best_year == 2025:
+                st.caption('2025 YTD (until July)')
+    except Exception as e:
+        st.caption(f"Revisional lollipop unavailable: {e}")
+
     # Procedure share (3 buckets)
     proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
     if proc_codes:
