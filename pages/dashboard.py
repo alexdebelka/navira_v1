@@ -2751,14 +2751,37 @@ with tab_complications:
             with left:
                 st.plotly_chart(fig_g, use_container_width=True)
             with right:
-                st.markdown("<div style='font-weight:700;font-size:1.1rem;text-align:center'>Never events (death)</div>", unsafe_allow_html=True)
                 def _fmt(n, d):
                     pct = (n / d * 100.0) if d > 0 else 0.0
-                    return f"{n:,}/{d:,} ({pct:.1f}%)"
-                st.markdown(f"**Hospital**: {_fmt(*death_h)}")
-                st.markdown(f"**National**: {_fmt(*death_n)}")
-                st.markdown(f"**Regional**: {_fmt(*death_r)}")
-                st.markdown(f"**Same status**: {_fmt(*death_c)}")
+                    return f"{n:,}/{d:,}", f"{pct:.1f}%"
+
+                rows = [
+                    ("Hospital", * _fmt(*death_h), "#0b4f6c"),
+                    ("National", * _fmt(*death_n), "#f2a777"),
+                    ("Regional", * _fmt(*death_r), "#16a34a"),
+                    ("Same status", * _fmt(*death_c), "#d946ef"),
+                ]
+                # Inline CSS for a clear, carded table
+                css = """
+                <style>
+                  .nv-ne-card { border:1px solid rgba(255,255,255,.2); border-radius:10px; padding:12px 14px; background:rgba(255,255,255,.04); }
+                  .nv-ne-title { font-weight:800; font-size:1.05rem; text-align:center; margin:0 0 8px 0; }
+                  .nv-ne-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border-radius:8px; margin:6px 0; background:rgba(0,0,0,.15); }
+                  .nv-ne-left { display:flex; align-items:center; gap:10px; font-weight:600; }
+                  .nv-ne-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+                  .nv-ne-num { font-weight:800; font-size:1.05rem; }
+                  .nv-ne-pct { font-weight:700; opacity:.85; margin-left:8px; }
+                </style>
+                """
+                html = [css, "<div class='nv-ne-card'>",
+                        "<div class='nv-ne-title'>Never events (death)</div>"]
+                for label, frac, pct, color in rows:
+                    html.append(
+                        f"<div class='nv-ne-row'><div class='nv-ne-left'><span class='nv-ne-dot' style='background:{color}'></span>{label}</div>"
+                        f"<div><span class='nv-ne-num'>{frac}</span><span class='nv-ne-pct'> ({pct})</span></div></div>"
+                    )
+                html.append("</div>")
+                st.markdown("".join(html), unsafe_allow_html=True)
     except Exception as e:
         st.caption(f"Clavien grade chart unavailable: {e}")
 
