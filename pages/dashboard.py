@@ -1596,7 +1596,7 @@ with tab_activity:
             # Names for hover
             name_map = establishments.set_index('id')['name'].to_dict() if 'name' in establishments.columns else {}
             others['name'] = others['id'].map(lambda i: name_map.get(i, str(i)))
-            sel['name'] = sel['id'].map(lambda i: name_map.get(i, str(i)))
+            sel_all['name'] = sel_all['id'].map(lambda i: name_map.get(i, str(i)))
 
             fig_sc = go.Figure()
             # Others (dots)
