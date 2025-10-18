@@ -1219,6 +1219,7 @@ with tab_activity:
                 fig_h_big.update_layout(height=340, xaxis_title='Year', yaxis_title='Number of procedures', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(type='category'))
                 fig_h_big.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                 st.plotly_chart(fig_h_big, use_container_width=True)
+                st.caption('Yearly total surgeries at the selected hospital. If 2025 is present, values are year‑to‑date.')
             with b2:
                 # Reuse previously computed yoy_text (2025 YTD vs 2024 from monthly data if available)
                 if 'yoy_text' in locals() or 'yoy_text' in globals():
@@ -1374,6 +1375,7 @@ with tab_activity:
                     fig_nat_small = px.bar(nat_avg_plot, x='annee', y='avg', title='National — Avg surgeries per hospital', color_discrete_sequence=['#E9A23B'])
                     fig_nat_small.update_layout(height=260, xaxis_title='Year', yaxis_title='Avg surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(type='category'))
                     st.plotly_chart(fig_nat_small, use_container_width=True)
+                    st.caption('Average number of surgeries per hospital across France, by year. Use as a national baseline.')
                 with s2:
                     val = _yoy_bubble_for_group(all_ids)
                     if val is not None:
@@ -1391,6 +1393,7 @@ with tab_activity:
                     fig_reg = px.bar(reg_avg_plot, x='annee', y='avg', title='Regional — Avg surgeries per hospital', color_discrete_sequence=['#4ECDC4'])
                     fig_reg.update_layout(height=260, xaxis_title='Year', yaxis_title='Avg surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(type='category'))
                     st.plotly_chart(fig_reg, use_container_width=True)
+                    st.caption('Average number of surgeries per hospital in your region, by year. Compares regional peers.')
                 with s2:
                     val = _yoy_bubble_for_group(reg_ids)
                     if val is not None:
@@ -1408,6 +1411,7 @@ with tab_activity:
                     fig_cat = px.bar(cat_avg_plot, x='annee', y='avg', title='Same category — Avg surgeries per hospital', color_discrete_sequence=['#A78BFA'])
                     fig_cat.update_layout(height=260, xaxis_title='Year', yaxis_title='Avg surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(type='category'))
                     st.plotly_chart(fig_cat, use_container_width=True)
+                    st.caption('Average number of surgeries per hospital for institutions with similar status/labels.')
                 with s2:
                     val = _yoy_bubble_for_group(est_cat_ids)
                     if val is not None:
@@ -1527,6 +1531,7 @@ with tab_activity:
             fig_ll.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(color='#5DA5DA', size=8), name='Other hospitals'))
             fig_ll.update_layout(height=360, xaxis_title='Hospitals', yaxis_title='Number of procedures', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(showticklabels=False))
             st.plotly_chart(fig_ll, use_container_width=True)
+            st.caption('Each dot is a hospital; stems show procedure volume. Orange highlights this hospital.')
             if year_candidate == 2025:
                 st.caption('2025 YTD (until July)')
         else:
@@ -1631,6 +1636,7 @@ with tab_activity:
                 plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
             )
             st.plotly_chart(fig_sc, use_container_width=True)
+            st.caption('Sleeve share (x) vs bypass share (y) across hospitals/years. Orange dot is this hospital’s 2021–2025 average.')
     except Exception as e:
         st.caption(f"Scatter unavailable: {e}")
     
@@ -1692,6 +1698,7 @@ with tab_activity:
                 )
                 
                 st.plotly_chart(fig_monthly, use_container_width=True)
+                st.caption('Monthly procedure totals with a 12‑month rolling average for trend context.')
                 
                 # Show procedure-specific monthly trends
                 with st.expander("📊 View by Procedure Type"):
@@ -1729,6 +1736,7 @@ with tab_activity:
                         )
                         
                         st.plotly_chart(fig_by_proc, use_container_width=True)
+                        st.caption('Monthly volumes split by procedure type for the selected hospital.')
     except Exception as e:
         st.warning(f"Could not load monthly volume data: {e}")
     
@@ -1851,9 +1859,13 @@ with tab_activity:
 
         c1, c2, c3, c4 = st.columns(4)
         with c1: _plot_donut('Hospital', cas_h)
+        st.caption('Share of procedures at the hospital (2021–2025 or last 12 months, depending on selection).')
         with c2: _plot_donut('National', cas_n)
+        st.caption('National procedure mix over the same period to benchmark against the hospital.')
         with c3: _plot_donut('Regional', cas_r)
+        st.caption('Regional procedure mix over the same period to compare with nearby peers.')
         with c4: _plot_donut('Same category', cas_c)
+        st.caption('Procedure mix for institutions with similar status/labels over the same period.')
         if use_last12:
             st.caption("Last 12 months based on monthly data; if unavailable, falls back to 2021–2025 aggregate.")
     except Exception as e:
@@ -2274,6 +2286,7 @@ with tab_activity:
                 fig_bar_h = px.bar(al, x='annee', y='Share', color='Approach', barmode='stack', color_discrete_map=APPROACH_COLORS)
                 fig_bar_h.update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig_bar_h, use_container_width=True)
+                st.caption('Year‑over‑year share of surgical approaches at the hospital (bars sum to 100%).')
         
         # Build National dataset
             st.markdown("")
@@ -2350,6 +2363,7 @@ with tab_activity:
                             fig_nat3 = px.bar(nat_appr_df, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=COLORS_NAT)
                             fig_nat3.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                             st.plotly_chart(fig_nat3, use_container_width=True)
+                            st.caption('National share of surgical approaches by year. Helps benchmark technique mix.')
                         else:
                             st.info('No national approach data.')
 
@@ -2359,6 +2373,7 @@ with tab_activity:
                             fig_r = px.bar(reg_share, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=COLORS_REG)
                             fig_r.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                             st.plotly_chart(fig_r, use_container_width=True)
+                            st.caption('Regional share of surgical approaches by year for peer comparison.')
                         else:
                             st.info('No regional approach data.')
 
@@ -2368,6 +2383,7 @@ with tab_activity:
                             fig_c = px.bar(cat_share, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map=COLORS_CAT)
                             fig_c.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                             st.plotly_chart(fig_c, use_container_width=True)
+                            st.caption('Same‑category share of surgical approaches by year for like‑for‑like comparison.')
                         else:
                             st.info('No same-category approach data.')
             except Exception as e:
@@ -2463,6 +2479,7 @@ with tab_activity:
                             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
                         )
                         st.plotly_chart(fig_rs2, use_container_width=True)
+                        st.caption('Each point is a hospital’s average (2021–2025). Compares volume with robotic adoption; orange marks this hospital.')
             except Exception as e:
                 st.caption(f"Robot share plot unavailable: {e}")
         
