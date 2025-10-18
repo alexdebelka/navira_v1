@@ -1583,7 +1583,10 @@ with tab_activity:
     
     # --- Scatter: Sleeve vs Bypass share (%) ---
     try:
-        st.markdown("#### Sleeve & Bypass share (%)")
+        st.markdown("""
+        <div class='nv-section'>
+          <div class='nv-section-title'>Sleeve & Bypass share (%)</div>
+        """, unsafe_allow_html=True)
 
         # Build grouping ids (national, regional, same status across France)
         def _extract_region_from_details(row) -> str | None:
@@ -1681,6 +1684,7 @@ with tab_activity:
             st.caption('Sleeve share (x) vs bypass share (y) across hospitals/years. Orange dot is this hospital’s 2021–2025 average.')
     except Exception as e:
         st.caption(f"Scatter unavailable: {e}")
+    st.markdown("</div>", unsafe_allow_html=True)
     
     # Monthly procedure volume trends
     try:
@@ -2343,7 +2347,10 @@ with tab_activity:
     appr_codes = [c for c in SURGICAL_APPROACH_NAMES.keys() if c in selected_hospital_all_data.columns]
     if appr_codes:
         # Hospital chart alone (full width)
-            st.markdown("#### Hospital: Surgical Approaches (share %)")
+            st.markdown("""
+            <div class='nv-section'>
+              <div class='nv-section-title'>Hospital: Surgical Approaches (share %)</div>
+            """, unsafe_allow_html=True)
             appr_df = selected_hospital_all_data[['annee']+appr_codes].copy()
             appr_long = []
             for _, r in appr_df.iterrows():
@@ -2358,6 +2365,7 @@ with tab_activity:
                 fig_bar_h.update_layout(height=360, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig_bar_h, use_container_width=True)
                 st.caption('Year‑over‑year share of surgical approaches at the hospital (bars sum to 100%).')
+            st.markdown("</div>", unsafe_allow_html=True)
         
         # Build National dataset
             st.markdown("")
