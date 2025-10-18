@@ -1377,7 +1377,7 @@ with tab_activity:
                 with s2:
                     val = _yoy_bubble_for_group(all_ids)
                     if val is not None:
-                        st.markdown(f"<div class='nv-bubble teal' style='width:90px;height:90px;font-size:1.2rem'>{val}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='nv-bubble' style='background:#E9A23B;width:90px;height:90px;font-size:1.2rem'>{val}</div>", unsafe_allow_html=True)
                         st.caption('2025 YTD (until July)')
             else:
                 st.info('National data unavailable.')
@@ -1394,7 +1394,7 @@ with tab_activity:
                 with s2:
                     val = _yoy_bubble_for_group(reg_ids)
                     if val is not None:
-                        st.markdown(f"<div class='nv-bubble purple' style='width:90px;height:90px;font-size:1.2rem'>{val}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='nv-bubble' style='background:#4ECDC4;width:90px;height:90px;font-size:1.2rem'>{val}</div>", unsafe_allow_html=True)
                         st.caption('2025 YTD (until July)')
             else:
                 st.info('Regional data unavailable for this hospital.')
@@ -1411,7 +1411,7 @@ with tab_activity:
                 with s2:
                     val = _yoy_bubble_for_group(est_cat_ids)
                     if val is not None:
-                        st.markdown(f"<div class='nv-bubble teal' style='width:90px;height:90px;font-size:1.2rem'>{val}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='nv-bubble' style='background:#A78BFA;width:90px;height:90px;font-size:1.2rem'>{val}</div>", unsafe_allow_html=True)
                         st.caption('2025 YTD (until July)')
             else:
                 st.info('No matching category group could be formed for this hospital.')
