@@ -125,6 +125,12 @@ st.markdown("""
           border-radius: 50%;
           background: #7c3aed;
         }
+        /* Make main container a grid so cards align like a dashboard */
+        .main .block-container { display:grid; grid-template-columns: repeat(12, minmax(0,1fr)); grid-auto-rows: 110px; gap: 18px; }
+        /* Let nv-section become direct grid items by removing wrapper layout */
+        .stMarkdown:has(.nv-section) { display: contents; }
+        /* Default span for cards if none specified */
+        .nv-section { grid-column: span 12; grid-row: span 2; }
         /* Responsive grid for cards */
         .nv-grid { display:grid; grid-template-columns: repeat(12, minmax(0,1fr)); grid-auto-rows: 110px; gap: 18px; }
         .nv-span-6x3 { grid-column: span 6; grid-row: span 3; }
