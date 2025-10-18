@@ -1520,18 +1520,8 @@ with tab_activity:
             # Stems
             for xi, yi, col in zip(x_pos, grp['total'], colors):
                 fig_ll.add_trace(go.Scatter(x=[xi, xi], y=[0, yi], mode='lines', line=dict(color=col, width=2), showlegend=False, hoverinfo='skip'))
-            # Heads with labels
-            fig_ll.add_trace(go.Scatter(
-                x=x_pos,
-                y=grp['total'],
-                mode='markers+text',
-                marker=dict(color=colors, size=8),
-                text=grp['name'],
-                textposition='top center',
-                textfont=dict(size=10),
-                showlegend=False,
-                hovertemplate='%{text}<br>Procedures: %{y:,}<extra></extra>'
-            ))
+            # Heads
+            fig_ll.add_trace(go.Scatter(x=x_pos, y=grp['total'], mode='markers', marker=dict(color=colors, size=8), showlegend=False, hovertemplate='%{text}<br>Procedures: %{y:,}<extra></extra>', text=grp['name']))
             # Pseudo-legend using dummy markers
             fig_ll.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(color='#FF8C00', size=8), name='Selected hospital'))
             fig_ll.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(color='#5DA5DA', size=8), name='Other hospitals'))
@@ -1611,13 +1601,11 @@ with tab_activity:
             fig_sc = go.Figure()
             # Others (dots)
             fig_sc.add_trace(go.Scatter(
-                x=others['_sleeve_pct'], y=others['_bypass_pct'], mode='markers+text',
+                x=others['_sleeve_pct'], y=others['_bypass_pct'], mode='markers',
                 marker=dict(color='#60a5fa', size=6, opacity=0.7),
                 name='Other hospitals',
                 hovertemplate='%{text}<br>Sleeve: %{x:.0f}%<br>Bypass: %{y:.0f}%<extra></extra>',
-                text=others['name'],
-                textposition='top center',
-                textfont=dict(size=10)
+                text=others['name']
             ))
             # Selected hospital (single average point across 2021–2025)
             if not sel_all.empty:
@@ -1631,13 +1619,10 @@ with tab_activity:
                     name_map = establishments.set_index('id')['name'].to_dict() if 'name' in establishments.columns else {}
                     sel_name = name_map.get(str(selected_hospital_id), str(selected_hospital_id))
                     fig_sc.add_trace(go.Scatter(
-                        x=[x_avg], y=[y_avg], mode='markers+text',
+                        x=[x_avg], y=[y_avg], mode='markers',
                         marker=dict(color='#FF8C00', size=12, line=dict(color='white', width=1)),
                         name='Selected hospital (avg)',
-                        hovertemplate=f'{sel_name}<br>Sleeve: %{{x:.0f}}%<br>Bypass: %{{y:.0f}}%<extra></extra>',
-                        text=[sel_name],
-                        textposition='top center',
-                        textfont=dict(size=11)
+                        hovertemplate=f'{sel_name}<br>Sleeve: %{{x:.0f}}%<br>Bypass: %{{y:.0f}}%<extra></extra>'
                     ))
             fig_sc.update_layout(
                 height=380,
@@ -1991,26 +1976,22 @@ with tab_activity:
             fig_rbs.add_trace(go.Scatter(
                 x=others['total_procedures_year'],
                 y=others['_robot_share'],
-                mode='markers+text',
+                mode='markers',
                 marker=dict(color='#60a5fa', size=6, opacity=0.75),
                 name='Other hospitals',
                 hovertemplate='%{text}<br>Procedures: %{x:,}<br>Robot share: %{y:.0f}%<extra></extra>',
-                text=others['name'],
-                textposition='top center',
-                textfont=dict(size=10)
+                text=others['name']
             ))
             # selected
             if not sel.empty:
                 fig_rbs.add_trace(go.Scatter(
                     x=sel['total_procedures_year'],
                     y=sel['_robot_share'],
-                    mode='markers+text',
+                    mode='markers',
                     marker=dict(color='#FF8C00', size=10, line=dict(color='white', width=1)),
                     name='Selected hospital',
                     hovertemplate='%{text}<br>Procedures: %{x:,}<br>Robot share: %{y:.0f}%<extra></extra>',
-                    text=sel['name'],
-                    textposition='top center',
-                    textfont=dict(size=11)
+                    text=sel['name']
                 ))
             fig_rbs.update_layout(
                 height=380,
@@ -2650,18 +2631,16 @@ with tab_complications:
                 fig_fp = go.Figure()
                 # Others
                 fig_fp.add_trace(go.Scatter(
-                    x=others['total'], y=others['rate'], mode='markers+text',
+                    x=others['total'], y=others['rate'], mode='markers',
                     marker=dict(color='#60a5fa', size=6, opacity=0.75), name='Other hospitals',
-                    hovertemplate='%{text}<br>Volume: %{x:,}<br>Rate: %{y:.1%}<extra></extra>', text=others['name'],
-                    textposition='top center', textfont=dict(size=10)
+                    hovertemplate='%{text}<br>Volume: %{x:,}<br>Rate: %{y:.1%}<extra></extra>', text=others['name']
                 ))
                 # Selected
                 if not sel.empty:
                     fig_fp.add_trace(go.Scatter(
-                        x=sel['total'], y=sel['rate'], mode='markers+text',
+                        x=sel['total'], y=sel['rate'], mode='markers',
                         marker=dict(color='#FF8C00', size=12, line=dict(color='white', width=1)), name='Selected hospital',
-                        hovertemplate='%{text}<br>Volume: %{x:,}<br>Rate: %{y:.1%}<extra></extra>', text=sel['name'],
-                        textposition='top center', textfont=dict(size=11)
+                        hovertemplate='%{text}<br>Volume: %{x:,}<br>Rate: %{y:.1%}<extra></extra>', text=sel['name']
                     ))
                 # Mean line
                 fig_fp.add_trace(go.Scatter(x=[vol.min(), vol.max()], y=[p_bar, p_bar], mode='lines', line=dict(color='#888', width=1, dash='solid'), name='Mean'))
@@ -3189,17 +3168,15 @@ with tab_complications:
                             oth = merged[merged['hid'] != str(selected_hospital_id)]
                             fig_los_sc = go.Figure()
                             fig_los_sc.add_trace(go.Scatter(
-                                x=oth['avg_vol'], y=oth['ge7_pct'], mode='markers+text',
+                                x=oth['avg_vol'], y=oth['ge7_pct'], mode='markers',
                                 marker=dict(color='#60a5fa', size=6, opacity=0.75), name='Other hospitals',
-                                hovertemplate='%{text}<br>Avg volume: %{x:.0f}<br>% ≥7 days: %{y:.0f}%<extra></extra>', text=oth['name'],
-                                textposition='top center', textfont=dict(size=10)
+                                hovertemplate='%{text}<br>Avg volume: %{x:.0f}<br>% ≥7 days: %{y:.0f}%<extra></extra>', text=oth['name']
                             ))
                             if not sel.empty:
                                 fig_los_sc.add_trace(go.Scatter(
-                                    x=sel['avg_vol'], y=sel['ge7_pct'], mode='markers+text',
+                                    x=sel['avg_vol'], y=sel['ge7_pct'], mode='markers',
                                     marker=dict(color='#FF8C00', size=12, line=dict(color='white', width=1)), name='Selected hospital',
-                                    hovertemplate='%{text}<br>Avg volume: %{x:.0f}<br>% ≥7 days: %{y:.0f}%<extra></extra>', text=sel['name'],
-                                    textposition='top center', textfont=dict(size=11)
+                                    hovertemplate='%{text}<br>Avg volume: %{x:.0f}<br>% ≥7 days: %{y:.0f}%<extra></extra>', text=sel['name']
                                 ))
                             fig_los_sc.update_layout(height=360, xaxis_title='Number of procedures per year (any approach)', yaxis_title='≥7 day of admission (%)', yaxis=dict(range=[0,100]), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                             st.plotly_chart(fig_los_sc, use_container_width=True)
