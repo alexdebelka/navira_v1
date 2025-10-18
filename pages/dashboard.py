@@ -95,9 +95,36 @@ st.markdown("""
         .nv-bubble.green { background:#16a34a; }
         .nv-bubble.pink { background:#d946ef; }
         .nv-bubble-label { text-align:center; font-weight:600; margin-top:6px; }
-        /* Section cards */
-        .nv-section { border: 1px solid rgba(255,255,255,.12); border-radius: 14px; padding: 14px 16px; background: rgba(255,255,255,.04); box-shadow: 0 6px 16px rgba(0,0,0,.18); margin: 14px 0 18px; }
-        .nv-section-title { font-weight: 700; font-size: 1.05rem; color: #e6e6e6; margin: 0 0 8px 0; }
+        /* Section cards — elevated, soft gradient, accent left bar */
+        .nv-section {
+          position: relative;
+          border: 1px solid rgba(255,255,255,.10);
+          border-left: 4px solid #7c3aed; /* accent */
+          border-radius: 14px;
+          padding: 16px 18px;
+          background: linear-gradient(180deg, rgba(255,255,255,.06) 0%, rgba(255,255,255,.03) 100%);
+          box-shadow: 0 10px 26px rgba(0,0,0,.28);
+          backdrop-filter: blur(2px);
+          margin: 16px 0 22px;
+        }
+        .nv-section:hover { box-shadow: 0 14px 30px rgba(0,0,0,.34); }
+        .nv-section-title {
+          font-weight: 800;
+          font-size: 1.08rem;
+          color: #eef;
+          margin: 0 0 10px 0;
+          letter-spacing: .2px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .nv-section-title::before {
+          content: "";
+          display: inline-block;
+          width: 10px; height: 10px;
+          border-radius: 50%;
+          background: #7c3aed;
+        }
     </style>
 """, unsafe_allow_html=True)
 
