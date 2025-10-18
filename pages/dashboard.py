@@ -1839,7 +1839,7 @@ with tab_activity:
             other = float(pd.to_numeric(m12[~m12['baria_t'].isin(['SLE','BPG'])].get('TOT_month_tcn', 0), errors='coerce').fillna(0).sum())
             return {'Sleeve': sleeve, 'Gastric Bypass': bypass, 'Other': other}
 
-        def _plot_donut(title: str, data: dict):
+        def _plot_donut(title: str, data: dict, height: int = 260):
             total = sum(data.values())
             if total <= 0:
                 st.info(f"No data for {title}.")
@@ -1847,7 +1847,7 @@ with tab_activity:
             dfp = pd.DataFrame({'Procedure': list(data.keys()), 'Count': list(data.values())})
             figp = px.pie(dfp, values='Count', names='Procedure', hole=0.55, color='Procedure', color_discrete_map=PROC_COLORS)
             figp.update_traces(textposition='inside', textinfo='percent+label')
-            figp.update_layout(title=title, height=260, showlegend=False, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            figp.update_layout(title=title, height=height, showlegend=False, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(figp, use_container_width=True)
 
         use_last12 = (mode == "Last 12 months")
@@ -1857,15 +1857,23 @@ with tab_activity:
         cas_r = _casemix_last12(ids_reg) if use_last12 else _casemix_period(ids_reg)
         cas_c = _casemix_last12(ids_cat) if use_last12 else _casemix_period(ids_cat)
 
-        c1, c2, c3, c4 = st.columns(4)
-        with c1: _plot_donut('Hospital', cas_h)
-        st.caption('Share of procedures at the hospital (2021–2025 or last 12 months, depending on selection).')
-        with c2: _plot_donut('National', cas_n)
-        st.caption('National procedure mix over the same period to benchmark against the hospital.')
-        with c3: _plot_donut('Regional', cas_r)
-        st.caption('Regional procedure mix over the same period to compare with nearby peers.')
-        with c4: _plot_donut('Same category', cas_c)
-        st.caption('Procedure mix for institutions with similar status/labels over the same period.')
+        # Top row: center the hospital donut and make it larger
+        _sp_l, _center, _sp_r = st.columns([1, 1, 1])
+        with _center:
+            _plot_donut('Hospital', cas_h, height=320)
+            st.caption('Share of procedures at the hospital (2021–2025 or last 12 months, depending on selection).')
+
+        # Second row: three donuts below (National, Regional, Same category)
+        c2, c3, c4 = st.columns(3)
+        with c2:
+            _plot_donut('National', cas_n)
+            st.caption('National procedure mix over the same period to benchmark against the hospital.')
+        with c3:
+            _plot_donut('Regional', cas_r)
+            st.caption('Regional procedure mix over the same period to compare with nearby peers.')
+        with c4:
+            _plot_donut('Same category', cas_c)
+            st.caption('Procedure mix for institutions with similar status/labels over the same period.')
         if use_last12:
             st.caption("Last 12 months based on monthly data; if unavailable, falls back to 2021–2025 aggregate.")
     except Exception as e:
