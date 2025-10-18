@@ -95,6 +95,9 @@ st.markdown("""
         .nv-bubble.green { background:#16a34a; }
         .nv-bubble.pink { background:#d946ef; }
         .nv-bubble-label { text-align:center; font-weight:600; margin-top:6px; }
+        /* Section cards */
+        .nv-section { border: 1px solid rgba(255,255,255,.12); border-radius: 14px; padding: 14px 16px; background: rgba(255,255,255,.04); box-shadow: 0 6px 16px rgba(0,0,0,.18); margin: 14px 0 18px; }
+        .nv-section-title { font-weight: 700; font-size: 1.05rem; color: #e6e6e6; margin: 0 0 8px 0; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -1175,7 +1178,10 @@ with tab_activity:
     
     # --- Big hospital chart: Number of procedures per year ---
     try:
-        st.markdown("#### Hospital — Number of procedures per year")
+        st.markdown("""
+        <div class='nv-section'>
+          <div class='nv-section-title'>Hospital — Number of procedures per year</div>
+        """, unsafe_allow_html=True)
         # Build yearly totals for the selected hospital (2021+)
         hosp_year_counts = (
             selected_hospital_all_data[['annee','total_procedures_year']]
@@ -1229,10 +1235,14 @@ with tab_activity:
             st.info('No annual totals available to plot.')
     except Exception:
         pass
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # --- National, Regional, Same-Category comparisons (average surgeries per hospital) ---
     try:
-        st.markdown("#### National, Regional and Similar-Category Comparisons")
+        st.markdown("""
+        <div class='nv-section'>
+          <div class='nv-section-title'>National, Regional and Similar-Category Comparisons</div>
+        """, unsafe_allow_html=True)
 
         # Helper to extract region value from establishment details
         def _extract_region_from_details(row) -> str | None:
@@ -1421,10 +1431,14 @@ with tab_activity:
                 st.info('No matching category group could be formed for this hospital.')
     except Exception as e:
         st.caption(f"Comparison charts unavailable: {e}")
+    st.markdown("</div>", unsafe_allow_html=True)
     
     # --- Lollipop chart: distribution across hospitals (highlight selected) ---
     try:
-        st.markdown("#### Lollipop — Number of procedures per hospital (latest year)")
+        st.markdown("""
+        <div class='nv-section'>
+          <div class='nv-section-title'>Lollipop — Number of procedures per hospital (latest year)</div>
+        """, unsafe_allow_html=True)
 
         def _extract_region_from_details(row) -> str | None:
             try:
@@ -1538,6 +1552,7 @@ with tab_activity:
             st.info('No hospital totals available for this scope.')
     except Exception as e:
         st.caption(f"Lollipop chart unavailable: {e}")
+    st.markdown("</div>", unsafe_allow_html=True)
     
     # --- Scatter: Sleeve vs Bypass share (%) ---
     try:
@@ -1642,6 +1657,10 @@ with tab_activity:
     
     # Monthly procedure volume trends
     try:
+        st.markdown("""
+        <div class='nv-section'>
+          <div class='nv-section-title'>Monthly Procedure Volume Trends</div>
+        """, unsafe_allow_html=True)
         @st.cache_data(show_spinner=False)
         def _load_monthly_volumes(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.csv") -> pd.DataFrame:
             try:
@@ -1655,7 +1674,7 @@ with tab_activity:
         if not monthly_vol.empty and 'finessGeoDP' in monthly_vol.columns:
             hosp_monthly = monthly_vol[monthly_vol['finessGeoDP'] == str(selected_hospital_id)].copy()
             if not hosp_monthly.empty:
-                st.markdown("#### Monthly Procedure Volume Trends")
+                # Title shown in section header
                 
                 # Create date column for proper time series
                 hosp_monthly['date'] = pd.to_datetime(hosp_monthly['annee'].astype(str) + '-' + hosp_monthly['mois'].astype(str).str.zfill(2) + '-01')
@@ -1739,10 +1758,14 @@ with tab_activity:
                         st.caption('Monthly volumes split by procedure type for the selected hospital.')
     except Exception as e:
         st.warning(f"Could not load monthly volume data: {e}")
+    st.markdown("</div>", unsafe_allow_html=True)
     
     # --- Procedure Casemix (Donut charts) ---
     try:
-        st.markdown("### Procedure casemix")
+        st.markdown("""
+        <div class='nv-section'>
+          <div class='nv-section-title'>Procedure casemix</div>
+        """, unsafe_allow_html=True)
         mode = st.radio(
             "View",
             ["2021–2025", "Last 12 months"],
@@ -1878,10 +1901,14 @@ with tab_activity:
             st.caption("Last 12 months based on monthly data; if unavailable, falls back to 2021–2025 aggregate.")
     except Exception as e:
         st.caption(f"Casemix section unavailable: {e}")
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # --- Robot share scatter (procedures vs robotic share) ---
     try:
-        st.markdown("#### Robot share")
+        st.markdown("""
+        <div class='nv-section'>
+          <div class='nv-section-title'>Robot share</div>
+        """, unsafe_allow_html=True)
         scope_rb = st.radio(
             "Compare against",
             ["National", "Regional", "Same status"],
@@ -2028,10 +2055,14 @@ with tab_activity:
                 st.caption(f'Year used: {year_used}')
     except Exception as e:
         st.caption(f"Robot share scatter unavailable: {e}")
+    st.markdown("</div>", unsafe_allow_html=True)
     
     # --- Revisional rate (bubble quartet) ---
     try:
-        st.markdown("### Revisional rate")
+        st.markdown("""
+        <div class='nv-section'>
+          <div class='nv-section-title'>Revisional rate</div>
+        """, unsafe_allow_html=True)
         ytd_rev = st.toggle("Show 2025 only (data through July)", value=False, key=f"rev_toggle_{selected_hospital_id}")
 
         def _sum_rev_from_details(ids: list[str] | None, years: list[int]) -> tuple[float, float]:
@@ -2131,10 +2162,14 @@ with tab_activity:
             st.caption('2025 YTD (until July)')
     except Exception as e:
         st.caption(f"Revisional rate unavailable: {e}")
+    st.markdown("</div>", unsafe_allow_html=True)
     
     # --- Lollipop: Revisional rate per hospital (latest year with best coverage) ---
     try:
-        st.markdown("#### Revisional rate — hospitals (latest year)")
+        st.markdown("""
+        <div class='nv-section'>
+          <div class='nv-section-title'>Revisional rate — hospitals (latest year)</div>
+        """, unsafe_allow_html=True)
 
         scope_rr = st.radio(
             "Compare against",
@@ -2270,6 +2305,7 @@ with tab_activity:
                 st.caption('2025 YTD (until July)')
     except Exception as e:
         st.caption(f"Revisional lollipop unavailable: {e}")
+    st.markdown("</div>", unsafe_allow_html=True)
     
     # Procedure share (3 buckets)
     proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
