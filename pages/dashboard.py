@@ -125,18 +125,6 @@ st.markdown("""
           border-radius: 50%;
           background: #7c3aed;
         }
-        /* Make main container a grid so cards align like a dashboard */
-        .main .block-container { display:grid; grid-template-columns: repeat(12, minmax(0,1fr)); grid-auto-rows: 110px; gap: 18px; }
-        /* Let nv-section become direct grid items by removing wrapper layout */
-        .stMarkdown:has(.nv-section) { display: contents; }
-        /* Default span for cards if none specified */
-        .nv-section { grid-column: span 12; grid-row: span 2; }
-        /* Responsive grid for cards */
-        .nv-grid { display:grid; grid-template-columns: repeat(12, minmax(0,1fr)); grid-auto-rows: 110px; gap: 18px; }
-        .nv-span-6x3 { grid-column: span 6; grid-row: span 3; }
-        .nv-span-6x4 { grid-column: span 6; grid-row: span 4; }
-        .nv-span-6x5 { grid-column: span 6; grid-row: span 5; }
-        .nv-span-12x2 { grid-column: span 12; grid-row: span 2; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -897,8 +885,6 @@ def _add_recruitment_choropleth_commune_to_map(folium_map, hospital_id, recruitm
 
 with tab_activity:
     st.subheader("Activity Overview")
-    # Begin grid container for cards
-    st.markdown("<div class='nv-grid'>", unsafe_allow_html=True)
     # Show YTD note and available years for quick diagnostics
     try:
         if is_ytd_2025:
@@ -1220,7 +1206,7 @@ with tab_activity:
     # --- Big hospital chart: Number of procedures per year ---
     try:
         st.markdown("""
-        <div class='nv-section nv-span-6x4'>
+        <div class='nv-section'>
           <div class='nv-section-title'>Hospital — Number of procedures per year</div>
         """, unsafe_allow_html=True)
         # Build yearly totals for the selected hospital (2021+)
@@ -1277,13 +1263,11 @@ with tab_activity:
     except Exception:
         pass
     st.markdown("</div>", unsafe_allow_html=True)
-    # Close grid container
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # --- National, Regional, Same-Category comparisons (average surgeries per hospital) ---
     try:
         st.markdown("""
-        <div class='nv-section nv-span-6x4'>
+        <div class='nv-section'>
           <div class='nv-section-title'>National, Regional and Similar-Category Comparisons</div>
         """, unsafe_allow_html=True)
 
@@ -1479,7 +1463,7 @@ with tab_activity:
     # --- Lollipop chart: distribution across hospitals (highlight selected) ---
     try:
         st.markdown("""
-        <div class='nv-section nv-span-12x2'>
+        <div class='nv-section'>
           <div class='nv-section-title'>Lollipop — Number of procedures per hospital (latest year)</div>
         """, unsafe_allow_html=True)
 
@@ -1600,7 +1584,7 @@ with tab_activity:
     # --- Scatter: Sleeve vs Bypass share (%) ---
     try:
         st.markdown("""
-        <div class='nv-section nv-span-6x3'>
+        <div class='nv-section'>
           <div class='nv-section-title'>Sleeve & Bypass share (%)</div>
         """, unsafe_allow_html=True)
 
@@ -1705,7 +1689,7 @@ with tab_activity:
     # Monthly procedure volume trends
     try:
         st.markdown("""
-        <div class='nv-section nv-span-6x3'>
+        <div class='nv-section'>
           <div class='nv-section-title'>Monthly Procedure Volume Trends</div>
         """, unsafe_allow_html=True)
         @st.cache_data(show_spinner=False)
@@ -1810,7 +1794,7 @@ with tab_activity:
     # --- Procedure Casemix (Donut charts) ---
     try:
         st.markdown("""
-        <div class='nv-section nv-span-12x2'>
+        <div class='nv-section'>
           <div class='nv-section-title'>Procedure casemix</div>
         """, unsafe_allow_html=True)
         mode = st.radio(
@@ -1953,7 +1937,7 @@ with tab_activity:
     # --- Robot share scatter (procedures vs robotic share) ---
     try:
         st.markdown("""
-        <div class='nv-section nv-span-6x3'>
+        <div class='nv-section'>
           <div class='nv-section-title'>Robot share</div>
         """, unsafe_allow_html=True)
         scope_rb = st.radio(
@@ -2107,7 +2091,7 @@ with tab_activity:
     # --- Revisional rate (bubble quartet) ---
     try:
         st.markdown("""
-        <div class='nv-section nv-span-6x3'>
+        <div class='nv-section'>
           <div class='nv-section-title'>Revisional rate</div>
         """, unsafe_allow_html=True)
         ytd_rev = st.toggle("Show 2025 only (data through July)", value=False, key=f"rev_toggle_{selected_hospital_id}")
@@ -2214,7 +2198,7 @@ with tab_activity:
     # --- Lollipop: Revisional rate per hospital (latest year with best coverage) ---
     try:
         st.markdown("""
-        <div class='nv-section nv-span-12x2'>
+        <div class='nv-section'>
           <div class='nv-section-title'>Revisional rate — hospitals (latest year)</div>
         """, unsafe_allow_html=True)
 
