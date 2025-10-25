@@ -1,0 +1,293 @@
+﻿ID,Table,Folder,File Rdata,Table summary,Variable,Description
+1,TAB_VOL_HOP_YEAR,Activity,01_volume,Total number of bariatric procedure per year and per hospital,finessGeoDP,"""Finess"" number, identification number for each hospital"
+,,,,,annee,year
+,,,,,n,number of procedures per year per hospital
+2,TAB_VOL_NATL_YEAR,Activity,01_volume,Total number of bariatric procedure per year on a national level (= France),annee,year
+,,,,,n,number of procedures per year in France
+3,TAB_VOL_REG_YEAR,Activity,01_volume,Total number of bariatric procedure per year on a regional level ,lib_reg,Name of the region
+,,,,,annee,year
+,,,,,n,number of procedures per year per region
+4,TAB_VOL_STATUS_YEAR,Activity,01_volume,Total number of bariatric procedure per year per type of hospital (4 types = 4 status),statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,annee,year
+,,,,,n,number of procedures per year per type of hospital
+5,TAB_VOL_HOP_MONTH,Activity,01_volume,"Total number of bariatric procedure per year, per month and per hospital",finessGeoDP,"""Finess"" number, identification number for each hospital"
+,,,,,annee,year
+,,,,,mois,month
+,,,,,n,number of procedures per year and per month per hospital
+6,TAB_TREND_HOP,Activity,02_trends_volume,Difference (%) in number of procedure between 2024 and 2025 at the same period at an hospital level,finessGeoDP,"""Finess"" number, identification number for each hospital"
+,,,,,Vol_2024,Number of procedure in 2024 at the same period
+,,,,,Vol_2025,Number of procedure in 2025 (last solid information)
+,,,,,diff_pct,percentage of difference between 2024 and 2025
+,,,,,rs,"""raison sociale"", full hospital name"
+,,,,,statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,lib_dep,Name of the departement
+,,,,,lib_reg,Name of the region
+,,,,,code_reg,ID  of the region
+7,TAB_TREND_NATL,Activity,02_trends_volume,Difference (%) in number of procedure between 2024 and 2025 at the same period at a national level,Vol_2024,Number of procedure in 2024 at the same period
+,,,,,Vol_2025,Number of procedure in 2025 (last solid information)
+,,,,,diff_pct,percentage of difference between 2024 and 2025
+8,TAB_TREND_REG,Activity,02_trends_volume,Difference (%) in number of procedure between 2024 and 2025 at the same period at a regional level,lib_reg,Name of the region
+,,,,,Vol_2024,Number of procedure in 2024 at the same period
+,,,,,Vol_2025,Number of procedure in 2025 (last solid information)
+,,,,,diff_pct,percentage of difference between 2024 and 2025
+9,TAB_TRENDS_STATUS,Activity,02_trends_volume,Difference (%) in number of procedure between 2024 and 2025 at the same period according to type (statut) of thehospitals,statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,Vol_2024,Number of procedure in 2024 at the same period
+,,,,,Vol_2025,Number of procedure in 2025 (last solid information)
+,,,,,diff_pct,percentage of difference between 2024 and 2025
+10,TAB_TCN_HOP,Activity,03_type_procedure.RData,Number and rate of each different baraitric procedure per hospital,finessGeoDP,"""Finess"" number, identification number for each hospital"
+,,,,,baria_t,type of baraitric procedure
+,,,,,n,number of procedure
+,,,,,pct,% of the specific type on the total number of procedue
+11,TAB_TCN_NATL,Activity,03_type_procedure.RData,Number and rate of each different baraitric procedure on a national level,baria_t,type of baraitric procedure
+,,,,,n,number of procedure
+,,,,,pct,% of the specific type on the total number of procedue
+12,TAB_TCN_REG,Activity,03_type_procedure.RData,Number and rate of each different baraitric procedure per region,lib_reg,Name of the region
+,,,,,baria_t,type of baraitric procedure
+,,,,,n,number of procedure
+,,,,,pct,% of the specific type on the total number of procedue
+13,TAB_TCN_STATUS,Activity,03_type_procedure.RData,Number and rate of each different baraitric procedure per statut of the hospital ,statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,baria_t,type of baraitric procedure
+,,,,,n,number of procedure
+,,,,,pct,% of the specific type on the total number of procedue
+14,TAB_TCN_HOP_12M,Activity,03_type_procedure.RData,Number and rate of each different baraitric procedure per hospital for the last 12 months,finessGeoDP,"""Finess"" number, identification number for each hospital"
+,,,,,baria_t,type of baraitric procedure
+,,,,,n,number of procedure
+,,,,,pct,% of the specific type on the total number of procedue
+15,TAB_TCN_NATL_12M,Activity,03_type_procedure.RData,Number and rate of each different baraitric procedure on a national level for the last 12 months,baria_t,type of baraitric procedure
+,,,,,n,number of procedure
+,,,,,pct,% of the specific type on the total number of procedue
+16,TAB_TCN_REG_12M,Activity,03_type_procedure.RData,Number and rate of each different baraitric procedure per region for the last 12 months,lib_reg,Name of the region
+,,,,,baria_t,type of baraitric procedure
+,,,,,n,number of procedure
+,,,,,pct,% of the specific type on the total number of procedue
+17,TAB_TCN_STATUS_12M,Activity,03_type_procedure.RData,Number and rate of each different baraitric procedure per statut of the hospital for the last 12 months,statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,baria_t,type of baraitric procedure
+,,,,,n,number of procedure
+,,,,,pct,% of the specific type on the total number of procedue
+18,TAB_TCN_HOP_YEAR,Activity,03_type_procedure.RData,Number and rate of each different baraitric procedure per hospital per year,finessGeoDP,"""Finess"" number, identification number for each hospital"
+,,,,,annee,year
+,,,,,baria_t,type of baraitric procedure
+,,,,,n,number of procedure
+,,,,,pct,% of the specific type on the total number of procedue
+19,TAB_TCN_NATL_YEAR,Activity,03_type_procedure.RData,Number and rate of each different baraitric procedure on a national level per year,baria_t,type of baraitric procedure
+,,,,,annee,year
+,,,,,n,number of procedure
+,,,,,pct,% of the specific type on the total number of procedue
+20,TAB_TCN_REG_YEAR,Activity,03_type_procedure.RData,Number and rate of each different baraitric procedure per region per year,lib_reg,Name of the region
+,,,,,baria_t,type of baraitric procedure
+,,,,,n,number of procedure
+,,,,,pct,% of the specific type on the total number of procedue
+21,TAB_TCN_STATUS_YEAR,Activity,03_type_procedure.RData,Number and rate of each different baraitric procedure per statut of the hospital per year,statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,annee,year
+,,,,,baria_t,type of baraitric procedure
+,,,,,n,number of procedure
+,,,,,pct,% of the specific type on the total number of procedue
+22,TAB_TCN_HOP_MONTH,Activity,03_type_procedure.RData,Number and rate of each different baraitric procedure per hospital per year,finessGeoDP,"""Finess"" number, identification number for each hospital"
+,,,,,annee,year
+,,,,,mois,month
+,,,,,baria_t,type of baraitric procedure
+,,,,,n,number of procedure
+,,,,,pct,% of the specific type on the total number of procedue
+23,TAB_REV_HOP,Activity,04_revisional.RData,Total and rate of revisional procedure per hospital,finessGeoDP,"""Finess"" number, identification number for each hospital"
+,,,,,rs,"""raison sociale"", full hospital name"
+,,,,,lib_reg,Name of the region
+,,,,,statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,TOT,Total number of procedure 
+,,,,,TOT_rev,Total number of revisional procedure
+,,,,,PCT_rev,Revisional rate 
+24,TAB_REV_NATL,Activity,04_revisional.RData,"Total and rate of revisional procedure, national scale",TOT,Total number of procedure 
+,,,,,TOT_rev,Total number of revisional procedure
+,,,,,PCT_rev,Revisional rate 
+25,TAB_REV_REG,Activity,04_revisional.RData,"Total and rate of revisional procedure, regional  scale",lib_reg,Name of the region
+,,,,,TOT,Total number of procedure 
+,,,,,TOT_rev,Total number of revisional procedure
+,,,,,PCT_rev,Revisional rate 
+26,TAB_REV_STATUT,Activity,04_revisional.RData,"Total and rate of revisional procedure, according t type of hospital",statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,TOT,Total number of procedure 
+,,,,,TOT_rev,Total number of revisional procedure
+,,,,,PCT_rev,Revisional rate 
+27,TAB_REV_HOP_12M,Activity,04_revisional.RData,"Total and rate of revisional procedure per hospital, last 12 months",finessGeoDP,"""Finess"" number, identification number for each hospital"
+,,,,,rs,"""raison sociale"", full hospital name"
+,,,,,lib_reg,Name of the region
+,,,,,statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,TOT,Total number of procedure 
+,,,,,TOT_rev,Total number of revisional procedure
+,,,,,PCT_rev,Revisional rate 
+28,TAB_REV_NATL_12M,Activity,04_revisional.RData,"Total and rate of revisional procedure, national scale, last 12 months",TOT,Total number of procedure 
+,,,,,TOT_rev,Total number of revisional procedure
+,,,,,PCT_rev,Revisional rate 
+29,TAB_REV_REG_12M,Activity,04_revisional.RData,"Total and rate of revisional procedure, regional  scale, last 12 months",lib_reg,Name of the region
+,,,,,TOT,Total number of procedure 
+,,,,,TOT_rev,Total number of revisional procedure
+,,,,,PCT_rev,Revisional rate 
+30,TAB_REV_STATUT_12M,Activity,04_revisional.RData,"Total and rate of revisional procedure, according t type of hospital, last 12 months",statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,TOT,Total number of procedure 
+,,,,,TOT_rev,Total number of revisional procedure
+,,,,,PCT_rev,Revisional rate 
+31,TAB_APP_HOP_YEAR,Activity,05_approach.RData,"Number an  rate od procedures accordign to the surgical approach (laparoscopy, open, robotic) per hospital per year",finessGeoDP,"""Finess"" number, identification number for each hospital"
+,,,,,annee,year
+,,,,,vda,"""surgical approach (""voie d'abord"" in french) , can be: COE (laparoscopy), LAP (open /laparotomy), ROB (robot)"
+,,,,,n,Total number of procedure per approach
+,,,,,pct,Rate of approach
+32,TAB_APP_NATL_YEAR,Activity,05_approach.RData,"Number an  rate od procedures accordign to the surgical approach (laparoscopy, open, robotic) per year, national scale",annee,year
+,,,,,vda,"""surgical approach (""voie d'abord"" in french) , can be: COE (laparoscopy), LAP (open /laparotomy), ROB (robot)"
+,,,,,n,Total number of procedure per approach
+,,,,,pct,Rate of approach
+33,TAB_APP_REG_YEAR,Activity,05_approach.RData,"Number an  rate od procedures accordign to the surgical approach (laparoscopy, open, robotic), per year, regional scale",lib_reg,Name of the region
+,,,,,annee,year
+,,,,,vda,"""surgical approach (""voie d'abord"" in french) , can be: COE (laparoscopy), LAP (open /laparotomy), ROB (robot)"
+,,,,,n,Total number of procedure per approach
+,,,,,pct,Rate of approach
+34,TAB_APP_STATUS_YEAR,Activity,05_approach.RData,"Number an  rate od procedures accordign to the surgical approach (laparoscopy, open, robotic),per year, aoccordign to hospital status",statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,annee,year
+,,,,,vda,"""surgical approach (""voie d'abord"" in french) , can be: COE (laparoscopy), LAP (open /laparotomy), ROB (robot)"
+,,,,,n,Total number of procedure per approach
+,,,,,pct,Rate of approach
+35,TAB_ROB_HOP_12M,Activity,05_approach.RData,"Rate of robotic surgery and total number of procedure, per hospital",finessGeoDP,"""Finess"" number, identification number for each hospital"
+,,,,,lib_reg,Name of the region
+,,,,,statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,vda,surgical approach: only ROB (robot)
+,,,,,n,Total number of procedure ROBOTIC approach
+,,,,,TOT,Total number of procedure ANY approach
+,,,,,PCT_app,Rate of robotic approach
+36,TAB_RECRUT_HOP,Geography,21.Data_geo.RData,"For each hospital, the recruitment zone : towns where 80 % of patients come from",finessGeoDP ,"""Finess"" number, identification number for each hospital"
+,,,,,rs,Hospital name
+,,,,,codeGeo ,"geographic code, ALMOST corresponding to the zip code (aggregates very small villages)"
+,,,,,lib_com ,town name
+,,,,,NB_pts ,Number of patients coming from the given town
+,,,,,PCT_pts ,Rate of the total recruitement for the patients coming from a given town
+,,,,,PCT_CUM_pts ,Cumulative rate of the total recruitement for the patients coming from a given town
+37,TAB_RECRUT_HOP,Geography,21.Data_geo.RData,"For each town, the hospitals where the patients go for surgery",codeGeo ,"geographic code, ALMOST corresponding to the zip code (aggregates very small villages)"
+,,,,,lib_com ,town name
+,,,,,NB_pts ,Number of patients coming from the given town
+,,,,,PCT_pts ,Rate of patients going to a given hospital
+,,,,,finessGeoDP ,"""Finess"" number, identification number for each hospital of destination"
+,,,,,rs,Hospital name
+38,TAB_COMPETITORS ,Geography,21.Data_geo.RData,List of 5 main competitors for each hospital (hospitals recruiting in the same zone),finessGeo_index ,"""Finess"" number, identification number for the index hospital"
+,,,,,Hospital_index ,Hospital index name
+,,,,,TOT_etb ,Number of patients coming from the index town
+,,,,,TOT_coompet,Number of patients coming from the competitor town
+,,,,,finessGeo_competitor ,"""Finess"" number, identification number for the competitor hospital"
+,,,,,Hospital_competitor ,Hospital competitor name
+39,TAB_COMPL_HOP_YEAR,Complications,11_complications.RData,Complication rate per hospital per year,finessGeoDP ,"""Finess"" number, identification number for each hospital"
+,,,,,annee ,Year
+,,,,,TOT ,Total number of procedure per year
+,,,,,COMPL_nb ,Number of complications
+,,,,,COMPL_pct ,Rate of complication
+40,TAB_COMPL_NATL_YEAR ,Complications,11_complications.RData,Complication rate per year (France),annee ,Year
+,,,,,TOT ,Total number of procedure per year
+,,,,,COMPL_nb ,Number of complications
+,,,,,COMPL_pct ,Rate of complication
+41,TAB_COMPL_REG_YEAR ,Complications,11_complications.RData,Complication rate per region per year,lib_reg,Name of the region
+,,,,,annee ,Year
+,,,,,TOT ,Total number of procedure per year
+,,,,,COMPL_nb ,Number of complications
+,,,,,COMPL_pct ,Rate of complication
+42,TAB_COMPL_STATUS_YEAR,Complications,11_complications.RData,Complication rate per year per hospital status,statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,annee ,Year
+,,,,,TOT ,Total number of procedure per year
+,,,,,COMPL_nb ,Number of complications
+,,,,,COMPL_pct ,Rate of complication
+43,TAB_COMPL_GRADE_HOP_YEAR,Complications,11_complications.RData,Complication rate per hospital per year according to Clavien Dindo classification grades,finessGeoDP ,"""Finess"" number, identification number for each hospital"
+,,,,,annee ,Year
+,,,,,clav_cat_90 ,Grade of Clavien Dindo classification (3-5)
+,,,,,TOT ,Total number of procedure per year per grade
+,,,,,COMPL_nb ,Number of complications
+,,,,,COMPL_pct ,Rate of complication
+44,TAB_COMPL_GRADE_NATL_YEAR ,Complications,11_complications.RData,Complication rate  per year according to Clavien Dindo classification grades (France),annee ,Year
+,,,,,TOT ,Total number of procedure per year
+,,,,,COMPL_nb ,Number of complications
+,,,,,COMPL_pct ,Rate of complication
+,,,,,clav_cat_90 ,Grade of Clavien Dindo classification (3-5)
+45,TAB_COMPL_GRADE_REG_YEAR ,Complications,11_complications.RData,Complication rate per region per year according to Clavien Dindo classification grades,lib_reg,Name of the region
+,,,,,annee ,Year
+,,,,,clav_cat_90 ,Grade of Clavien Dindo classification (3-5)
+,,,,,TOT ,Total number of procedure per year per grade
+,,,,,COMPL_nb ,Number of complications
+,,,,,COMPL_pct ,Rate of complication
+46,TAB_COMPL_GRADE_STATUS_YEAR ,Complications,11_complications.RData,Complication rate per hospital status per year according to Clavien Dindo classification grades,statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,annee ,Year
+,,,,,clav_cat_90 ,Grade of Clavien Dindo classification (3-5)
+,,,,,TOT ,Total number of procedure per year per grade
+,,,,,COMPL_nb ,Number of complications
+,,,,,COMPL_pct ,Rate of complication
+47,TAB_COMPL_HOP_ROLL12 ,Complications,11_complications.RData,"Complication rate , rolling average in the last 12 months, per hospital",finessGeoDP ,"""Finess"" number, identification number for each hospital"
+,,,,,date ,first day of each month
+,,,,,annee ,Year
+,,,,,mois,Month of the year
+,,,,,TOT ,Total number of procedure per year per grade
+,,,,,COMPL_nb ,Number of complications per month
+,,,,,COMPL_pct ,Rate of complication per month
+,,,,,COMPL_pct_roll12 ,Rate of complication rolling 12 last months
+48,TAB_COMPL_NATL_ROLL12 ,Complications,11_complications.RData,"Complication rate , rolling average in the last 12 months, France",date ,first day of each month
+,,,,,annee ,Year
+,,,,,mois,Month of the year
+,,,,,TOT ,Total number of procedure per year per grade
+,,,,,COMPL_nb ,Number of complications per month
+,,,,,COMPL_pct ,Rate of complication per month
+,,,,,COMPL_pct_roll12 ,Rate of complication rolling 12 last months
+49,TAB_COMPL_REG_ROLL12 ,Complications,11_complications.RData,"Complication rate , rolling average in the last 12 months, per region",lib_reg,Name of the region
+,,,,,date ,first day of each month
+,,,,,annee ,Year
+,,,,,mois,Month of the year
+,,,,,TOT ,Total number of procedure per year per grade
+,,,,,COMPL_nb ,Number of complications per month
+,,,,,COMPL_pct ,Rate of complication per month
+,,,,,COMPL_pct_roll12 ,Rate of complication rolling 12 last months
+50,TAB_COMPL_STATUS_ROLL12 ,Complications,11_complications.RData,"Complication rate , rolling average in the last 12 months, per hospital status",statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,date ,first day of each month
+,,,,,annee ,Year
+,,,,,mois,Month of the year
+,,,,,TOT ,Total number of procedure per year per grade
+,,,,,COMPL_nb ,Number of complications per month
+,,,,,COMPL_pct ,Rate of complication per month
+,,,,,COMPL_pct_roll12 ,Rate of complication rolling 12 last months
+51,TAB_NEVER_HOP,Complications,11_complications.RData,"Never events : death after surgery, or clavien dindo grade. Per hospital",finessGeoDP ,"""Finess"" number, identification number for each hospital"
+,,,,,TOT ,Total number of procedure per year per grade
+,,,,,NEVER_nb ,Number of never events
+,,,,,NEVER_pct ,Rate of never events
+52,TAB_NEVER_NATL ,Complications,11_complications.RData,"Never events : death after surgery, or clavien dindo grade. France",TOT ,Total number of procedure per year per grade
+,,,,,NEVER_nb ,Number of never events
+,,,,,NEVER_pct ,Rate of never events
+53,TAB_NEVER_REG ,Complications,11_complications.RData,"Never events : death after surgery, or clavien dindo grade. Per region",lib_reg,Name of the region
+,,,,,TOT ,Total number of procedure per year per grade
+,,,,,NEVER_nb ,Number of never events
+,,,,,NEVER_pct ,Rate of never events
+54,TAB_NEVER_STATUS ,Complications,11_complications.RData,"Never events : death after surgery, or clavien dindo grade. Per hospital status",statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,TOT ,Total number of procedure per year per grade
+,,,,,NEVER_nb ,Number of never events
+,,,,,NEVER_pct ,Rate of never events
+55,TAB_LOS_HOP ,Complications,11_complications.RData,"Lenght of stay for surgery admission, in category (0 day, 1-3, 4-6, >7). Per hospital",finessGeoDP ,"""Finess"" number, identification number for each hospital"
+,,,,,annee,Year
+,,,,,duree_cat ,Category of length of stay
+,,,,,LOS_nb ,Nb of patients
+,,,,,LOS_pct ,Rate of patiens
+56,TAB_LOS_NATL ,Complications,11_complications.RData,"Lenght of stay for surgery admission, in category (0 day, 1-3, 4-6, >7). France",annee,Year
+,,,,,duree_cat ,Category of length of stay
+,,,,,LOS_nb ,Nb of patients
+,,,,,LOS_pct ,Rate of patiens
+57,TAB_LOS_REG ,Complications,11_complications.RData,"Lenght of stay for surgery admission, in category (0 day, 1-3, 4-6, >7). Per Region",lib_reg,Name of the region
+,,,,,annee,Year
+,,,,,duree_cat ,Category of length of stay
+,,,,,LOS_nb ,Nb of patients
+,,,,,LOS_pct ,Rate of patiens
+58,TAB_LOS_STATUS ,Complications,11_complications.RData,"Lenght of stay for surgery admission, in category (0 day, 1-3, 4-6, >7). Per hospital status",statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,annee,Year
+,,,,,duree_cat ,Category of length of stay
+,,,,,LOS_nb ,Nb of patients
+,,,,,LOS_pct ,Rate of patiens
+59,TAB_LOS7_HOP ,Complications,11_complications.RData,"Rate of patients staying more than 7 days, per hospital",finessGeoDP ,"""Finess"" number, identification number for each hospital"
+,,,,,TOT ,Total number of procedure 
+,,,,,LOS_nb ,Nb of patients
+,,,,,LOS_pct ,Rate of patiens
+60,TAB_LOS7_NATL ,Complications,11_complications.RData,"Rate of patients staying more than 7 days, France",TOT ,Total number of procedure 
+,,,,,LOS_nb ,Nb of patients
+,,,,,LOS_pct ,Rate of patiens
+61,TAB_LOS7_REG ,Complications,11_complications.RData,"Rate of patients staying more than 7 days, per region",lib_reg,Name of the region
+,,,,,TOT ,Total number of procedure 
+,,,,,LOS_nb ,Nb of patients
+,,,,,LOS_pct ,Rate of patiens
+62,TAB_LOS7_TATUS ,Complications,11_complications.RData,"Rate of patients staying more than 7 days, per hospital status",statut,"Type of hospital (private, PFT, public, academic)"
+,,,,,TOT ,Total number of procedure 
+,,,,,LOS_nb ,Nb of patients
+,,,,,LOS_pct ,Rate of patiens
