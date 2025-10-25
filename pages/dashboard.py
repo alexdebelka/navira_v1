@@ -2525,7 +2525,15 @@ with tab_complications:
     except Exception as e:
         st.caption(f"Clavien grade chart unavailable: {e}")
 
-    hosp_comp = _get_hospital_complications(complications, str(selected_hospital_id)).sort_values('quarter_date')
+    hosp_comp = _get_hospital_complications(complications, str(selected_hospital_id))
+    # Sort by available date column
+    if not hosp_comp.empty:
+        if 'quarter_date' in hosp_comp.columns:
+            hosp_comp = hosp_comp.sort_values('quarter_date')
+        elif 'date' in hosp_comp.columns:
+            hosp_comp = hosp_comp.sort_values('date')
+        elif 'year' in hosp_comp.columns:
+            hosp_comp = hosp_comp.sort_values('year')
     # Global note if 2025 data is present (YTD)
     has_2025_data = False
     try:
@@ -2985,7 +2993,14 @@ with tab_complications:
 
             if not used_external:
                 # Fallback to computing from internal aggregates
-                roll = hosp_comp.dropna(subset=['quarter_date']).sort_values('quarter_date').copy()
+                if 'quarter_date' in hosp_comp.columns:
+                    roll = hosp_comp.dropna(subset=['quarter_date']).sort_values('quarter_date').copy()
+                elif 'date' in hosp_comp.columns:
+                    roll = hosp_comp.dropna(subset=['date']).sort_values('date').copy()
+                elif 'year' in hosp_comp.columns:
+                    roll = hosp_comp.dropna(subset=['year']).sort_values('year').copy()
+                else:
+                    roll = hosp_comp.copy()
                 if not roll.empty:
                     if 'rolling_rate' in roll.columns:
                         roll['rolling_pct'] = pd.to_numeric(roll['rolling_rate'], errors='coerce') * 100.0
@@ -2998,8 +3013,10 @@ with tab_complications:
                     roll['rolling_pct'] = pd.to_numeric(roll['rolling_pct'], errors='coerce')
                     roll_plot = roll.dropna(subset=['rolling_pct'])
                     if not roll_plot.empty:
+                        # Use appropriate date column for x-axis
+                        date_col = 'quarter_date' if 'quarter_date' in roll_plot.columns else ('date' if 'date' in roll_plot.columns else 'year')
                         fig_roll.add_trace(go.Scatter(
-                            x=roll_plot['quarter_date'],
+                            x=roll_plot[date_col],
                             y=roll_plot['rolling_pct'],
                             mode='lines+markers',
                             name='Hospital Rolling Rate',
@@ -3013,8 +3030,10 @@ with tab_complications:
                     try:
                         if 'national_avg_data' in locals() and not national_avg_data.empty and 'national_rate' in national_avg_data.columns:
                             roll_nat_name = 'National Average (YTD)' if has_2025_data else 'National Average'
+                            # Use appropriate date column for national data
+                            nat_date_col = 'quarter_date' if 'quarter_date' in national_avg_data.columns else ('date' if 'date' in national_avg_data.columns else 'year')
                             fig_roll.add_trace(go.Scatter(
-                                x=national_avg_data['quarter_date'],
+                                x=national_avg_data[nat_date_col],
                                 y=national_avg_data['national_rate'],
                                 mode='lines',
                                 name=roll_nat_name,
@@ -3540,8 +3559,13 @@ st.header("📊 Complications Statistics")
 # Get complications data for this hospital
 hospital_complications = _get_hospital_complications(complications, str(selected_hospital_id))
 if not hospital_complications.empty:
-    # Sort by quarter date
-    hospital_complications = hospital_complications.sort_values('quarter_date')
+    # Sort by available date column
+    if 'quarter_date' in hospital_complications.columns:
+        hospital_complications = hospital_complications.sort_values('quarter_date')
+    elif 'date' in hospital_complications.columns:
+        hospital_complications = hospital_complications.sort_values('date')
+    elif 'year' in hospital_complications.columns:
+        hospital_complications = hospital_complications.sort_values('year')
     
     # Calculate overall statistics
     col1, col2, col3 = st.columns(3)
