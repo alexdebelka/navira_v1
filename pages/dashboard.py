@@ -292,7 +292,7 @@ st.markdown("---")
 # Hospital details in columns
 col1, col2, col3 = st.columns(3)
 col1.markdown(f"**City:** {selected_hospital_details['city']}")
-col2.markdown(f"**Status:** {selected_hospital_details['statut']}")
+col2.markdown(f"**Status:** {selected_hospital_details['status']}")
 if 'Distance (km)' in selected_hospital_details:
     col3.markdown(f"**Distance:** {selected_hospital_details['Distance (km)']:.1f} km")
 st.markdown("---")
@@ -1328,7 +1328,7 @@ with tab_activity:
 
         # Compute Same-category avg per year (status + labels match)
         try:
-            status_val = str(selected_hospital_details.get('statut', '')).strip()
+            status_val = str(selected_hospital_details.get('status', '')).strip()
             def _flag(v):
                 try:
                     return int(v) if pd.notna(v) else 0
@@ -1495,7 +1495,7 @@ with tab_activity:
             if region_value2 is not None and 'id' in establishments.columns else []
         )
         try:
-            status_val2 = str(selected_hospital_details.get('statut', '')).strip()
+            status_val2 = str(selected_hospital_details.get('status', '')).strip()
             def _flag(v):
                 try:
                     return int(v) if pd.notna(v) else 0
@@ -1616,10 +1616,10 @@ with tab_activity:
             establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_val3)]['id'].astype(str).unique().tolist()
             if region_val3 is not None and 'id' in establishments.columns else []
         )
-        status_val3 = str(selected_hospital_details.get('statut', '')).strip()
+        status_val3 = str(selected_hospital_details.get('status', '')).strip()
         ids_status3 = (
-            establishments[establishments.get('statut','').astype(str).str.strip() == status_val3]['id'].astype(str).unique().tolist()
-            if 'statut' in establishments.columns else []
+            establishments[establishments.get('status','').astype(str).str.strip() == status_val3]['id'].astype(str).unique().tolist()
+            if 'status' in establishments.columns else []
         )
 
         scope_sc = st.radio("Compare against", ["National", "Regional", "Same status"], horizontal=True, index=0, key=f"scatter_scope_{selected_hospital_id}")
@@ -1835,7 +1835,7 @@ with tab_activity:
         )
         # Same category
         try:
-            status_val = str(selected_hospital_details.get('statut', '')).strip()
+            status_val = str(selected_hospital_details.get('status', '')).strip()
             def _flag(v):
                 try:
                     return int(v) if pd.notna(v) else 0
@@ -1977,10 +1977,10 @@ with tab_activity:
             establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_val_rb)]['id'].astype(str).unique().tolist()
             if region_val_rb is not None and 'id' in establishments.columns else []
         )
-        status_val_rb = str(selected_hospital_details.get('statut', '')).strip()
+        status_val_rb = str(selected_hospital_details.get('status', '')).strip()
         ids_status_rb = (
-            establishments[establishments.get('statut','').astype(str).str.strip() == status_val_rb]['id'].astype(str).unique().tolist()
-            if 'statut' in establishments.columns else []
+            establishments[establishments.get('status','').astype(str).str.strip() == status_val_rb]['id'].astype(str).unique().tolist()
+            if 'status' in establishments.columns else []
         )
 
         if scope_rb == "Regional":
@@ -2170,10 +2170,10 @@ with tab_activity:
             establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_rev)]['id'].astype(str).unique().tolist()
             if region_rev is not None and 'id' in establishments.columns else []
         )
-        status_rev = str(selected_hospital_details.get('statut', '')).strip()
+        status_rev = str(selected_hospital_details.get('status', '')).strip()
         ids_cat_rev = (
             establishments[establishments.get('statut','').astype(str).str.strip() == status_rev]['id'].astype(str).unique().tolist()
-            if 'statut' in establishments.columns else []
+            if 'status' in establishments.columns else []
         )
 
         if ytd_rev:
@@ -2237,10 +2237,10 @@ with tab_activity:
             establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_rr)]['id'].astype(str).unique().tolist()
             if region_rr is not None and 'id' in establishments.columns else []
         )
-        status_rr = str(selected_hospital_details.get('statut', '')).strip()
+        status_rr = str(selected_hospital_details.get('status', '')).strip()
         ids_cat_rr = (
             establishments[establishments.get('statut','').astype(str).str.strip() == status_rr]['id'].astype(str).unique().tolist()
-            if 'statut' in establishments.columns else []
+            if 'status' in establishments.columns else []
         )
 
         if scope_rr == "Regional":
@@ -2413,10 +2413,10 @@ with tab_activity:
                     establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_value_a)]['id'].astype(str).unique().tolist()
                     if region_value_a is not None and 'id' in establishments.columns else []
                 )
-                status_val_a = str(selected_hospital_details.get('statut', '')).strip()
+                status_val_a = str(selected_hospital_details.get('status', '')).strip()
                 ids_cat = (
                     establishments[establishments.get('statut','').astype(str).str.strip() == status_val_a]['id'].astype(str).unique().tolist()
-                    if 'statut' in establishments.columns else []
+                    if 'status' in establishments.columns else []
                 )
 
                 def _approach_share_for_ids(id_list: list[str]) -> pd.DataFrame:
@@ -2518,7 +2518,7 @@ with tab_complications:
         status_val_c = str(selected_hospital_details.get('statut','')).strip()
         ids_cat_c = (
             establishments[establishments.get('statut','').astype(str).str.strip() == status_val_c]['id'].astype(str).unique().tolist()
-            if 'statut' in establishments.columns else []
+            if 'status' in establishments.columns else []
         )
 
         def _rate_for_ids(ids: list[str]) -> float:
@@ -2591,10 +2591,10 @@ with tab_complications:
             establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(reg_fp)]['id'].astype(str).unique().tolist()
             if reg_fp is not None and 'id' in establishments.columns else []
         )
-        status_fp = str(selected_hospital_details.get('statut', '')).strip()
+        status_fp = str(selected_hospital_details.get('status', '')).strip()
         ids_status_fp = (
             establishments[establishments.get('statut','').astype(str).str.strip() == status_fp]['id'].astype(str).unique().tolist()
-            if 'statut' in establishments.columns else []
+            if 'status' in establishments.columns else []
         )
 
         if scope_fp == "Regional":
@@ -2706,10 +2706,10 @@ with tab_complications:
                 establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_val_g)]['id'].astype(str).unique().tolist()
                 if region_val_g is not None and 'id' in establishments.columns else []
             )
-            status_val_g = str(selected_hospital_details.get('statut', '')).strip()
+            status_val_g = str(selected_hospital_details.get('status', '')).strip()
             ids_cat_g = (
                 establishments[establishments.get('statut','').astype(str).str.strip() == status_val_g]['id'].astype(str).unique().tolist()
-                if 'statut' in establishments.columns else []
+                if 'status' in establishments.columns else []
             )
 
             def _sum_unique_totals(df: pd.DataFrame, id_col: str) -> float:
@@ -3059,10 +3059,10 @@ with tab_complications:
                             establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(reg_val_l)]['id'].astype(str).unique().tolist()
                             if reg_val_l is not None and 'id' in establishments.columns else []
                         )
-                        status_val_l = str(selected_hospital_details.get('statut', '')).strip()
+                        status_val_l = str(selected_hospital_details.get('status', '')).strip()
                         ids_cat_l = (
                             establishments[establishments.get('statut','').astype(str).str.strip() == status_val_l]['id'].astype(str).unique().tolist()
-                            if 'statut' in establishments.columns else []
+                            if 'status' in establishments.columns else []
                         )
 
                         g_nat = _los_share_for_ids(df_los, ids_all_l)
@@ -3144,10 +3144,10 @@ with tab_complications:
                             establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(reg_sc)]['id'].astype(str).unique().tolist()
                             if reg_sc is not None and 'id' in establishments.columns else []
                         )
-                        status_sc = str(selected_hospital_details.get('statut', '')).strip()
+                        status_sc = str(selected_hospital_details.get('status', '')).strip()
                         ids_cat_sc = (
                             establishments[establishments.get('statut','').astype(str).str.strip() == status_sc]['id'].astype(str).unique().tolist()
-                            if 'statut' in establishments.columns else []
+                            if 'status' in establishments.columns else []
                         )
                         if scope_los_sc == "Regional":
                             ids_scope_sc = ids_reg_sc
@@ -3523,13 +3523,13 @@ if show_geography:
         st.markdown("#### Nearby/Competitor Hospitals")
         hosp_competitors = competitors[competitors['hospital_id'] == str(selected_hospital_id)]
         if not hosp_competitors.empty:
-            comp_named = hosp_competitors.merge(establishments[['id','name','city','statut']], left_on='competitor_id', right_on='id', how='left')
+            comp_named = hosp_competitors.merge(establishments[['id','name','city','status']], left_on='competitor_id', right_on='id', how='left')
             comp_named = comp_named.sort_values('competitor_patients', ascending=False)
             for _, r in comp_named.head(5).iterrows():
                 c1, c2, c3 = st.columns([3,2,1])
                 c1.markdown(f"**{r.get('name','Unknown')}**")
                 c1.caption(f"📍 {r.get('city','')} ")
-                c2.markdown(r.get('statut',''))
+                c2.markdown(r.get('status',''))
                 c3.metric("Patients", f"{int(r.get('competitor_patients',0)):,}")
         else:
             st.info("No competitor data available.")
@@ -3546,7 +3546,7 @@ if not hospital_competitors.empty:
     
     # Create columns for competitor display
     competitors_with_names = hospital_competitors.merge(
-        establishments[['id', 'name', 'city', 'statut']], 
+        establishments[['id', 'name', 'city', 'status']], 
         left_on='competitor_id', 
         right_on='id', 
         how='left'
@@ -3566,7 +3566,7 @@ if not hospital_competitors.empty:
             st.caption(f"📍 {competitor_city}")
         
         with col2:
-            competitor_status = competitor.get('statut', 'Unknown')
+            competitor_status = competitor.get('status', 'Unknown')
             status_color = {
                 'public': '🔵',
                 'private for profit': '🟢',
