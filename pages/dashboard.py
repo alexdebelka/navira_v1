@@ -3546,7 +3546,7 @@ if not hospital_competitors.empty:
     
     # Create columns for competitor display
     competitors_with_names = hospital_competitors.merge(
-        establishments[['id', 'name', 'ville', 'statut']], 
+        establishments[['id', 'name', 'city', 'statut']], 
         left_on='competitor_id', 
         right_on='id', 
         how='left'
@@ -3561,7 +3561,7 @@ if not hospital_competitors.empty:
         
         with col1:
             competitor_name = competitor.get('name', 'Unknown Hospital')
-            competitor_city = competitor.get('ville', 'Unknown City')
+            competitor_city = competitor.get('city', 'Unknown City')
             st.markdown(f"**{competitor_name}**")
             st.caption(f"📍 {competitor_city}")
         
