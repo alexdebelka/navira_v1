@@ -282,16 +282,16 @@ st.markdown(f"## 🏥 {selected_hospital_details['name']}")
 
 # Address section
 if 'adresse' in selected_hospital_details and pd.notna(selected_hospital_details['adresse']):
-    address_line = f"📍 {selected_hospital_details['adresse']}, {selected_hospital_details['code_postal']} {selected_hospital_details['ville']}"
+    address_line = f"📍 {selected_hospital_details['adresse']}, {selected_hospital_details['code_postal']} {selected_hospital_details['city']}"
     st.markdown(f"**Address:** {address_line}")
 else:
-    st.markdown(f"**Address:** {selected_hospital_details['code_postal']} {selected_hospital_details['ville']}")
+    st.markdown(f"**Address:** {selected_hospital_details['code_postal']} {selected_hospital_details['city']}")
 
 st.markdown("---")
 
 # Hospital details in columns
 col1, col2, col3 = st.columns(3)
-col1.markdown(f"**City:** {selected_hospital_details['ville']}")
+col1.markdown(f"**City:** {selected_hospital_details['city']}")
 col2.markdown(f"**Status:** {selected_hospital_details['statut']}")
 if 'Distance (km)' in selected_hospital_details:
     col3.markdown(f"**Distance:** {selected_hospital_details['Distance (km)']:.1f} km")
@@ -3523,12 +3523,12 @@ if show_geography:
         st.markdown("#### Nearby/Competitor Hospitals")
         hosp_competitors = competitors[competitors['hospital_id'] == str(selected_hospital_id)]
         if not hosp_competitors.empty:
-            comp_named = hosp_competitors.merge(establishments[['id','name','ville','statut']], left_on='competitor_id', right_on='id', how='left')
+            comp_named = hosp_competitors.merge(establishments[['id','name','city','statut']], left_on='competitor_id', right_on='id', how='left')
             comp_named = comp_named.sort_values('competitor_patients', ascending=False)
             for _, r in comp_named.head(5).iterrows():
                 c1, c2, c3 = st.columns([3,2,1])
                 c1.markdown(f"**{r.get('name','Unknown')}**")
-                c1.caption(f"📍 {r.get('ville','')} ")
+                c1.caption(f"📍 {r.get('city','')} ")
                 c2.markdown(r.get('statut',''))
                 c3.metric("Patients", f"{int(r.get('competitor_patients',0)):,}")
         else:
