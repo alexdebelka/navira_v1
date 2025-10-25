@@ -1282,13 +1282,15 @@ with tab_activity:
             if not vda_h.empty:
                 vda_h = vda_h[vda_h['finessGeoDP'] == str(selected_hospital_id)]
                 if not vda_h.empty:
+                    # Use the correct year column
+                    year_col = 'annee' if 'annee' in vda_h.columns else 'year'
                     add_rows = (
-                        vda_h.groupby('annee', as_index=False)['TOT']
+                        vda_h.groupby(year_col, as_index=False)['TOT']
                         .max().rename(columns={'TOT':'total_procedures_year'})
                     )
-                    add_rows = add_rows[add_rows['annee'] >= 2021]
+                    add_rows = add_rows[add_rows[year_col] >= 2021]
                     for _, r in add_rows.iterrows():
-                        yr = int(r['annee'])
+                        yr = int(r[year_col])
                         if hosp_year_counts[hosp_year_counts['annee'] == yr].empty:
                             hosp_year_counts = pd.concat([
                                 hosp_year_counts,
@@ -1351,8 +1353,10 @@ with tab_activity:
         region_value = _extract_region_from_details(selected_hospital_details)
 
         # Compute National avg per year (reuse if available)
+        # Use the correct year column
+        year_col = 'year' if 'year' in annual_base.columns else 'annee'
         nat_avg = (
-            annual_base.groupby('annee', as_index=False)['total_procedures_year']
+            annual_base.groupby(year_col, as_index=False)['total_procedures_year']
             .mean().rename(columns={'total_procedures_year': 'avg'})
         ) if 'total_procedures_year' in annual_base.columns else pd.DataFrame()
 
@@ -1369,7 +1373,7 @@ with tab_activity:
                 reg_mask = reg_mask | (annual_base[c].astype(str).str.strip() == str(region_value))
             regional_df = annual_base[reg_mask]
             reg_avg = (
-                regional_df.groupby('annee', as_index=False)['total_procedures_year']
+                regional_df.groupby(year_col, as_index=False)['total_procedures_year']
                 .mean().rename(columns={'total_procedures_year': 'avg'})
             ) if not regional_df.empty else pd.DataFrame()
         else:
@@ -1397,8 +1401,10 @@ with tab_activity:
                 & (est_cat['cso'].fillna(0).astype(int) == cso_val)
             ]['id'].astype(str).unique().tolist()
             cat_df = annual_base[annual_base['id'].astype(str).isin(cat_ids)] if cat_ids else pd.DataFrame()
+            # Use the correct year column
+            year_col = 'year' if 'year' in cat_df.columns else 'annee'
             cat_avg = (
-                cat_df.groupby('annee', as_index=False)['total_procedures_year']
+                cat_df.groupby(year_col, as_index=False)['total_procedures_year']
                 .mean().rename(columns={'total_procedures_year': 'avg'})
             ) if not cat_df.empty else pd.DataFrame()
         except Exception:
@@ -1413,10 +1419,12 @@ with tab_activity:
                 sub = vda_df[vda_df['finessGeoDP'].astype(str).isin([str(i) for i in id_list])]
                 if sub.empty:
                     return None
-                per_hosp_year = sub.groupby(['finessGeoDP','annee'], as_index=False)['TOT'].max()
-                avg_by_year = per_hosp_year.groupby('annee', as_index=False)['TOT'].mean()
-                v2024 = float(avg_by_year[avg_by_year['annee'] == 2024]['TOT'].iloc[0]) if (avg_by_year['annee'] == 2024).any() else None
-                v2025 = float(avg_by_year[avg_by_year['annee'] == 2025]['TOT'].iloc[0]) if (avg_by_year['annee'] == 2025).any() else None
+                # Use the correct year column
+                year_col = 'annee' if 'annee' in sub.columns else 'year'
+                per_hosp_year = sub.groupby(['finessGeoDP', year_col], as_index=False)['TOT'].max()
+                avg_by_year = per_hosp_year.groupby(year_col, as_index=False)['TOT'].mean()
+                v2024 = float(avg_by_year[avg_by_year[year_col] == 2024]['TOT'].iloc[0]) if (avg_by_year[year_col] == 2024).any() else None
+                v2025 = float(avg_by_year[avg_by_year[year_col] == 2025]['TOT'].iloc[0]) if (avg_by_year[year_col] == 2025).any() else None
                 if v2024 and v2025 is not None and v2024 > 0:
                     return f"{((v2025 / v2024 - 1.0) * 100.0):+.0f}%"
             except Exception:
