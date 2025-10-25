@@ -1271,11 +1271,13 @@ with tab_activity:
           <div class='nv-section-title'>Hospital — Number of procedures per year</div>
         """, unsafe_allow_html=True)
         # Build yearly totals for the selected hospital (2021+)
+        # Use the correct year column
+        year_col = 'year' if 'year' in selected_hospital_all_data.columns else 'annee'
         hosp_year_counts = (
-            selected_hospital_all_data[['annee','total_procedures_year']]
+            selected_hospital_all_data[[year_col,'total_procedures_year']]
             .dropna().copy()
         )
-        hosp_year_counts = hosp_year_counts[hosp_year_counts['annee'] >= 2021]
+        hosp_year_counts = hosp_year_counts[hosp_year_counts[year_col] >= 2021]
         # If 2025 (or any year) is missing from parquet, augment from VDA CSV (YTD)
         try:
             vda_h = _load_vda_year_totals_summary()
@@ -1291,16 +1293,16 @@ with tab_activity:
                     add_rows = add_rows[add_rows[year_col] >= 2021]
                     for _, r in add_rows.iterrows():
                         yr = int(r[year_col])
-                        if hosp_year_counts[hosp_year_counts['annee'] == yr].empty:
+                        if hosp_year_counts[hosp_year_counts[year_col] == yr].empty:
                             hosp_year_counts = pd.concat([
                                 hosp_year_counts,
-                                pd.DataFrame({'annee':[yr], 'total_procedures_year':[float(r['total_procedures_year'])]})
+                                pd.DataFrame({year_col:[yr], 'total_procedures_year':[float(r['total_procedures_year'])]})
                             ], ignore_index=True)
         except Exception:
             pass
-        hosp_year_counts = hosp_year_counts.sort_values('annee')
+        hosp_year_counts = hosp_year_counts.sort_values(year_col)
         if not hosp_year_counts.empty:
-            years = hosp_year_counts['annee'].astype(int).tolist()
+            years = hosp_year_counts[year_col].astype(int).tolist()
             vals = hosp_year_counts['total_procedures_year'].tolist()
             colors = []
             for y in years:
@@ -1316,13 +1318,23 @@ with tab_activity:
                 fig_h_big.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                 st.plotly_chart(fig_h_big, use_container_width=True)
                 st.caption('Yearly total surgeries at the selected hospital. If 2025 is present, values are year‑to‑date.')
+                # Debug information
+                st.sidebar.write(f"✅ Graph displayed for hospital {selected_hospital_id}")
+                st.sidebar.write(f"📊 Years: {years_str}")
+                st.sidebar.write(f"📈 Values: {vals}")
             with b2:
                 # Reuse previously computed yoy_text (2025 YTD vs 2024 from monthly data if available)
                 if 'yoy_text' in locals() or 'yoy_text' in globals():
                     st.markdown(f"<div class='nv-bubble teal' style='width:90px;height:90px;font-size:1.2rem'>{yoy_text}</div>", unsafe_allow_html=True)
                     st.caption('2025 YTD (until July)')
         else:
-            st.info('No annual totals available to plot.')
+            st.info(f'No annual totals available to plot for hospital {selected_hospital_id}.')
+            # Debug information
+            st.sidebar.write(f"🔍 Debug: Hospital {selected_hospital_id} has no data in annual records")
+            st.sidebar.write(f"📊 Total annual records: {len(annual)}")
+            st.sidebar.write(f"🏥 Hospital data shape: {selected_hospital_all_data.shape}")
+            if not selected_hospital_all_data.empty:
+                st.sidebar.write(f"📅 Available columns: {list(selected_hospital_all_data.columns)}")
     except Exception:
         pass
     st.markdown("</div>", unsafe_allow_html=True)
