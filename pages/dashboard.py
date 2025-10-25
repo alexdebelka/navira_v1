@@ -150,7 +150,7 @@ SURGICAL_APPROACH_NAMES = {
     'LAP': 'Open Surgery', 'COE': 'Coelioscopy', 'ROB': 'Robotic'
 }
 
-# --- Load Data (Parquet) ---
+# --- Load Data (CSV with Parquet fallback) ---
 try:
     establishments, annual = get_dataframes()
     # Load additional datasets
@@ -162,8 +162,18 @@ try:
     cities = all_data.get('cities', pd.DataFrame())
     los_90 = all_data.get('los_90', pd.DataFrame())
     clavien = all_data.get('clavien', pd.DataFrame())
-except Exception:
-    st.error("Parquet data not found. Please run: make parquet")
+    
+    # Debug: Check data structure
+    st.sidebar.write(f"📊 Data loaded: {len(establishments)} establishments, {len(annual)} annual records")
+    if not annual.empty:
+        st.sidebar.write(f"📅 Annual columns: {list(annual.columns)}")
+        if 'year' in annual.columns:
+            st.sidebar.write(f"📈 Years available: {sorted(annual['year'].unique())}")
+        elif 'annee' in annual.columns:
+            st.sidebar.write(f"📈 Years available: {sorted(annual['annee'].unique())}")
+    
+except Exception as e:
+    st.error(f"Data loading failed: {e}")
     st.stop()
 
 # Navigation is now handled by the sidebar
@@ -269,9 +279,20 @@ if selected_hospital_all_data.empty:
     # Create empty DataFrame with expected columns
     selected_hospital_all_data = pd.DataFrame(columns=['annee', 'total_procedures_year'])
 
+# Load new CSV complications data for this hospital
+try:
+    from navira.csv_data_loader import get_complications_data
+    complications = get_complications_data(str(selected_hospital_id), 'HOP', 'YEAR')
+    st.sidebar.write(f"🏥 Complications data: {len(complications)} records")
+except Exception as e:
+    st.sidebar.write(f"⚠️ Complications data unavailable: {e}")
+    complications = pd.DataFrame()
+
 # Year helpers for dynamic 2025 inclusion (YTD)
 try:
-    _years_all = sorted(pd.to_numeric(annual.get('annee', pd.Series(dtype=float)), errors='coerce').dropna().astype(int).unique().tolist())
+    # Try both column names for compatibility
+    year_col = 'year' if 'year' in annual.columns else 'annee'
+    _years_all = sorted(pd.to_numeric(annual.get(year_col, pd.Series(dtype=float)), errors='coerce').dropna().astype(int).unique().tolist())
     latest_year_activity = max([y for y in _years_all if y <= 2025]) if _years_all else 2024
 except Exception:
     latest_year_activity = 2025
@@ -1483,9 +1504,11 @@ with tab_activity:
             if not cat_avg.empty:
                 s1, s2 = st.columns([4, 1])
                 with s1:
-                    cat_avg_plot = cat_avg[cat_avg['annee'] >= 2021].copy()
-                    cat_avg_plot['annee'] = cat_avg_plot['annee'].astype(int).astype(str)
-                    fig_cat = px.bar(cat_avg_plot, x='annee', y='avg', title='Same category — Avg surgeries per hospital', color_discrete_sequence=['#A78BFA'])
+                    # Use the correct year column
+                    year_col = 'year' if 'year' in cat_avg.columns else 'annee'
+                    cat_avg_plot = cat_avg[cat_avg[year_col] >= 2021].copy()
+                    cat_avg_plot[year_col] = cat_avg_plot[year_col].astype(int).astype(str)
+                    fig_cat = px.bar(cat_avg_plot, x=year_col, y='avg', title='Same category — Avg surgeries per hospital', color_discrete_sequence=['#A78BFA'])
                     fig_cat.update_layout(height=260, xaxis_title='Year', yaxis_title='Avg surgeries', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(type='category'))
                     st.plotly_chart(fig_cat, use_container_width=True)
                     st.caption('Average number of surgeries per hospital for institutions with similar status/labels.')
@@ -1554,7 +1577,9 @@ with tab_activity:
             id_filter = ids_all
 
         def _get_group_year_totals(year: int, ids: list[str]) -> pd.DataFrame:
-            df_a = annual[annual['annee'] == year][['id','total_procedures_year']].copy() if 'annee' in annual.columns else pd.DataFrame()
+            # Use the correct year column
+            year_col = 'year' if 'year' in annual.columns else 'annee'
+            df_a = annual[annual[year_col] == year][['id','total_procedures_year']].copy() if year_col in annual.columns else pd.DataFrame()
             if not df_a.empty:
                 df_a['id'] = df_a['id'].astype(str)
                 df_a = df_a.groupby('id', as_index=False)['total_procedures_year'].sum()
@@ -1660,7 +1685,9 @@ with tab_activity:
 
             # Use ALL years 2021–2025 (stacked points), filter scope
             proc_cols = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in annual.columns]
-            base = annual[(annual.get('annee') >= 2021) & (annual.get('annee') <= 2025)].copy()
+            # Use the correct year column
+            year_col = 'year' if 'year' in annual.columns else 'annee'
+            base = annual[(annual.get(year_col) >= 2021) & (annual.get(year_col) <= 2025)].copy()
             if ids_scope:
                 base = base[base['id'].astype(str).isin([str(i) for i in ids_scope])]
             if base.empty:
@@ -2543,9 +2570,9 @@ with tab_complications:
             establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_val_c)]['id'].astype(str).unique().tolist()
             if region_val_c is not None and 'id' in establishments.columns else []
         )
-        status_val_c = str(selected_hospital_details.get('statut','')).strip()
+        status_val_c = str(selected_hospital_details.get('status','')).strip()
         ids_cat_c = (
-            establishments[establishments.get('statut','').astype(str).str.strip() == status_val_c]['id'].astype(str).unique().tolist()
+            establishments[establishments.get('status','').astype(str).str.strip() == status_val_c]['id'].astype(str).unique().tolist()
             if 'status' in establishments.columns else []
         )
 
@@ -2564,9 +2591,9 @@ with tab_complications:
                 if pd.notna(mx):
                     start = (mx - pd.DateOffset(months=11))  # approx 12 months; data is quarterly so covers last 4 quarters
                     df = df[(df['quarter_date'] >= start) & (df['quarter_date'] <= mx)]
-            # Sum numerator and denominator
+            # Use new CSV data structure
             num = float(pd.to_numeric(df.get('complications_count', 0), errors='coerce').fillna(0).sum())
-            den = float(pd.to_numeric(df.get('procedures_count', 0), errors='coerce').fillna(0).sum())
+            den = float(pd.to_numeric(df.get('total_procedures', 0), errors='coerce').fillna(0).sum())
             return (num / den * 100.0) if den > 0 else 0.0
 
         val_h = _rate_for_ids([selected_hospital_id])
