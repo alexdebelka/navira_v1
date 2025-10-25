@@ -22,6 +22,18 @@ from navira.data_loader import get_dataframes, get_all_dataframes
 from auth_wrapper import add_auth_to_page
 from navigation_utils import handle_navigation_request
 from typing import List, Optional, Tuple, Dict
+from charts import (
+    create_procedure_mix_chart, 
+    create_surgical_approaches_chart, 
+    create_volume_trend_chart,
+    create_revision_rate_chart,
+    create_robotic_surgery_chart,
+    create_complications_rate_chart,
+    create_complications_grade_chart,
+    create_los_distribution_chart,
+    create_extended_los_chart,
+    create_never_events_chart
+)
 handle_navigation_request()
 
 # Identify this page early to avoid redirect loops for limited users
@@ -3643,6 +3655,163 @@ else:
 
 # --- Complications Statistics Section ---
 st.markdown("---")
+# --- NEW CSV-BASED CHARTS SECTION ---
+st.header("📈 Enhanced Analytics (CSV Data)")
+
+# Add toggle for CSV-based charts
+use_csv_charts = st.checkbox("Use enhanced CSV-based charts", value=True, help="Toggle to use the new CSV data sources for more detailed analytics")
+
+if use_csv_charts:
+    st.markdown("### Procedure Mix Analysis")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Hospital Level**")
+        procedure_mix_fig = create_procedure_mix_chart(
+            hospital_id=selected_hospital_id, 
+            level='HOP', 
+            title="Hospital Procedure Mix"
+        )
+        st.plotly_chart(procedure_mix_fig, use_container_width=True)
+    
+    with col2:
+        st.markdown("**National Level**")
+        procedure_mix_nat_fig = create_procedure_mix_chart(
+            hospital_id=None, 
+            level='NATL', 
+            title="National Procedure Mix"
+        )
+        st.plotly_chart(procedure_mix_nat_fig, use_container_width=True)
+    
+    st.markdown("### Surgical Approaches Analysis")
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        st.markdown("**Hospital Level**")
+        approaches_fig = create_surgical_approaches_chart(
+            hospital_id=selected_hospital_id, 
+            level='HOP', 
+            title="Hospital Surgical Approaches"
+        )
+        st.plotly_chart(approaches_fig, use_container_width=True)
+    
+    with col4:
+        st.markdown("**National Level**")
+        approaches_nat_fig = create_surgical_approaches_chart(
+            hospital_id=None, 
+            level='NATL', 
+            title="National Surgical Approaches"
+        )
+        st.plotly_chart(approaches_nat_fig, use_container_width=True)
+    
+    st.markdown("### Volume Trends")
+    volume_trend_fig = create_volume_trend_chart(
+        hospital_id=selected_hospital_id, 
+        level='HOP', 
+        title="Hospital Volume Trends"
+    )
+    st.plotly_chart(volume_trend_fig, use_container_width=True)
+    
+    st.markdown("### Revision Surgery Analysis")
+    col5, col6 = st.columns(2)
+    
+    with col5:
+        st.markdown("**Hospital Revision Rate**")
+        revision_fig = create_revision_rate_chart(
+            hospital_id=selected_hospital_id, 
+            level='HOP', 
+            title="Hospital Revision Surgeries"
+        )
+        st.plotly_chart(revision_fig, use_container_width=True)
+    
+    with col6:
+        st.markdown("**Robotic Surgery Share**")
+        robotic_fig = create_robotic_surgery_chart(
+            hospital_id=selected_hospital_id, 
+            title="Robotic Surgery Share"
+        )
+        st.plotly_chart(robotic_fig, use_container_width=True)
+
+# --- NEW COMPLICATIONS, LOS, AND NEVER EVENTS SECTION ---
+st.header("🏥 Clinical Quality Analytics (New Data)")
+
+# Add toggle for new clinical quality charts
+use_clinical_charts = st.checkbox("Use new clinical quality analytics", value=True, help="Toggle to use the new complications, LOS, and Never Events data sources")
+
+if use_clinical_charts:
+    st.markdown("### Complications Analysis")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Hospital Complications Rate**")
+        complications_fig = create_complications_rate_chart(
+            hospital_id=selected_hospital_id, 
+            level='HOP', 
+            timeframe='YEAR',
+            title="Hospital Complications Rate"
+        )
+        st.plotly_chart(complications_fig, use_container_width=True)
+    
+    with col2:
+        st.markdown("**National Complications Rate**")
+        complications_nat_fig = create_complications_rate_chart(
+            hospital_id=None, 
+            level='NATL', 
+            timeframe='YEAR',
+            title="National Complications Rate"
+        )
+        st.plotly_chart(complications_nat_fig, use_container_width=True)
+    
+    st.markdown("### Complications by Grade")
+    complications_grade_fig = create_complications_grade_chart(
+        hospital_id=selected_hospital_id, 
+        level='HOP', 
+        title="Hospital Complications by Clavien-Dindo Grade"
+    )
+    st.plotly_chart(complications_grade_fig, use_container_width=True)
+    
+    st.markdown("### Length of Stay Analysis")
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        st.markdown("**LOS Distribution**")
+        los_fig = create_los_distribution_chart(
+            hospital_id=selected_hospital_id, 
+            level='HOP', 
+            title="Hospital Length of Stay Distribution"
+        )
+        st.plotly_chart(los_fig, use_container_width=True)
+    
+    with col4:
+        st.markdown("**Extended LOS (>7 days)**")
+        extended_los_fig = create_extended_los_chart(
+            hospital_id=selected_hospital_id, 
+            level='HOP', 
+            title="Extended Length of Stay"
+        )
+        st.plotly_chart(extended_los_fig, use_container_width=True)
+    
+    st.markdown("### Never Events Analysis")
+    col5, col6 = st.columns(2)
+    
+    with col5:
+        st.markdown("**Hospital Never Events**")
+        never_events_fig = create_never_events_chart(
+            hospital_id=selected_hospital_id, 
+            level='HOP', 
+            title="Hospital Never Events Rate"
+        )
+        st.plotly_chart(never_events_fig, use_container_width=True)
+    
+    with col6:
+        st.markdown("**National Never Events**")
+        never_events_nat_fig = create_never_events_chart(
+            hospital_id=None, 
+            level='NATL', 
+            title="National Never Events Rate"
+        )
+        st.plotly_chart(never_events_nat_fig, use_container_width=True)
+
 st.header("📊 Complications Statistics")
 # Get complications data for this hospital
 hospital_complications = _get_hospital_complications(complications, str(selected_hospital_id))

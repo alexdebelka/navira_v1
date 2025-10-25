@@ -13,6 +13,9 @@ processed_data_dir = os.path.join(data_dir, 'processed')
 DATA_DIR_DEFAULT = os.environ.get("NAVIRA_OUT_DIR", processed_data_dir)
 RAW_FALLBACK_DIR = data_dir
 
+# Import the new CSV data loader
+from .csv_data_loader import get_csv_dataframes, get_all_csv_dataframes
+
 def _resolve_parquet_path(filename: str) -> str:
     """Return the existing Parquet path, preferring NAVIRA_OUT_DIR then falling back to data/."""
     preferred = os.path.join(DATA_DIR_DEFAULT, filename)
@@ -151,13 +154,21 @@ def load_annual(path: str, _ver: float) -> pd.DataFrame:
 
 
 def get_dataframes():
-    est_path = _resolve_parquet_path("establishments.parquet")
-    ann_path = _resolve_parquet_path("annual_procedures.parquet")
-    est_ver = _mtime(est_path)
-    ann_ver = _mtime(ann_path)
-    est = load_establishments(est_path, est_ver)
-    ann = load_annual(ann_path, ann_ver)
-    return est, ann
+    """Get dataframes - now uses CSV data by default."""
+    try:
+        # Try CSV data first
+        csv_data = get_all_csv_dataframes()
+        return csv_data['establishments'], csv_data['annual']
+    except Exception as e:
+        st.warning(f"CSV data not available, falling back to parquet: {e}")
+        # Fallback to parquet
+        est_path = _resolve_parquet_path("establishments.parquet")
+        ann_path = _resolve_parquet_path("annual_procedures.parquet")
+        est_ver = _mtime(est_path)
+        ann_ver = _mtime(ann_path)
+        est = load_establishments(est_path, est_ver)
+        ann = load_annual(ann_path, ann_ver)
+        return est, ann
 
 
 @st.cache_data(show_spinner=False)
@@ -442,27 +453,56 @@ def load_french_cities():
 
 
 def get_all_dataframes():
-    """Get all dataframes including the new ones"""
-    establishments, annual = get_dataframes()
-    recruitment = load_recruitment_zones()
-    competitors = load_competitors()
-    complications = load_complications()
-    procedure_details = load_procedure_details()
-    cities = load_french_cities()
-    los_90 = load_los_90()
-    clavien = load_clavien()
-    
-    return {
-        'establishments': establishments,
-        'annual': annual,
-        'recruitment': recruitment,
-        'competitors': competitors,
-        'complications': complications,
-        'procedure_details': procedure_details,
-        'cities': cities,
-        'los_90': los_90,
-        'clavien': clavien,
-    }
+    """Get all dataframes including the new ones - now uses CSV data by default."""
+    try:
+        # Try CSV data first
+        csv_data = get_all_csv_dataframes()
+        
+        # Add legacy data that's not in CSV format
+        recruitment = load_recruitment_zones()
+        competitors = load_competitors()
+        complications = load_complications()
+        procedure_details = load_procedure_details()
+        cities = load_french_cities()
+        los_90 = load_los_90()
+        clavien = load_clavien()
+        
+        # Merge CSV data with legacy data
+        result = csv_data.copy()
+        result.update({
+            'recruitment': recruitment,
+            'competitors': competitors,
+            'complications': complications,
+            'procedure_details': procedure_details,
+            'cities': cities,
+            'los_90': los_90,
+            'clavien': clavien,
+        })
+        
+        return result
+    except Exception as e:
+        st.warning(f"CSV data not available, falling back to parquet: {e}")
+        # Fallback to original parquet-based system
+        establishments, annual = get_dataframes()
+        recruitment = load_recruitment_zones()
+        competitors = load_competitors()
+        complications = load_complications()
+        procedure_details = load_procedure_details()
+        cities = load_french_cities()
+        los_90 = load_los_90()
+        clavien = load_clavien()
+        
+        return {
+            'establishments': establishments,
+            'annual': annual,
+            'recruitment': recruitment,
+            'competitors': competitors,
+            'complications': complications,
+            'procedure_details': procedure_details,
+            'cities': cities,
+            'los_90': los_90,
+            'clavien': clavien,
+        }
 
 
 @st.cache_data
