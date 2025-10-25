@@ -1,11 +1,9 @@
 # pages/Hospital_Dashboard.py
 import streamlit as st
 import pandas as pd
-import altair as alt
 import numpy as np
 import folium
 from folium.plugins import HeatMap
-import os
 import requests
 import branca.colormap as cm
 from navira.competitors import (
@@ -13,15 +11,12 @@ from navira.competitors import (
     get_competitor_names,
     competitor_choropleth_df
 )
-from navira.data_loaders import build_postal_to_insee_mapping
-from navira.geo import load_communes_geojson, detect_insee_key
 from streamlit_folium import st_folium
 import plotly.express as px
 import plotly.graph_objects as go
 from navira.data_loader import get_dataframes, get_all_dataframes
 from auth_wrapper import add_auth_to_page
 from navigation_utils import handle_navigation_request
-from typing import List, Optional, Tuple, Dict
 from charts import (
     create_procedure_mix_chart, 
     create_surgical_approaches_chart, 
@@ -158,19 +153,9 @@ try:
     competitors = all_data.get('competitors', pd.DataFrame())
     complications = all_data.get('complications', pd.DataFrame())
     procedure_details = all_data.get('procedure_details', pd.DataFrame())
-    recruitment = all_data.get('recruitment', pd.DataFrame())
-    cities = all_data.get('cities', pd.DataFrame())
     los_90 = all_data.get('los_90', pd.DataFrame())
     clavien = all_data.get('clavien', pd.DataFrame())
     
-    # Debug: Check data structure
-    st.sidebar.write(f"📊 Data loaded: {len(establishments)} establishments, {len(annual)} annual records")
-    if not annual.empty:
-        st.sidebar.write(f"📅 Annual columns: {list(annual.columns)}")
-        if 'year' in annual.columns:
-            st.sidebar.write(f"📈 Years available: {sorted(annual['year'].unique())}")
-        elif 'annee' in annual.columns:
-            st.sidebar.write(f"📈 Years available: {sorted(annual['annee'].unique())}")
     
 except Exception as e:
     st.error(f"Data loading failed: {e}")
@@ -273,7 +258,6 @@ if est_row.empty:
 selected_hospital_details = est_row.iloc[0]
 selected_hospital_all_data = annual[annual['id'] == str(selected_hospital_id)]
 
-# Debug: Check data structure
 if selected_hospital_all_data.empty:
     st.warning(f"No annual data found for hospital {selected_hospital_id}")
     # Create empty DataFrame with expected columns
@@ -283,9 +267,7 @@ if selected_hospital_all_data.empty:
 try:
     from navira.csv_data_loader import get_complications_data
     complications = get_complications_data(str(selected_hospital_id), 'HOP', 'YEAR')
-    st.sidebar.write(f"🏥 Complications data: {len(complications)} records")
 except Exception as e:
-    st.sidebar.write(f"⚠️ Complications data unavailable: {e}")
     complications = pd.DataFrame()
 
 # Year helpers for dynamic 2025 inclusion (YTD)
@@ -620,329 +602,6 @@ if show_geography:
 else:
     tab_activity, tab_complications = st.tabs(["📈 Activity", "🧪 Complications"])  # Hide geography for limited
 
-def _add_recruitment_zones_to_map(folium_map, hospital_id, recruitment_df, cities_df):
-    try:
-        # Normalize types to ensure join works
-        df_rec = recruitment_df.copy()
-        df_rec['hospital_id'] = df_rec['hospital_id'].astype(str)
-        # Normalize codes to improve join hit-rate
-        df_rec['city_code'] = (
-            df_rec['city_code']
-            .astype(str)
-            .str.strip()
-            .str.upper()
-            .str.zfill(5)
-        )
-        df_cities = cities_df.copy()
-        if 'city_code' in df_cities.columns:
-            df_cities['city_code'] = (
-                df_cities['city_code']
-                .astype(str)
-                .str.strip()
-                .str.upper()
-                .str.zfill(5)
-            )
-        
-        hosp_recr = df_rec[df_rec['hospital_id'] == str(hospital_id)]
-        if hosp_recr.empty:
-            st.info("No recruitment data found for this hospital.")
-            return
-        
-        # Sort by patient count and take top N zones for heatmap (broader view)
-        hosp_recr = hosp_recr.sort_values('patient_count', ascending=False).head(60)
-            
-        if df_cities.empty:
-            st.info("No city coordinate data available.")
-            return
-            
-        # Try to match recruitment data with city coordinates
-        df = hosp_recr.merge(df_cities[['city_code','latitude','longitude','city_name','postal_code']], on='city_code', how='left')
-        missing_coords = df[df['latitude'].isna() | df['longitude'].isna()].copy()
-        
-        # Show diagnostic info
-        st.caption(f"Top 5 recruitment zones: {len(hosp_recr)} | With coords: {len(df.dropna(subset=['latitude','longitude']))} | Missing coords: {len(missing_coords)}")
-        
-        # If we have missing coordinates, optionally attempt a very small geocoding fallback
-        if not missing_coords.empty:
-            st.info("Top recruitment zones found but some city coordinates are missing.")
-            try:
-                limited = missing_coords.head(8)
-                from geopy.geocoders import Nominatim
-                geolocator = Nominatim(user_agent="navira_hospital_dashboard_geography")
-                filled = 0
-                for _, row in limited.iterrows():
-                    city_code = str(row['city_code'])
-                    try:
-                        q = f"{city_code}, France"
-                        loc = geolocator.geocode(q, timeout=2)
-                        if loc:
-                            df.loc[df['city_code'] == city_code, 'latitude'] = df.loc[df['city_code'] == city_code, 'latitude'].fillna(loc.latitude)
-                            df.loc[df['city_code'] == city_code, 'longitude'] = df.loc[df['city_code'] == city_code, 'longitude'].fillna(loc.longitude)
-                            filled += 1
-                    except Exception:
-                        continue
-                if filled:
-                    st.success(f"Filled coordinates for {filled} zones via quick geocoding.")
-            except Exception:
-                pass
-            
-            # Show unresolved cities for debugging
-            unresolved = df[df['latitude'].isna() | df['longitude'].isna()][['city_code','city_name','postal_code']].drop_duplicates()
-            if not unresolved.empty:
-                with st.expander("Unmatched towns (no coordinates)"):
-                    st.dataframe(unresolved.head(10), use_container_width=True, hide_index=True)
-        
-        # Filter to only cities with coordinates
-        df = df.dropna(subset=['latitude','longitude'])
-        if df.empty:
-            st.warning("No cities with coordinates found. Recruitment zones cannot be displayed.")
-            return
-            
-        # Render heat map of recruitment zones (weights by patient_count)
-        st.success(f"Rendering recruitment heatmap from {len(df)} zones")
-        max_pat = float(df['patient_count'].max() or 1)
-        heat_points = [
-            [float(r['latitude']), float(r['longitude']), float(r['patient_count']) / max_pat]
-            for _, r in df.iterrows()
-        ]
-        if heat_points:
-            HeatMap(
-                heat_points,
-                radius=20,
-                blur=15,
-                max_zoom=12,
-                min_opacity=0.05
-            ).add_to(folium_map)
-            
-    except Exception as e:
-        st.error(f"Error rendering recruitment zones: {str(e)}")
-
-
-@st.cache_data(show_spinner=False)
-def _get_fr_departments_geojson():
-    try:
-        url = "https://france-geojson.gregoiredavid.fr/repo/departements.geojson"
-        r = requests.get(url, timeout=10)
-        r.raise_for_status()
-        return r.json()
-    except Exception:
-        return None
-
-
-def _dept_code_from_insee(code: str) -> str:
-    c = str(code).strip().upper()
-    if c.startswith('97') or c.startswith('98'):
-        return c[:3]
-    if c.startswith('2A') or c.startswith('2B'):
-        return c[:2]
-    return c[:2]
-
-
-def _add_recruitment_choropleth_to_map(folium_map, hospital_id, recruitment_df):
-    try:
-        df_rec = recruitment_df.copy()
-        df_rec['hospital_id'] = df_rec['hospital_id'].astype(str)
-        df_rec = df_rec[df_rec['hospital_id'] == str(hospital_id)]
-        if df_rec.empty:
-            st.info("No recruitment data for this hospital.")
-            return
-        df_rec['city_code'] = (
-            df_rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
-        )
-        df_rec['dept_code'] = df_rec['city_code'].apply(_dept_code_from_insee)
-        dep = df_rec.groupby('dept_code', as_index=False)['patient_count'].sum()
-        if dep.empty:
-            st.info("No recruitment data to render.")
-            return
-        gj = _get_fr_departments_geojson()
-        if not gj:
-            st.warning("Department boundaries unavailable. Choropleth cannot be displayed.")
-            return
-        folium.Choropleth(
-            geo_data=gj,
-            name='Recruitment (dept)',
-            data=dep,
-            columns=['dept_code', 'patient_count'],
-            key_on='feature.properties.code',
-            fill_color='YlGn',
-            fill_opacity=0.7,
-            line_opacity=0.2,
-            nan_fill_opacity=0,
-            legend_name='Patients (department sum)'
-        ).add_to(folium_map)
-    except Exception as e:
-        st.error(f"Error rendering choropleth: {str(e)}")
-
-
-@st.cache_data(show_spinner=False)
-def _get_fr_regions_geojson():
-    try:
-        url = "https://france-geojson.gregoiredavid.fr/repo/regions.geojson"
-        r = requests.get(url, timeout=10)
-        r.raise_for_status()
-        return r.json()
-    except Exception:
-        return None
-
-
-def _infer_geojson_code_key(gj, candidates: list[str]) -> str | None:
-    try:
-        feats = gj.get('features', [])
-        if not feats:
-            return None
-        props = feats[0].get('properties', {})
-        for k in candidates:
-            if k in props:
-                return k
-        return None
-    except Exception:
-        return None
-
-
-@st.cache_data(show_spinner=False)
-def _build_dept_to_region_map() -> dict[str, str]:
-    gj = _get_fr_departments_geojson()
-    if not gj:
-        return {}
-    mapping: dict[str, str] = {}
-    for f in gj.get('features', []):
-        props = f.get('properties', {})
-        dept = str(props.get('code', '')).strip()
-        # Try multiple property names for region code
-        reg = (
-            props.get('code_region')
-            or props.get('codeRegion')
-            or props.get('region')
-            or props.get('reg_code')
-            or props.get('code_reg')
-        )
-        if dept and reg is not None:
-            mapping[str(dept)] = str(reg)
-    return mapping
-
-
-def _add_recruitment_choropleth_region_to_map(folium_map, hospital_id, recruitment_df):
-    try:
-        df_rec = recruitment_df.copy()
-        df_rec['hospital_id'] = df_rec['hospital_id'].astype(str)
-        df_rec = df_rec[df_rec['hospital_id'] == str(hospital_id)]
-        if df_rec.empty:
-            st.info("No recruitment data for this hospital.")
-            return
-        df_rec['city_code'] = (
-            df_rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
-        )
-        df_rec['dept_code'] = df_rec['city_code'].apply(_dept_code_from_insee)
-        d2r = _build_dept_to_region_map()
-        if not d2r:
-            st.warning("Could not map departments to regions.")
-            return
-        df_rec['region_code'] = df_rec['dept_code'].map(d2r)
-        reg = df_rec.dropna(subset=['region_code']).groupby('region_code', as_index=False)['patient_count'].sum()
-        if reg.empty:
-            st.info("No recruitment data to render.")
-            return
-        gj = _get_fr_regions_geojson()
-        if not gj:
-            st.warning("Region boundaries unavailable. Choropleth cannot be displayed.")
-            return
-        code_key = _infer_geojson_code_key(gj, ['code','code_insee','codeRegion','code_region','code_reg'])
-        if not code_key:
-            st.warning("Could not infer region code key in GeoJSON.")
-            return
-        # Normalize keys to strings
-        reg['region_code'] = reg['region_code'].astype(str)
-        folium.Choropleth(
-            geo_data=gj,
-            name='Recruitment (region)',
-            data=reg,
-            columns=['region_code', 'patient_count'],
-            key_on=f'feature.properties.{code_key}',
-            fill_color='YlOrRd',
-            fill_opacity=0.7,
-            line_opacity=0.2,
-            nan_fill_opacity=0,
-            legend_name='Patients (region sum)'
-        ).add_to(folium_map)
-    except Exception as e:
-        st.error(f"Error rendering regional choropleth: {str(e)}")
-
-
-@st.cache_data(show_spinner=False)
-def _get_fr_communes_geojson():
-    try:
-        url = "https://france-geojson.gregoiredavid.fr/repo/communes.geojson"
-        r = requests.get(url, timeout=25)
-        r.raise_for_status()
-        return r.json()
-    except Exception:
-        return None
-
-
-def _add_recruitment_choropleth_commune_to_map(folium_map, hospital_id, recruitment_df, max_communes: int = 300):
-    try:
-        df_rec = recruitment_df.copy()
-        df_rec['hospital_id'] = df_rec['hospital_id'].astype(str)
-        df_rec = df_rec[df_rec['hospital_id'] == str(hospital_id)]
-        if df_rec.empty:
-            st.info("No recruitment data for this hospital.")
-            return
-        df_rec['city_code'] = (
-            df_rec['city_code'].astype(str).str.strip().str.upper().str.zfill(5)
-        )
-        # Treat codes primarily as postal codes (dataset uses postal codes)
-        df_rec['postal'] = df_rec['city_code'].str.replace(r'\D+', '', regex=True).str.zfill(5)
-        agg = (
-            df_rec[df_rec['postal'].str.len() == 5]
-            .groupby('postal', as_index=False)['patient_count'].sum()
-            .sort_values('patient_count', ascending=False)
-            .head(max_communes)
-        )
-        codes = set(agg['postal'].astype(str))
-        gj_all = _get_fr_communes_geojson()
-        if not gj_all:
-            st.warning("Commune boundaries unavailable. Choropleth cannot be displayed.")
-            return
-        feats = gj_all.get('features', [])
-        # Build per-commune (INSEE code) sums by matching postal codes to feature 'codesPostaux'
-        rows = []
-        filtered = []
-        for f in feats:
-            props = f.get('properties', {})
-            insee = str(props.get('code', '')).strip()
-            postals = props.get('codesPostaux') or props.get('codes_postaux') or []
-            try:
-                if isinstance(postals, str):
-                    postals = [p.strip() for p in postals.split(',') if p.strip()]
-            except Exception:
-                postals = []
-            matched = [p for p in postals if p in codes]
-            if matched:
-                # Sum patient counts for all matched postals to this commune
-                s = float(agg[agg['postal'].isin(matched)]['patient_count'].sum())
-                if s > 0:
-                    rows.append({"insee": insee, "patient_count": s})
-                    filtered.append(f)
-        if not rows:
-            st.info("No commune polygons matched the recruitment codes.")
-            return
-        gj = {"type": "FeatureCollection", "features": filtered}
-        data_df = pd.DataFrame(rows)
-        folium.Choropleth(
-            geo_data=gj,
-            name='Recruitment (commune)',
-            data=data_df,
-            columns=['insee', 'patient_count'],
-            key_on='feature.properties.code',
-            fill_color='YlOrRd',
-            fill_opacity=0.75,
-            line_opacity=0.2,
-            nan_fill_opacity=0,
-            legend_name='Patients (commune sum)'
-        ).add_to(folium_map)
-        st.caption(f"Commune choropleth rendered from top {len(agg)} postal zones (mapped to communes).")
-    except Exception as e:
-        st.error(f"Error rendering commune choropleth: {str(e)}")
 
 with tab_activity:
     st.subheader("Activity Overview")
@@ -1318,10 +977,6 @@ with tab_activity:
                 fig_h_big.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                 st.plotly_chart(fig_h_big, use_container_width=True)
                 st.caption('Yearly total surgeries at the selected hospital. If 2025 is present, values are year‑to‑date.')
-                # Debug information
-                st.sidebar.write(f"✅ Graph displayed for hospital {selected_hospital_id}")
-                st.sidebar.write(f"📊 Years: {years_str}")
-                st.sidebar.write(f"📈 Values: {vals}")
             with b2:
                 # Reuse previously computed yoy_text (2025 YTD vs 2024 from monthly data if available)
                 if 'yoy_text' in locals() or 'yoy_text' in globals():
@@ -1329,12 +984,6 @@ with tab_activity:
                     st.caption('2025 YTD (until July)')
         else:
             st.info(f'No annual totals available to plot for hospital {selected_hospital_id}.')
-            # Debug information
-            st.sidebar.write(f"🔍 Debug: Hospital {selected_hospital_id} has no data in annual records")
-            st.sidebar.write(f"📊 Total annual records: {len(annual)}")
-            st.sidebar.write(f"🏥 Hospital data shape: {selected_hospital_all_data.shape}")
-            if not selected_hospital_all_data.empty:
-                st.sidebar.write(f"📅 Available columns: {list(selected_hospital_all_data.columns)}")
     except Exception:
         pass
     st.markdown("</div>", unsafe_allow_html=True)
