@@ -611,55 +611,63 @@ with tab_activity:
     def load_activity_csv_data():
         """Load all activity CSV data from new_data/ACTIVITY directory."""
         import os
-        activity_dir = "/Users/alexdebelka/Downloads/navira/new_data/ACTIVITY"
-        
-        data = {}
-        
-        # Load volume data
-        try:
-            vol_hop_year = pd.read_csv(os.path.join(activity_dir, "TAB_VOL_HOP_YEAR.csv"))
-            vol_hop_year['finessGeoDP'] = vol_hop_year['finessGeoDP'].astype(str)
-            data['vol_hop_year'] = vol_hop_year
-        except Exception as e:
-            st.warning(f"Could not load TAB_VOL_HOP_YEAR.csv: {e}")
-            data['vol_hop_year'] = pd.DataFrame()
-        
-        # Load procedure type data (TCN)
-        try:
-            tcn_hop_year = pd.read_csv(os.path.join(activity_dir, "TAB_TCN_HOP_YEAR.csv"))
-            tcn_hop_year['finessGeoDP'] = tcn_hop_year['finessGeoDP'].astype(str)
-            data['tcn_hop_year'] = tcn_hop_year
-        except Exception as e:
-            st.warning(f"Could not load TAB_TCN_HOP_YEAR.csv: {e}")
-            data['tcn_hop_year'] = pd.DataFrame()
-        
-        # Load approach data (APP)
-        try:
-            app_hop_year = pd.read_csv(os.path.join(activity_dir, "TAB_APP_HOP_YEAR.csv"))
-            app_hop_year['finessGeoDP'] = app_hop_year['finessGeoDP'].astype(str)
-            data['app_hop_year'] = app_hop_year
-        except Exception as e:
-            st.warning(f"Could not load TAB_APP_HOP_YEAR.csv: {e}")
-            data['app_hop_year'] = pd.DataFrame()
-        
-        # Load revision data (REV)
-        try:
-            rev_hop = pd.read_csv(os.path.join(activity_dir, "TAB_REV_HOP.csv"))
-            rev_hop['finessGeoDP'] = rev_hop['finessGeoDP'].astype(str)
-            data['rev_hop'] = rev_hop
-        except Exception as e:
-            st.warning(f"Could not load TAB_REV_HOP.csv: {e}")
-            data['rev_hop'] = pd.DataFrame()
-        
-        # Load robotic data (ROB)
-        try:
-            rob_hop = pd.read_csv(os.path.join(activity_dir, "TAB_ROB_HOP_12M.csv"))
-            rob_hop['finessGeoDP'] = rob_hop['finessGeoDP'].astype(str)
-            data['rob_hop'] = rob_hop
-        except Exception as e:
-            st.warning(f"Could not load TAB_ROB_HOP_12M.csv: {e}")
-            data['rob_hop'] = pd.DataFrame()
-        
+        from pathlib import Path
+        # Resolve ACTIVITY directory robustly
+        def _resolve_activity_dir():
+            candidates: list[str] = []
+            env_dir = os.environ.get('NAVIRA_ACTIVITY_DIR')
+            if env_dir:
+                candidates.append(env_dir)
+            try:
+                candidates.append(str(Path.cwd() / 'new_data' / 'ACTIVITY'))
+            except Exception:
+                pass
+            try:
+                here = Path(__file__).resolve()
+                candidates.append(str((here.parent / '..' / 'new_data' / 'ACTIVITY').resolve()))
+                candidates.append(str((here.parent.parent / 'new_data' / 'ACTIVITY').resolve()))
+            except Exception:
+                pass
+            candidates.append('/Users/alexdebelka/Downloads/navira/new_data/ACTIVITY')
+            for c in candidates:
+                try:
+                    if Path(c).is_dir():
+                        return c
+                except Exception:
+                    continue
+            return None
+
+        activity_dir = _resolve_activity_dir()
+        data: dict[str, pd.DataFrame] = {}
+        if not activity_dir:
+            st.warning("Could not locate new_data/ACTIVITY directory. Set NAVIRA_ACTIVITY_DIR or ensure it exists in the repo.")
+            return {
+                'vol_hop_year': pd.DataFrame(),
+                'tcn_hop_year': pd.DataFrame(),
+                'app_hop_year': pd.DataFrame(),
+                'rev_hop': pd.DataFrame(),
+                'rob_hop': pd.DataFrame(),
+            }
+
+        # Helper to read CSVs
+        def _read_csv(filename: str) -> pd.DataFrame:
+            try:
+                p = Path(activity_dir) / filename
+                if not p.exists():
+                    raise FileNotFoundError(str(p))
+                df = pd.read_csv(p)
+                if 'finessGeoDP' in df.columns:
+                    df['finessGeoDP'] = df['finessGeoDP'].astype(str)
+                return df
+            except Exception as e:
+                st.warning(f"Could not load {filename}: {e}")
+                return pd.DataFrame()
+
+        data['vol_hop_year'] = _read_csv('TAB_VOL_HOP_YEAR.csv')
+        data['tcn_hop_year'] = _read_csv('TAB_TCN_HOP_YEAR.csv')
+        data['app_hop_year'] = _read_csv('TAB_APP_HOP_YEAR.csv')
+        data['rev_hop'] = _read_csv('TAB_REV_HOP.csv')
+        data['rob_hop'] = _read_csv('TAB_ROB_HOP_12M.csv')
         return data
     
     # Load the CSV data
@@ -1697,7 +1705,7 @@ with tab_complications:
                 plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
             )
             st.plotly_chart(fig_sc, use_container_width=True)
-            st.caption('Sleeve share (x) vs bypass share (y) across hospitals/years. Orange dot is this hospital’s 2021–2025 average.')
+            st.caption("Sleeve share (x) vs bypass share (y) across hospitals/years. Orange dot is this hospital's 2021–2025 average.")
     except Exception as e:
         st.caption(f"Scatter unavailable: {e}")
     st.markdown("</div>", unsafe_allow_html=True)
