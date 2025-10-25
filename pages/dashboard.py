@@ -874,17 +874,49 @@ with tab_activity:
         if not rev_data.empty:
             hospital_rev = rev_data[rev_data['finessGeoDP'] == str(selected_hospital_id)]
             if not hospital_rev.empty:
-                # Calculate revision rate
-                total_procedures = hospital_rev['n'].sum()
-                revision_procedures = hospital_rev[hospital_rev['redo'] == 1]['n'].sum()
-                
-                if total_procedures > 0:
-                    revision_rate = (revision_procedures / total_procedures) * 100
+                # Calculate revision rate with flexible schema support
+                revision_rate = None
+                total_procedures = None
+                revision_procedures = None
+
+                # Case 1: Old schema with 'redo' flag and 'n' counts
+                if {'redo', 'n'}.issubset(set(hospital_rev.columns)):
+                    n_series = pd.to_numeric(hospital_rev['n'], errors='coerce').fillna(0)
+                    total_procedures = float(n_series.sum())
+                    redo_mask = (pd.to_numeric(hospital_rev['redo'], errors='coerce') == 1)
+                    revision_procedures = float(pd.to_numeric(hospital_rev.loc[redo_mask, 'n'], errors='coerce').fillna(0).sum())
+                    if total_procedures > 0:
+                        revision_rate = (revision_procedures / total_procedures) * 100.0
+
+                # Case 2: New schema with TOT (all) and TOT_rev (revision count)
+                elif {'TOT', 'TOT_rev'}.issubset(set(hospital_rev.columns)):
+                    tot = pd.to_numeric(hospital_rev['TOT'], errors='coerce').fillna(0)
+                    tot_rev = pd.to_numeric(hospital_rev['TOT_rev'], errors='coerce').fillna(0)
+                    total_procedures = float(tot.sum())
+                    revision_procedures = float(tot_rev.sum())
+                    if total_procedures > 0:
+                        revision_rate = (revision_procedures / total_procedures) * 100.0
+
+                # Case 3: Only percentage provided (PCT_rev), optionally weight by TOT
+                elif 'PCT_rev' in hospital_rev.columns:
+                    pct = pd.to_numeric(hospital_rev['PCT_rev'], errors='coerce').fillna(0)
+                    if 'TOT' in hospital_rev.columns:
+                        weights = pd.to_numeric(hospital_rev['TOT'], errors='coerce').fillna(0)
+                        wsum = float(weights.sum())
+                        if wsum > 0:
+                            revision_rate = float((pct * weights).sum() / wsum)
+                            total_procedures = float(wsum)
+                        else:
+                            revision_rate = float(pct.mean())
+                    else:
+                        revision_rate = float(pct.mean())
+
+                if revision_rate is not None:
                     
                     # Create revision rate indicator
                     fig = go.Figure(go.Indicator(
                         mode = "number+delta",
-                        value = revision_rate,
+                        value = float(revision_rate),
                         title = {"text": "Revision Rate (%)"},
                         number = {'font': {'size': 50}, 'suffix': '%'},
                         delta = {'reference': 0}
@@ -898,9 +930,12 @@ with tab_activity:
                     )
                     
                     st.plotly_chart(fig, use_container_width=True)
-                    st.caption(f"Total procedures: {total_procedures:,}<br>Revision procedures: {revision_procedures:,}")
+                    if total_procedures is not None and revision_procedures is not None:
+                        st.caption(f"Total procedures: {int(total_procedures):,}<br>Revision procedures: {int(revision_procedures):,}")
+                    else:
+                        st.caption("Rate computed from percentages")
                 else:
-                    st.info("No procedure data available")
+                    st.info("No revision rate available for this hospital")
             else:
                 st.info(f"No revision data found for hospital {selected_hospital_id}")
         else:
