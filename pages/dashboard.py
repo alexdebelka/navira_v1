@@ -605,170 +605,450 @@ else:
 
 with tab_activity:
     st.subheader("Activity Overview")
-    # Show YTD note and available years for quick diagnostics
-    try:
-        if is_ytd_2025:
-            st.caption("Note: 2025 figures are year‑to‑date through July.")
-        yrs_avail = sorted(pd.to_numeric(selected_hospital_all_data.get('annee', pd.Series(dtype=float)), errors='coerce').dropna().astype(int).unique().tolist())
-        if yrs_avail:
-            st.caption(f"Available years for this hospital: {yrs_avail[0]}–{yrs_avail[-1]}")
-            if 2025 not in yrs_avail and is_ytd_2025:
-                st.info("2025 activity is not present in the current dataset. If you recently added 2025 activity CSVs, please rebuild parquet with: make parquet, then reload.")
-    except Exception:
-        pass
     
-    # Load monthly volume data helper function
+    # Load CSV data directly from new_data/ACTIVITY
     @st.cache_data(show_spinner=False)
-    def _load_monthly_volumes(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.csv") -> pd.DataFrame:
+    def load_activity_csv_data():
+        """Load all activity CSV data from new_data/ACTIVITY directory."""
+        import os
+        activity_dir = "/Users/alexdebelka/Downloads/navira/new_data/ACTIVITY"
+        
+        data = {}
+        
+        # Load volume data
         try:
-            df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int, 'mois': int})
-            df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
-            return df
-        except Exception:
-            return pd.DataFrame()
+            vol_hop_year = pd.read_csv(os.path.join(activity_dir, "TAB_VOL_HOP_YEAR.csv"))
+            vol_hop_year['finessGeoDP'] = vol_hop_year['finessGeoDP'].astype(str)
+            data['vol_hop_year'] = vol_hop_year
+        except Exception as e:
+            st.warning(f"Could not load TAB_VOL_HOP_YEAR.csv: {e}")
+            data['vol_hop_year'] = pd.DataFrame()
+        
+        # Load procedure type data (TCN)
+        try:
+            tcn_hop_year = pd.read_csv(os.path.join(activity_dir, "TAB_TCN_HOP_YEAR.csv"))
+            tcn_hop_year['finessGeoDP'] = tcn_hop_year['finessGeoDP'].astype(str)
+            data['tcn_hop_year'] = tcn_hop_year
+        except Exception as e:
+            st.warning(f"Could not load TAB_TCN_HOP_YEAR.csv: {e}")
+            data['tcn_hop_year'] = pd.DataFrame()
+        
+        # Load approach data (APP)
+        try:
+            app_hop_year = pd.read_csv(os.path.join(activity_dir, "TAB_APP_HOP_YEAR.csv"))
+            app_hop_year['finessGeoDP'] = app_hop_year['finessGeoDP'].astype(str)
+            data['app_hop_year'] = app_hop_year
+        except Exception as e:
+            st.warning(f"Could not load TAB_APP_HOP_YEAR.csv: {e}")
+            data['app_hop_year'] = pd.DataFrame()
+        
+        # Load revision data (REV)
+        try:
+            rev_hop = pd.read_csv(os.path.join(activity_dir, "TAB_REV_HOP.csv"))
+            rev_hop['finessGeoDP'] = rev_hop['finessGeoDP'].astype(str)
+            data['rev_hop'] = rev_hop
+        except Exception as e:
+            st.warning(f"Could not load TAB_REV_HOP.csv: {e}")
+            data['rev_hop'] = pd.DataFrame()
+        
+        # Load robotic data (ROB)
+        try:
+            rob_hop = pd.read_csv(os.path.join(activity_dir, "TAB_ROB_HOP_12M.csv"))
+            rob_hop['finessGeoDP'] = rob_hop['finessGeoDP'].astype(str)
+            data['rob_hop'] = rob_hop
+        except Exception as e:
+            st.warning(f"Could not load TAB_ROB_HOP_12M.csv: {e}")
+            data['rob_hop'] = pd.DataFrame()
+        
+        return data
     
-    # Total surgeries and quick mix charts (MOVED TO TOP)
-    col1, col2 = st.columns([2, 1])  # Hospital graphs larger (2), National graphs smaller (1)
+    # Load the CSV data
+    csv_data = load_activity_csv_data()
     
-    # with col1:
-    #     # Combined chart: Total Surgeries line + Procedure Mix bars
-    #     st.markdown("#### Hospital: Total Surgeries & Procedure Mix")
+    # Create main activity charts
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("#### Hospital: Number of Procedures per Year")
         
-    #     # Load monthly volume data for more granular visualization
-    #     monthly_vol = _load_monthly_volumes()
-        
-    #     # Get procedure data for the combined chart - Filter out 2020
-    #     proc_codes = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
-    #     hosp_year = selected_hospital_all_data[['annee','total_procedures_year']].dropna()
-    #     hosp_year = hosp_year[hosp_year['annee'] > 2020]  # Remove 2020 data
-        
-    #     if not hosp_year.empty and proc_codes:
-    #         # Use monthly volume data if available, otherwise fall back to annual data
-    #         if not monthly_vol.empty and 'finessGeoDP' in monthly_vol.columns and 'baria_t' in monthly_vol.columns:
-    #             hosp_monthly_vol = monthly_vol[monthly_vol['finessGeoDP'] == str(selected_hospital_id)].copy()
-    #             hosp_monthly_vol = hosp_monthly_vol[hosp_monthly_vol['annee'] > 2020]  # Filter out 2020
+        # Get hospital volume data
+        vol_data = csv_data['vol_hop_year']
+        if not vol_data.empty:
+            hospital_vol = vol_data[vol_data['finessGeoDP'] == str(selected_hospital_id)]
+            if not hospital_vol.empty:
+                # Create the procedures per year chart
+                fig = go.Figure()
                 
-    #             if not hosp_monthly_vol.empty:
-    #                 # Aggregate monthly data by year and procedure type
-    #                 proc_long = []
-    #                 for year in sorted(hosp_monthly_vol['annee'].unique()):
-    #                     year_data = hosp_monthly_vol[hosp_monthly_vol['annee'] == year]
-    #                     # Map baria_t codes to our display names
-    #                     sleeve_total = year_data[year_data['baria_t'] == 'SLE']['TOT_year_tcn'].iloc[0] if not year_data[year_data['baria_t'] == 'SLE'].empty else 0
-    #                     bypass_total = year_data[year_data['baria_t'] == 'BPG']['TOT_year_tcn'].iloc[0] if not year_data[year_data['baria_t'] == 'BPG'].empty else 0
-    #                     # Other procedures
-    #                     other_codes = year_data[~year_data['baria_t'].isin(['SLE', 'BPG'])]
-    #                     other_total = other_codes['TOT_year_tcn'].sum() if not other_codes.empty else 0
+                # Sort by year
+                hospital_vol = hospital_vol.sort_values('annee')
+                years = hospital_vol['annee'].astype(int).tolist()
+                procedures = hospital_vol['n'].tolist()
+                
+                # Color 2025 differently if it exists
+                colors = ['#1f4e79' if y == 2025 else '#4e79a7' for y in years]
+                
+                fig.add_trace(go.Bar(
+                    x=[str(y) for y in years],
+                    y=procedures,
+                    marker_color=colors,
+                    name='Procedures',
+                    hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>'
+                ))
+                
+                fig.update_layout(
+                    title="Hospital Procedures per Year",
+                    xaxis_title="Year",
+                    yaxis_title="Number of Procedures",
+                    height=400,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='white')
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption("Yearly total surgeries at the selected hospital. 2025 values are year-to-date if present.")
+            else:
+                st.info(f"No volume data found for hospital {selected_hospital_id}")
+        else:
+            st.warning("Volume data not available")
+    
+    with col2:
+        st.markdown("#### Procedure Mix")
+        
+        # Get procedure type data
+        tcn_data = csv_data['tcn_hop_year']
+        if not tcn_data.empty:
+            hospital_tcn = tcn_data[tcn_data['finessGeoDP'] == str(selected_hospital_id)]
+            if not hospital_tcn.empty:
+                # Get the latest year's data
+                latest_year = hospital_tcn['annee'].max()
+                latest_data = hospital_tcn[hospital_tcn['annee'] == latest_year]
+                
+                if not latest_data.empty:
+                    # Create procedure mix pie chart
+                    procedure_totals = {}
+                    for _, row in latest_data.iterrows():
+                        procedure_type = row.get('baria_t', 'Unknown')
+                        total = row.get('TOT', 0)
+                        if procedure_type in procedure_totals:
+                            procedure_totals[procedure_type] += total
+                        else:
+                            procedure_totals[procedure_type] = total
+                    
+                    if procedure_totals:
+                        # Map procedure codes to names
+                        procedure_names = {
+                            'SLE': 'Sleeve Gastrectomy',
+                            'BPG': 'Gastric Bypass', 
+                            'ANN': 'Gastric Banding',
+                            'REV': 'Other',
+                            'ABL': 'Band Removal',
+                            'DBP': 'Bilio-pancreatic Diversion',
+                            'GVC': 'Calibrated Vertical Gastroplasty',
+                            'NDD': 'Not Defined'
+                        }
                         
-    #                     total = max(1, sleeve_total + bypass_total + other_total)
-    #                     for label, val in [("Sleeve", sleeve_total), ("Gastric Bypass", bypass_total), ("Other", other_total)]:
-    #                         proc_long.append({'annee': int(year), 'Procedures': label, 'Share': val / total * 100})
-    #                 pl = pd.DataFrame(proc_long)
-    #             else:
-    #                 # Fallback to annual data
-    #                 proc_df = selected_hospital_all_data[selected_hospital_all_data['annee'] > 2020][['annee']+proc_codes].copy()
-    #                 proc_long = []
-    #                 for _, r in proc_df.iterrows():
-    #                     total = max(1, sum(r[c] for c in proc_codes))
-    #                     sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
-    #                     other = total - sleeve - bypass
-    #                     for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
-    #                         proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
-    #                 pl = pd.DataFrame(proc_long)
-    #         else:
-    #             # Fallback to annual data
-    #             proc_df = selected_hospital_all_data[selected_hospital_all_data['annee'] > 2020][['annee']+proc_codes].copy()
-    #             proc_long = []
-    #             for _, r in proc_df.iterrows():
-    #                 total = max(1, sum(r[c] for c in proc_codes))
-    #                 sleeve = r.get('SLE',0); bypass = r.get('BPG',0)
-    #                 other = total - sleeve - bypass
-    #                 for label,val in [("Sleeve",sleeve),("Gastric Bypass",bypass),("Other",other)]:
-    #                     proc_long.append({'annee':int(r['annee']),'Procedures':label,'Share':val/total*100})
-    #             pl = pd.DataFrame(proc_long)
-            
-    #         if not pl.empty:
-    #             # Create the combined chart
-    #             fig = go.Figure()
+                        labels = []
+                        values = []
+                        colors = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#A8E6CF', '#FFB6C1', '#DDA0DD', '#98FB98', '#F0E68C']
+                        
+                        for i, (code, total) in enumerate(procedure_totals.items()):
+                            if total > 0:
+                                labels.append(procedure_names.get(code, code))
+                                values.append(total)
+                        
+                        if values:
+                            fig = go.Figure(data=[go.Pie(
+                                labels=labels,
+                                values=values,
+                                hole=0.4,
+                                marker_colors=colors[:len(labels)]
+                            )])
+                            
+                            fig.update_layout(
+                                title=f"Procedure Mix ({int(latest_year)})",
+                                height=400,
+                                plot_bgcolor='rgba(0,0,0,0)',
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                font=dict(color='white')
+                            )
+                            
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.info("No procedure data available")
+                    else:
+                        st.info("No procedure totals found")
+                else:
+                    st.info("No data for latest year")
+            else:
+                st.info(f"No procedure data found for hospital {selected_hospital_id}")
+        else:
+            st.warning("Procedure data not available")
+    
+    # Add more charts in a new row
+    st.markdown("---")
+    
+    col3, col4 = st.columns([1, 1])
+    
+    with col3:
+        st.markdown("#### Surgical Approaches")
+        
+        # Get approach data
+        app_data = csv_data['app_hop_year']
+        if not app_data.empty:
+            hospital_app = app_data[app_data['finessGeoDP'] == str(selected_hospital_id)]
+            if not hospital_app.empty:
+                # Get the latest year's data
+                latest_year = hospital_app['annee'].max()
+                latest_data = hospital_app[hospital_app['annee'] == latest_year]
                 
-    #             # Add stacked bar chart for procedure mix with different colors for 2025
-    #             colors_regular = {'Sleeve': '#FF6B6B', 'Gastric Bypass': '#4ECDC4', 'Other': '#FFE66D'}  # Coral, Teal, Yellow
-    #             colors_2025 = {'Sleeve': '#C92A2A', 'Gastric Bypass': '#0C8599', 'Other': '#E8B923'}  # Darker/more saturated for 2025
-                
-    #             for procedure in pl['Procedures'].unique():
-    #                 data = pl[pl['Procedures'] == procedure]
-    #                 # Split data into 2025 and non-2025
-    #                 data_before_2025 = data[data['annee'] < 2025]
-    #                 data_2025 = data[data['annee'] == 2025]
+                if not latest_data.empty:
+                    # Create approach mix chart
+                    approach_totals = {}
+                    for _, row in latest_data.iterrows():
+                        approach_type = row.get('VDA', 'Unknown')
+                        total = row.get('TOT', 0)
+                        if approach_type in approach_totals:
+                            approach_totals[approach_type] += total
+                        else:
+                            approach_totals[approach_type] = total
                     
-    #                 # Add bars for years before 2025
-    #                 if not data_before_2025.empty:
-    #                     fig.add_trace(go.Bar(
-    #                         x=data_before_2025['annee'],
-    #                         y=data_before_2025['Share'],
-    #                         name=procedure,
-    #                         marker_color=colors_regular.get(procedure, '#cccccc'),
-    #                         yaxis='y',
-    #                         opacity=0.7,
-    #                         legendgroup=procedure,
-    #                         showlegend=True
-    #                     ))
+                    if approach_totals:
+                        # Map approach codes to names
+                        approach_names = {
+                            'LAP': 'Open Surgery',
+                            'COE': 'Coelioscopy',
+                            'ROB': 'Robotic'
+                        }
+                        
+                        labels = []
+                        values = []
+                        colors = ['#FF6B6B', '#4ECDC4', '#FFE66D']
+                        
+                        for i, (code, total) in enumerate(approach_totals.items()):
+                            if total > 0:
+                                labels.append(approach_names.get(code, code))
+                                values.append(total)
+                        
+                        if values:
+                            fig = go.Figure(data=[go.Pie(
+                                labels=labels,
+                                values=values,
+                                hole=0.4,
+                                marker_colors=colors[:len(labels)]
+                            )])
+                            
+                            fig.update_layout(
+                                title=f"Surgical Approaches ({int(latest_year)})",
+                                height=400,
+                                plot_bgcolor='rgba(0,0,0,0)',
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                font=dict(color='white')
+                            )
+                            
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.info("No approach data available")
+                    else:
+                        st.info("No approach totals found")
+                else:
+                    st.info("No data for latest year")
+            else:
+                st.info(f"No approach data found for hospital {selected_hospital_id}")
+        else:
+            st.warning("Approach data not available")
+    
+    with col4:
+        st.markdown("#### Revision Rate")
+        
+        # Get revision data
+        rev_data = csv_data['rev_hop']
+        if not rev_data.empty:
+            hospital_rev = rev_data[rev_data['finessGeoDP'] == str(selected_hospital_id)]
+            if not hospital_rev.empty:
+                # Calculate revision rate
+                total_procedures = hospital_rev['n'].sum()
+                revision_procedures = hospital_rev[hospital_rev['redo'] == 1]['n'].sum()
+                
+                if total_procedures > 0:
+                    revision_rate = (revision_procedures / total_procedures) * 100
                     
-    #                 # Add bars for 2025 with different color
-    #                 if not data_2025.empty:
-    #                     fig.add_trace(go.Bar(
-    #                         x=data_2025['annee'],
-    #                         y=data_2025['Share'],
-    #                         name=f"{procedure} (2025 YTD)",
-    #                         marker_color=colors_2025.get(procedure, '#888888'),
-    #                         yaxis='y',
-    #                         opacity=0.85,
-    #                         legendgroup=procedure,
-    #                         showlegend=True
-    #                     ))
+                    # Create revision rate indicator
+                    fig = go.Figure(go.Indicator(
+                        mode = "number+delta",
+                        value = revision_rate,
+                        title = {"text": "Revision Rate (%)"},
+                        number = {'font': {'size': 50}, 'suffix': '%'},
+                        delta = {'reference': 0}
+                    ))
+                    
+                    fig.update_layout(
+                        height=300,
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color='white')
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.caption(f"Total procedures: {total_procedures:,}<br>Revision procedures: {revision_procedures:,}")
+                else:
+                    st.info("No procedure data available")
+            else:
+                st.info(f"No revision data found for hospital {selected_hospital_id}")
+        else:
+            st.warning("Revision data not available")
+    
+    # Add robotic surgery chart
+    st.markdown("---")
+    
+    col5, col6 = st.columns([1, 1])
+    
+    with col5:
+        st.markdown("#### Robotic Surgery Share")
+        
+        # Get robotic data
+        rob_data = csv_data['rob_hop']
+        if not rob_data.empty:
+            hospital_rob = rob_data[rob_data['finessGeoDP'] == str(selected_hospital_id)]
+            if not hospital_rob.empty:
+                # Calculate robotic surgery percentage
+                total_robotic = hospital_rob['TOT'].sum()
                 
-    #             # Add line chart for total surgeries using annual data (on secondary y-axis)
-    #             hosp_year_clean = hosp_year.dropna()
-    #             fig.add_trace(go.Scatter(
-    #                 x=hosp_year_clean['annee'],
-    #                 y=hosp_year_clean['total_procedures_year'],
-    #                 mode='lines+markers',
-    #                 name='Total Surgeries',
-    #                 line=dict(color='#961316', width=4),
-    #                 marker=dict(size=8, color='#961316'),
-    #                 yaxis='y2',
-    #                 hovertemplate='<b>Total Surgeries</b><br>Year: %{x}<br>Count: %{y}<extra></extra>'
-    #             ))
-                
-    #             # Update layout with dual y-axes
-    #             max_y2 = max(hosp_year_clean['total_procedures_year']) * 1.1 if not hosp_year_clean.empty else 100
-    #             fig.update_layout(
-    #                 height=450,
-    #                 plot_bgcolor='rgba(0,0,0,0)',
-    #                 paper_bgcolor='rgba(0,0,0,0)',
-    #                 barmode='stack',
-    #                 title='Total Surgeries & Procedure Mix Overlay',
-    #                 xaxis_title='Year',
-    #                 yaxis=dict(
-    #                     title='Procedure Share (%)',
-    #                     side='left',
-    #                     range=[0, 100]
-    #                 ),
-    #                 yaxis2=dict(
-    #                     title='Total Surgeries Count',
-    #                     side='right',
-    #                     overlaying='y',
-    #                     range=[0, max_y2]
-    #                 ),
-    #                 legend=dict(
-    #                     orientation="h",
-    #                     yanchor="bottom",
-    #                     y=-0.35,
-    #                     xanchor="center",
-    #                     x=0.5
-    #                 ),
-    #                 xaxis=dict(automargin=True),
-    #                 margin=dict(b=140, t=60)
+                if total_robotic > 0:
+                    # Create robotic surgery indicator
+                    fig = go.Figure(go.Indicator(
+                        mode = "number",
+                        value = total_robotic,
+                        title = {"text": "Robotic Procedures"},
+                        number = {'font': {'size': 50}}
+                    ))
+                    
+                    fig.update_layout(
+                        height=300,
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color='white')
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.caption("Total robotic procedures (12-month rolling)")
+                else:
+                    st.info("No robotic procedures found")
+            else:
+                st.info(f"No robotic data found for hospital {selected_hospital_id}")
+        else:
+            st.warning("Robotic data not available")
+    
+    with col6:
+        st.markdown("#### Data Summary")
+        
+        # Show data availability summary
+        st.markdown("**Data Sources:**")
+        st.markdown("• Volume: TAB_VOL_HOP_YEAR.csv")
+        st.markdown("• Procedures: TAB_TCN_HOP_YEAR.csv") 
+        st.markdown("• Approaches: TAB_APP_HOP_YEAR.csv")
+        st.markdown("• Revisions: TAB_REV_HOP.csv")
+        st.markdown("• Robotic: TAB_ROB_HOP_12M.csv")
+        
+        # Show hospital ID for debugging
+        st.markdown(f"**Hospital ID:** {selected_hospital_id}")
+        
+        # Show data status
+        data_status = []
+        for key, df in csv_data.items():
+            if not df.empty:
+                hospital_data = df[df['finessGeoDP'] == str(selected_hospital_id)]
+                if not hospital_data.empty:
+                    data_status.append(f"✅ {key}: {len(hospital_data)} records")
+                else:
+                    data_status.append(f"⚠️ {key}: No hospital data")
+            else:
+                data_status.append(f"❌ {key}: No data loaded")
+        
+        st.markdown("**Data Status:**")
+        for status in data_status:
+            st.markdown(f"• {status}")
+
+
+with tab_complications:
+    st.subheader("Complications")
+    # Overall complication rate (90 days) — bubble quartet per design
+    try:
+        st.markdown("### Overall complication rate (90 days)")
+        last12 = st.toggle("Last 12 months", value=False, key=f"comp_rate_last12_{selected_hospital_id}")
+
+        # Ensure datetime and numeric types
+        comp_src = complications.copy()
+        if not comp_src.empty:
+            if 'quarter_date' in comp_src.columns:
+                comp_src['quarter_date'] = pd.to_datetime(comp_src['quarter_date'], errors='coerce')
+            for c in ['complications_count','procedures_count']:
+                if c in comp_src.columns:
+                    comp_src[c] = pd.to_numeric(comp_src[c], errors='coerce')
+
+        def _extract_region_from_details(row) -> str | None:
+            try:
+                for key in ['lib_reg', 'region', 'code_reg', 'region_name']:
+                    if key in row and pd.notna(row[key]) and str(row[key]).strip():
+                        return str(row[key]).strip()
+            except Exception:
+                return None
+            return None
+
+        region_val_c = _extract_region_from_details(selected_hospital_details)
+        ids_all_c = establishments['id'].astype(str).unique().tolist() if 'id' in establishments.columns else []
+        ids_reg_c = (
+            establishments[establishments.get('lib_reg', establishments.get('region', '')).astype(str).str.strip() == str(region_val_c)]['id'].astype(str).unique().tolist()
+            if region_val_c is not None and 'id' in establishments.columns else []
+        )
+        status_val_c = str(selected_hospital_details.get('status','')).strip()
+        ids_cat_c = (
+            establishments[establishments.get('status','').astype(str).str.strip() == status_val_c]['id'].astype(str).unique().tolist()
+            if 'status' in establishments.columns else []
+        )
+
+        def _rate_for_ids(ids: list[str]) -> float:
+            if comp_src is None or comp_src.empty:
+                return 0.0
+            df = comp_src.copy()
+            if 'hospital_id' in df.columns:
+                df['hospital_id'] = df['hospital_id'].astype(str)
+                if ids:
+                    df = df[df['hospital_id'].isin([str(i) for i in ids])]
+            if df.empty:
+                return 0.0
+            if last12 and 'quarter_date' in df.columns:
+                mx = df['quarter_date'].dropna().max()
+                if pd.notna(mx):
+                    start = (mx - pd.DateOffset(months=11))  # approx 12 months; data is quarterly so covers last 4 quarters
+                    df = df[(df['quarter_date'] >= start) & (df['quarter_date'] <= mx)]
+            # Use new CSV data structure
+            num = float(pd.to_numeric(df.get('complications_count', 0), errors='coerce').fillna(0).sum())
+            den = float(pd.to_numeric(df.get('total_procedures', 0), errors='coerce').fillna(0).sum())
+            return (num / den * 100.0) if den > 0 else 0.0
+
+        val_h = _rate_for_ids([selected_hospital_id])
+        val_n = _rate_for_ids(ids_all_c)
+        val_r = _rate_for_ids(ids_reg_c)
+        val_s = _rate_for_ids(ids_cat_c)
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.markdown(f"<div class='nv-bubble blue' style='width:120px;height:120px;font-size:1.8rem'>{val_h:.1f}%</div>", unsafe_allow_html=True)
+            st.markdown("<div class='nv-bubble-label'>Hospital</div>", unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"<div class='nv-bubble peach' style='width:120px;height:120px;font-size:1.8rem'>{val_n:.1f}%</div>", unsafe_allow_html=True)
+            st.markdown("<div class='nv-bubble-label'>National</div>", unsafe_allow_html=True)
+        with c3:
+            st.markdown(f"<div class='nv-bubble green' style='width:120px;height:120px;font-size:1.8rem'>{val_r:.1f}%</div>", unsafe_allow_html=True)
+            st.markdown("<div class='nv-bubble-label'>Regional</div>", unsafe_allow_html=True)
+        with c4:
+            st.markdown(f"<div class='nv-bubble pink' style='width:120px;height:120px;font-size:1.8rem'>{val_s:.1f}%</div>", unsafe_allow_html=True)
+            st.markdown("<div class='nv-bubble-label'>Same category</div>", unsafe_allow_html=True)
+        if last12:
+            st.caption("Last 12 months (approx. last 4 quarters)")
+    except Exception as e:
+        st.caption(f"Overall complication rate unavailable: {e}")
     #             )
                 
     #             # Update bar hover templates
