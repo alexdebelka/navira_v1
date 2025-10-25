@@ -263,6 +263,12 @@ if est_row.empty:
 selected_hospital_details = est_row.iloc[0]
 selected_hospital_all_data = annual[annual['id'] == str(selected_hospital_id)]
 
+# Debug: Check data structure
+if selected_hospital_all_data.empty:
+    st.warning(f"No annual data found for hospital {selected_hospital_id}")
+    # Create empty DataFrame with expected columns
+    selected_hospital_all_data = pd.DataFrame(columns=['annee', 'total_procedures_year'])
+
 # Year helpers for dynamic 2025 inclusion (YTD)
 try:
     _years_all = sorted(pd.to_numeric(annual.get('annee', pd.Series(dtype=float)), errors='coerce').dropna().astype(int).unique().tolist())
@@ -325,18 +331,34 @@ def _load_vda_year_totals_summary(path: str = "data/export_TAB_VDA_HOP.csv", cac
         return pd.DataFrame()
 
 # Core aggregates
-total_proc_hospital = float(selected_hospital_all_data.get('total_procedures_year', pd.Series(dtype=float)).sum())
+if 'total_procedures_year' in selected_hospital_all_data.columns:
+    total_proc_hospital = float(selected_hospital_all_data['total_procedures_year'].sum())
+else:
+    total_proc_hospital = 0.0
 total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
 hospital_revision_pct = (total_rev_hospital / total_proc_hospital) * 100 if total_proc_hospital > 0 else 0.0
 
 # Period totals (2021–2024)
-_period_mask = (selected_hospital_all_data.get('annee', pd.Series(dtype=float)) >= 2021) & (selected_hospital_all_data.get('annee', pd.Series(dtype=float)) <= 2024)
-period_21_24 = selected_hospital_all_data[_period_mask]
-period_total = int(pd.to_numeric(period_21_24.get('total_procedures_year', 0), errors='coerce').fillna(0).sum())
+if 'annee' in selected_hospital_all_data.columns:
+    _period_mask = (selected_hospital_all_data['annee'] >= 2021) & (selected_hospital_all_data['annee'] <= 2024)
+    period_21_24 = selected_hospital_all_data[_period_mask]
+else:
+    period_21_24 = selected_hospital_all_data
+if 'total_procedures_year' in period_21_24.columns:
+    period_total = int(pd.to_numeric(period_21_24['total_procedures_year'], errors='coerce').fillna(0).sum())
+else:
+    period_total = 0
 
 # Ongoing year total
 ongoing_year = int(latest_year_activity)
-ongoing_total = int(pd.to_numeric(selected_hospital_all_data[selected_hospital_all_data['annee'] == ongoing_year].get('total_procedures_year', 0), errors='coerce').fillna(0).sum())
+if 'annee' in selected_hospital_all_data.columns:
+    ongoing_data = selected_hospital_all_data[selected_hospital_all_data['annee'] == ongoing_year]
+    if 'total_procedures_year' in ongoing_data.columns:
+        ongoing_total = int(pd.to_numeric(ongoing_data['total_procedures_year'], errors='coerce').fillna(0).sum())
+    else:
+        ongoing_total = 0
+else:
+    ongoing_total = 0
 ongoing_year_display = int(ongoing_year)
 
 # Expected trend (YoY YTD vs same months last year)
@@ -427,7 +449,10 @@ with c_donut:
         st.markdown("##### Type of procedures")
         proc_cols_present = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
         # Use 2021–2024 window to match headline period
-        dfp = selected_hospital_all_data[(selected_hospital_all_data['annee'] >= 2021) & (selected_hospital_all_data['annee'] <= 2024)]
+        if 'annee' in selected_hospital_all_data.columns:
+            dfp = selected_hospital_all_data[(selected_hospital_all_data['annee'] >= 2021) & (selected_hospital_all_data['annee'] <= 2024)]
+        else:
+            dfp = selected_hospital_all_data
         sleeve_total = int(pd.to_numeric(dfp.get('SLE', 0), errors='coerce').fillna(0).sum()) if 'SLE' in proc_cols_present else 0
         bypass_total = int(pd.to_numeric(dfp.get('BPG', 0), errors='coerce').fillna(0).sum()) if 'BPG' in proc_cols_present else 0
         other_codes = [c for c in proc_cols_present if c not in ['SLE', 'BPG']]
@@ -451,7 +476,10 @@ with c_robot:
     try:
         st.markdown("##### Robotic share")
         bar_year = 2024 if is_ytd_2025 else latest_year_activity
-        row = selected_hospital_all_data[selected_hospital_all_data['annee'] == bar_year]
+        if 'annee' in selected_hospital_all_data.columns:
+            row = selected_hospital_all_data[selected_hospital_all_data['annee'] == bar_year]
+        else:
+            row = selected_hospital_all_data
         if not row.empty:
             v_lap = float(pd.to_numeric(row.get('LAP', 0), errors='coerce').fillna(0).sum())
             v_coe = float(pd.to_numeric(row.get('COE', 0), errors='coerce').fillna(0).sum())
