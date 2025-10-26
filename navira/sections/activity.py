@@ -98,6 +98,116 @@ def render_activity(hospital_id: str, repo: DataRepo):
         st.markdown(f"<div class='nv-bubble teal' style='width:110px;height:110px;font-size:1.6rem'>{yoy_text}</div>", unsafe_allow_html=True)
         st.caption('2025 YTD vs 2024 (based on CSV totals)')
 
+    # National / Regional / Same-category — Procedures per year from APP CSVs (sum of n by year)
+    def _totals_by_year(df: pd.DataFrame) -> pd.DataFrame:
+        if df is None or df.empty:
+            return pd.DataFrame(columns=["year", "total"])
+        d = DataRepo.ensure_year_column(df)
+        val_col = "n" if "n" in d.columns else ("TOT" if "TOT" in d.columns else None)
+        if val_col is None or "year" not in d.columns:
+            return pd.DataFrame(columns=["year", "total"])
+        g = d.groupby("year", as_index=False)[val_col].sum().rename(columns={val_col: "total"})
+        g["year"] = pd.to_numeric(g["year"], errors="coerce").astype("Int64")
+        g = g.dropna(subset=["year"])  # keep valid years only
+        return g
+
+    def _yoy_label(totals: pd.DataFrame) -> str | None:
+        try:
+            if totals is None or totals.empty:
+                return None
+            def _val(y: int) -> float | None:
+                m = totals[totals["year"] == y]
+                return float(m["total"].iloc[0]) if not m.empty else None
+            v24, v25 = _val(2024), _val(2025)
+            if v24 and v25 is not None and v24 > 0:
+                return f"{((v25 / v24 - 1.0) * 100.0):+.0f}%"
+        except Exception:
+            return None
+        return None
+
+    st.markdown("---")
+    st.markdown("#### National / Regional / Same category — Procedures per year")
+    c_nat, c_reg, c_cat = st.columns(3)
+
+    # National
+    with c_nat:
+        nat_tot = _totals_by_year(app_nat_year)
+        if not nat_tot.empty:
+            s1, s2 = st.columns([4, 1])
+            with s1:
+                dfp = nat_tot.copy()
+                dfp = dfp.sort_values("year")
+                fig_n = px.bar(
+                    dfp.assign(year=lambda d: d["year"].astype(int).astype(str)),
+                    x="year", y="total", title="National",
+                    color_discrete_sequence=["#E9A23B"],
+                )
+                fig_n.update_layout(height=260, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                fig_n.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
+                st.plotly_chart(fig_n, use_container_width=True)
+            with s2:
+                lbl = _yoy_label(nat_tot)
+                if lbl:
+                    st.markdown(f"<div class='nv-bubble' style='background:#E9A23B;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
+                    st.caption('2025 vs 2024')
+        else:
+            st.info("No national APP CSV data.")
+
+    # Regional
+    region_name, status_val = repo.get_region_and_status(hospital_id)
+    with c_reg:
+        if region_name and not app_reg_year.empty:
+            reg = app_reg_year[app_reg_year.get("lib_reg").astype(str).str.strip() == str(region_name)]
+            reg_tot = _totals_by_year(reg)
+            if not reg_tot.empty:
+                s1, s2 = st.columns([4, 1])
+                with s1:
+                    dfp = reg_tot.sort_values("year")
+                    fig_r = px.bar(
+                        dfp.assign(year=lambda d: d["year"].astype(int).astype(str)),
+                        x="year", y="total", title=f"Regional — {region_name}",
+                        color_discrete_sequence=["#4ECDC4"],
+                    )
+                    fig_r.update_layout(height=260, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    fig_r.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
+                    st.plotly_chart(fig_r, use_container_width=True)
+                with s2:
+                    lbl = _yoy_label(reg_tot)
+                    if lbl:
+                        st.markdown(f"<div class='nv-bubble' style='background:#4ECDC4;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
+                        st.caption('2025 vs 2024')
+            else:
+                st.info("No regional APP rows for this region.")
+        else:
+            st.info("Regional APP CSV not loaded or region not found.")
+
+    # Same category
+    with c_cat:
+        if status_val and not app_status_year.empty:
+            cat = app_status_year[app_status_year.get("statut").astype(str).str.strip() == str(status_val)]
+            cat_tot = _totals_by_year(cat)
+            if not cat_tot.empty:
+                s1, s2 = st.columns([4, 1])
+                with s1:
+                    dfp = cat_tot.sort_values("year")
+                    fig_c = px.bar(
+                        dfp.assign(year=lambda d: d["year"].astype(int).astype(str)),
+                        x="year", y="total", title="Same category",
+                        color_discrete_sequence=["#A78BFA"],
+                    )
+                    fig_c.update_layout(height=260, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    fig_c.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
+                    st.plotly_chart(fig_c, use_container_width=True)
+                with s2:
+                    lbl = _yoy_label(cat_tot)
+                    if lbl:
+                        st.markdown(f"<div class='nv-bubble' style='background:#A78BFA;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
+                        st.caption('2025 vs 2024')
+            else:
+                st.info("No same-category APP rows for this status.")
+        else:
+            st.info("Same-category APP CSV not loaded or status not found.")
+
     st.markdown("---")
 
     # Row 2: Approaches pies
