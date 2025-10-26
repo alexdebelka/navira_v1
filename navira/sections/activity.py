@@ -3,7 +3,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from navira.data_repo import DataRepo
+import os
+from pathlib import Path
 
 
 APPROACH_LABELS = {"LAP": "Open Surgery", "COE": "Coelioscopy", "ROB": "Robotic"}
@@ -13,10 +14,12 @@ APPROACH_COLORS = {"Open Surgery": "#A23B72", "Coelioscopy": "#2E86AB", "Robotic
 def _latest_year(df: pd.DataFrame) -> int | None:
     if df is None or df.empty:
         return None
-    d = DataRepo.ensure_year_column(df)
-    if d.empty or "year" not in d.columns:
+    if "annee" in df.columns:
+        years = pd.to_numeric(df["annee"], errors="coerce").dropna().astype(int)
+    elif "year" in df.columns:
+        years = pd.to_numeric(df["year"], errors="coerce").dropna().astype(int)
+    else:
         return None
-    years = pd.to_numeric(d["year"], errors="coerce").dropna().astype(int)
     return int(years.max()) if not years.empty else None
 
 
@@ -47,7 +50,7 @@ def _pie_from(df: pd.DataFrame, title: str):
     st.plotly_chart(fig, use_container_width=True)
 
 
-def render_activity(hospital_id: str, repo: DataRepo):
+def render_activity(hospital_id: str):
     """Render the Activity section (Version 2 layout) using CSV repo data only.
 
     Layout:
@@ -56,11 +59,70 @@ def render_activity(hospital_id: str, repo: DataRepo):
     """
     st.subheader("Activity Overview")
 
-    vol_hop_year = repo.get_vol_hop_year()
-    app_hop_year = repo.get_app_hop_year()
-    app_nat_year = repo.get_app_nat_year()
-    app_reg_year = repo.get_app_reg_year()
-    app_status_year = repo.get_app_status_year()
+    # Even though a repo is accepted for backward compatibility, for this section
+    # we now read totals directly from dedicated VOL CSVs (CSV-first, no recompute)
+    @st.cache_data(show_spinner=False)
+    def _resolve_activity_dir() -> str | None:
+        candidates: list[str] = []
+        env_dir = os.environ.get("NAVIRA_ACTIVITY_DIR")
+        if env_dir:
+            candidates.append(env_dir)
+        try:
+            candidates.append(str(Path.cwd() / "new_data" / "ACTIVITY"))
+        except Exception:
+            pass
+        try:
+            here = Path(__file__).resolve()
+            candidates.append(str((here.parent / ".." / "new_data" / "ACTIVITY").resolve()))
+            candidates.append(str((here.parent.parent / "new_data" / "ACTIVITY").resolve()))
+        except Exception:
+            pass
+        candidates.append("/Users/alexdebelka/Downloads/navira/new_data/ACTIVITY")
+        for c in candidates:
+            try:
+                if Path(c).is_dir():
+                    return c
+            except Exception:
+                continue
+        return None
+
+    @st.cache_data(show_spinner=False)
+    def _read_csv(filename: str) -> pd.DataFrame:
+        base = _resolve_activity_dir()
+        if not base:
+            return pd.DataFrame()
+        p = Path(base) / filename
+        try:
+            df = pd.read_csv(p)
+            # Normalization: types used below
+            if "annee" in df.columns:
+                df["annee"] = pd.to_numeric(df["annee"], errors="coerce").astype("Int64")
+            if "year" in df.columns:
+                df["year"] = pd.to_numeric(df["year"], errors="coerce").astype("Int64")
+            if "n" in df.columns:
+                df["n"] = pd.to_numeric(df["n"], errors="coerce")
+            if "finessGeoDP" in df.columns:
+                df["finessGeoDP"] = df["finessGeoDP"].astype(str).str.strip()
+            if "lib_reg" in df.columns:
+                df["lib_reg"] = df["lib_reg"].astype(str).str.strip()
+            if "statut" in df.columns:
+                df["statut"] = df["statut"].astype(str).str.strip()
+            return df
+        except Exception:
+            return pd.DataFrame()
+
+    # Load totals CSVs directly
+    vol_hop_year = _read_csv("TAB_VOL_HOP_YEAR.csv")
+    vol_reg_year = _read_csv("TAB_VOL_REG_YEAR.csv")
+    vol_nat_year = _read_csv("TAB_VOL_NATL_YEAR.csv")
+    vol_status_year = _read_csv("TAB_VOL_STATUS_YEAR.csv")
+    # Approach pies — also use APP CSVs directly
+    app_hop_year = _read_csv("TAB_APP_HOP_YEAR.csv")
+    app_nat_year = _read_csv("TAB_APP_NATL_YEAR.csv")
+    app_reg_year = _read_csv("TAB_APP_REG_YEAR.csv")
+    app_status_year = _read_csv("TAB_APP_STATUS_YEAR.csv")
+    # Region/Status mapping for this hospital
+    rev_hop_12m = _read_csv("TAB_REV_HOP_12M.csv")
 
     # Row 1: Hospital volume per year (bar)
     col1, col2 = st.columns([2, 1])
@@ -98,47 +160,23 @@ def render_activity(hospital_id: str, repo: DataRepo):
         st.markdown(f"<div class='nv-bubble teal' style='width:110px;height:110px;font-size:1.6rem'>{yoy_text}</div>", unsafe_allow_html=True)
         st.caption('2025 YTD vs 2024 (based on CSV totals)')
 
-    # National / Regional / Same-category — Procedures per year from APP CSVs (sum of n by year)
-    def _totals_by_year(df: pd.DataFrame) -> pd.DataFrame:
-        if df is None or df.empty:
-            return pd.DataFrame(columns=["year", "total"])
-        d = DataRepo.ensure_year_column(df)
-        val_col = "n" if "n" in d.columns else ("TOT" if "TOT" in d.columns else None)
-        if val_col is None or "year" not in d.columns:
-            return pd.DataFrame(columns=["year", "total"])
-        g = d.groupby("year", as_index=False)[val_col].sum().rename(columns={val_col: "total"})
-        g["year"] = pd.to_numeric(g["year"], errors="coerce").astype("Int64")
-        g = g.dropna(subset=["year"])  # keep valid years only
-        return g
-
-    def _hospital_totals_by_year(vol_df: pd.DataFrame, hid: str) -> pd.DataFrame:
-        if vol_df is None or vol_df.empty:
-            return pd.DataFrame(columns=["year", "total"])
-        d = vol_df[vol_df.get("finessGeoDP").astype(str) == str(hid)].copy()
-        d = DataRepo.ensure_year_column(d)
-        val_col = "n" if "n" in d.columns else ("TOT" if "TOT" in d.columns else None)
-        if val_col is None or d.empty or "year" not in d.columns:
-            return pd.DataFrame(columns=["year", "total"])
-        g = d.groupby("year", as_index=False)[val_col].sum().rename(columns={val_col: "total"})
-        g["year"] = pd.to_numeric(g["year"], errors="coerce").astype("Int64")
-        return g.dropna(subset=["year"]) if not g.empty else g
-
-    def _diff_vs_hospital_label(group_totals: pd.DataFrame, hosp_totals: pd.DataFrame, preferred_year: int = 2024) -> str | None:
+    # National / Regional / Same-category — Procedures per year directly from VOL CSVs
+    def _diff_vs_hospital_label(group_df: pd.DataFrame, hosp_df: pd.DataFrame, preferred_year: int = 2024) -> str | None:
         try:
-            if group_totals is None or group_totals.empty or hosp_totals is None or hosp_totals.empty:
+            if group_df is None or group_df.empty or hosp_df is None or hosp_df.empty:
                 return None
-            gy = pd.to_numeric(group_totals["year"], errors="coerce").dropna().astype(int)
-            hy = pd.to_numeric(hosp_totals["year"], errors="coerce").dropna().astype(int)
+            # Determine available years
+            gy = pd.to_numeric((group_df.get("annee") if "annee" in group_df.columns else group_df.get("year")), errors="coerce").dropna().astype(int)
+            hy = pd.to_numeric((hosp_df.get("annee") if "annee" in hosp_df.columns else hosp_df.get("year")), errors="coerce").dropna().astype(int)
             common = sorted(set(gy.tolist()).intersection(set(hy.tolist())))
             if not common:
                 return None
-            # Prefer 2024; if absent, use latest common year <= preferred_year
             year_candidates = [y for y in common if y <= preferred_year]
             if not year_candidates:
                 return None
             year = year_candidates[-1]
-            gv = float(group_totals[group_totals["year"] == year]["total"].iloc[0])
-            hv = float(hosp_totals[hosp_totals["year"] == year]["total"].iloc[0])
+            gv = float(group_df[(group_df.get("annee", group_df.get("year")) == year)]["n"].sum())
+            hv = float(hosp_df[(hosp_df.get("annee", hosp_df.get("year")) == year)]["n"].sum())
             if gv <= 0:
                 return None
             diff = (hv / gv - 1.0) * 100.0
@@ -150,27 +188,27 @@ def render_activity(hospital_id: str, repo: DataRepo):
     st.markdown("#### National / Regional / Same category — Procedures per year")
     c_nat, c_reg, c_cat = st.columns(3)
 
-    # Precompute hospital totals once
-    _hosp_totals = _hospital_totals_by_year(vol_hop_year, hospital_id)
+    # Slice hospital totals once
+    hosp_totals_df = vol_hop_year[vol_hop_year.get("finessGeoDP").astype(str) == str(hospital_id)].copy()
 
     # National
     with c_nat:
-        nat_tot = _totals_by_year(app_nat_year)
+        nat_tot = vol_nat_year.copy()
         if not nat_tot.empty:
             s1, s2 = st.columns([4, 1])
             with s1:
                 dfp = nat_tot.copy()
-                dfp = dfp.sort_values("year")
+                dfp = dfp.sort_values("annee")
                 fig_n = px.bar(
-                    dfp.assign(year=lambda d: d["year"].astype(int).astype(str)),
-                    x="year", y="total", title="National",
+                    dfp.assign(annee=lambda d: d["annee"].astype(int).astype(str)),
+                    x="annee", y="n", title="National",
                     color_discrete_sequence=["#E9A23B"],
                 )
                 fig_n.update_layout(height=260, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                 fig_n.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                 st.plotly_chart(fig_n, use_container_width=True)
             with s2:
-                lbl = _diff_vs_hospital_label(nat_tot, _hosp_totals, preferred_year=2024)
+                lbl = _diff_vs_hospital_label(nat_tot, hosp_totals_df, preferred_year=2024)
                 if lbl:
                     st.markdown(f"<div class='nv-bubble' style='background:#E9A23B;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
                     st.caption('Hospital vs National (2024)')
@@ -178,25 +216,31 @@ def render_activity(hospital_id: str, repo: DataRepo):
             st.info("No national APP CSV data.")
 
     # Regional
-    region_name, status_val = repo.get_region_and_status(hospital_id)
+    # Resolve region/status from REV 12M file
+    try:
+        _row = rev_hop_12m[rev_hop_12m.get("finessGeoDP").astype(str) == str(hospital_id)].head(1)
+        region_name = str(_row.iloc[0].get("lib_reg") or _row.iloc[0].get("region") or "").strip() if not _row.empty else None
+        status_val = str(_row.iloc[0].get("statut") or _row.iloc[0].get("status") or "").strip() if not _row.empty else None
+    except Exception:
+        region_name = None
+        status_val = None
     with c_reg:
         if region_name and not app_reg_year.empty:
-            reg = app_reg_year[app_reg_year.get("lib_reg").astype(str).str.strip() == str(region_name)]
-            reg_tot = _totals_by_year(reg)
-            if not reg_tot.empty:
+            reg = vol_reg_year[vol_reg_year.get("lib_reg").astype(str).str.strip() == str(region_name)]
+            if not reg.empty:
                 s1, s2 = st.columns([4, 1])
                 with s1:
-                    dfp = reg_tot.sort_values("year")
+                    dfp = reg.sort_values("annee")
                     fig_r = px.bar(
-                        dfp.assign(year=lambda d: d["year"].astype(int).astype(str)),
-                        x="year", y="total", title=f"Regional — {region_name}",
+                        dfp.assign(annee=lambda d: d["annee"].astype(int).astype(str)),
+                        x="annee", y="n", title=f"Regional — {region_name}",
                         color_discrete_sequence=["#4ECDC4"],
                     )
                     fig_r.update_layout(height=260, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                     fig_r.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                     st.plotly_chart(fig_r, use_container_width=True)
                 with s2:
-                    lbl = _diff_vs_hospital_label(reg_tot, _hosp_totals, preferred_year=2024)
+                    lbl = _diff_vs_hospital_label(reg, hosp_totals_df, preferred_year=2024)
                     if lbl:
                         st.markdown(f"<div class='nv-bubble' style='background:#4ECDC4;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
                         st.caption('Hospital vs Regional (2024)')
@@ -207,23 +251,22 @@ def render_activity(hospital_id: str, repo: DataRepo):
 
     # Same category
     with c_cat:
-        if status_val and not app_status_year.empty:
-            cat = app_status_year[app_status_year.get("statut").astype(str).str.strip() == str(status_val)]
-            cat_tot = _totals_by_year(cat)
-            if not cat_tot.empty:
+        if status_val and not vol_status_year.empty:
+            cat = vol_status_year[vol_status_year.get("statut").astype(str).str.strip() == str(status_val)]
+            if not cat.empty:
                 s1, s2 = st.columns([4, 1])
                 with s1:
-                    dfp = cat_tot.sort_values("year")
+                    dfp = cat.sort_values("annee")
                     fig_c = px.bar(
-                        dfp.assign(year=lambda d: d["year"].astype(int).astype(str)),
-                        x="year", y="total", title="Same category",
+                        dfp.assign(annee=lambda d: d["annee"].astype(int).astype(str)),
+                        x="annee", y="n", title="Same category",
                         color_discrete_sequence=["#A78BFA"],
                     )
                     fig_c.update_layout(height=260, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                     fig_c.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                     st.plotly_chart(fig_c, use_container_width=True)
                 with s2:
-                    lbl = _diff_vs_hospital_label(cat_tot, _hosp_totals, preferred_year=2024)
+                    lbl = _diff_vs_hospital_label(cat, hosp_totals_df, preferred_year=2024)
                     if lbl:
                         st.markdown(f"<div class='nv-bubble' style='background:#A78BFA;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
                         st.caption('Hospital vs Same category (2024)')
@@ -253,8 +296,7 @@ def render_activity(hospital_id: str, repo: DataRepo):
         else:
             st.info("National approach CSV not loaded.")
 
-    # Region and status from repo helper
-    region_name, status_val = repo.get_region_and_status(hospital_id)
+    # Region and status derived from REV 12M (already loaded above)
     with c_reg:
         if region_name and not app_reg_year.empty:
             reg = app_reg_year[app_reg_year.get("lib_reg").astype(str).str.strip() == str(region_name)]

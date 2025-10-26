@@ -29,7 +29,6 @@ from charts import (
     create_extended_los_chart,
     create_never_events_chart
 )
-from navira.data_repo import DataRepo
 from navira.sections.activity import render_activity as render_activity_section
 handle_navigation_request()
 
@@ -606,11 +605,7 @@ else:
 
 
 with tab_activity:
-    @st.cache_resource(show_spinner=False)
-    def _get_repo() -> DataRepo:
-        return DataRepo()
-
-    render_activity_section(str(selected_hospital_id), _get_repo())
+    render_activity_section(str(selected_hospital_id))
     
     # Activity section rendered via sections/activity.py
 
