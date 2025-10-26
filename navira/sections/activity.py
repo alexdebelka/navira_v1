@@ -27,7 +27,10 @@ def _pie_from(df: pd.DataFrame, title: str):
     totals: dict[str, float] = {}
     for _, r in df.iterrows():
         code = str(r.get("vda") or r.get("VDA") or "").upper()
-        val = pd.to_numeric(r.get("n") or r.get("TOT") or 0, errors="coerce")
+        raw_val = r.get("n", pd.NA)
+        if pd.isna(raw_val):
+            raw_val = r.get("TOT", 0)
+        val = pd.to_numeric(raw_val, errors="coerce")
         if code:
             totals[code] = totals.get(code, 0.0) + float(val)
     labels, values, colors = [], [], []
@@ -68,7 +71,8 @@ def render_activity(hospital_id: str, repo: DataRepo):
             if not hosp.empty:
                 hosp = hosp.sort_values("annee" if "annee" in hosp.columns else "year")
                 x = hosp["annee" if "annee" in hosp.columns else "year"].astype(int).astype(str)
-                y = pd.to_numeric(hosp.get("n") or hosp.get("TOT"), errors="coerce").fillna(0)
+                value_col = "n" if "n" in hosp.columns else ("TOT" if "TOT" in hosp.columns else None)
+                y = pd.to_numeric(hosp[value_col], errors="coerce").fillna(0) if value_col else pd.Series([], dtype=float)
                 colors = ["#1f4e79" if v == "2025" else "#4e79a7" for v in x]
                 fig = go.Figure(go.Bar(x=x, y=y, marker_color=colors, hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>'))
                 fig.update_layout(title="Hospital Procedures per Year", height=380, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
