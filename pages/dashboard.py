@@ -668,6 +668,11 @@ with tab_activity:
         data['app_hop_year'] = _read_csv('TAB_APP_HOP_YEAR.csv')
         data['rev_hop'] = _read_csv('TAB_REV_HOP.csv')
         data['rob_hop'] = _read_csv('TAB_ROB_HOP_12M.csv')
+        # New: national/regional/status approaches + region mapping helper
+        data['app_nat_year'] = _read_csv('TAB_APP_NATL_YEAR.csv')
+        data['app_reg_year'] = _read_csv('TAB_APP_REG_YEAR.csv')
+        data['app_status_year'] = _read_csv('TAB_APP_STATUS_YEAR.csv')
+        data['rev_hop_12m'] = _read_csv('TAB_REV_HOP_12M.csv')
         return data
     
     # Load the CSV data
@@ -799,72 +804,97 @@ with tab_activity:
     col3, col4 = st.columns([1, 1])
     
     with col3:
-        st.markdown("#### Surgical Approaches")
-        
-        # Get approach data
-        app_data = csv_data['app_hop_year']
-        if not app_data.empty:
-            hospital_app = app_data[app_data['finessGeoDP'] == str(selected_hospital_id)]
-            if not hospital_app.empty:
-                # Get the latest year's data
-                latest_year = hospital_app['annee'].max()
-                latest_data = hospital_app[hospital_app['annee'] == latest_year]
-                
-                if not latest_data.empty:
-                    # Create approach mix chart
-                    approach_totals = {}
-                    for _, row in latest_data.iterrows():
-                        approach_type = row.get('VDA', 'Unknown')
-                        total = row.get('TOT', 0)
-                        if approach_type in approach_totals:
-                            approach_totals[approach_type] += total
-                        else:
-                            approach_totals[approach_type] = total
-                    
-                    if approach_totals:
-                        # Map approach codes to names
-                        approach_names = {
-                            'LAP': 'Open Surgery',
-                            'COE': 'Coelioscopy',
-                            'ROB': 'Robotic'
-                        }
-                        
-                        labels = []
-                        values = []
-                        colors = ['#FF6B6B', '#4ECDC4', '#FFE66D']
-                        
-                        for i, (code, total) in enumerate(approach_totals.items()):
-                            if total > 0:
-                                labels.append(approach_names.get(code, code))
-                                values.append(total)
-                        
-                        if values:
-                            fig = go.Figure(data=[go.Pie(
-                                labels=labels,
-                                values=values,
-                                hole=0.4,
-                                marker_colors=colors[:len(labels)]
-                            )])
-                            
-                            fig.update_layout(
-                                title=f"Surgical Approaches ({int(latest_year)})",
-                                height=400,
-                                plot_bgcolor='rgba(0,0,0,0)',
-                                paper_bgcolor='rgba(0,0,0,0)',
-                                font=dict(color='white')
-                            )
-                            
-                            st.plotly_chart(fig, use_container_width=True)
-                        else:
-                            st.info("No approach data available")
-                    else:
-                        st.info("No approach totals found")
-                else:
-                    st.info("No data for latest year")
+        st.markdown("#### Surgical Approaches (Hospital / National / Regional / Same category)")
+
+        # Base mapping for approach codes
+        approach_names = {'LAP': 'Open Surgery', 'COE': 'Coelioscopy', 'ROB': 'Robotic'}
+        approach_colors = ['#FF6B6B', '#4ECDC4', '#FFE66D']
+
+        def _pie_from_df(df: pd.DataFrame, title: str):
+            if df is None or df.empty:
+                st.info(f"No data available for {title.lower()}.")
+            return
+            totals = {}
+            for _, r in df.iterrows():
+                code = str(r.get('vda') or r.get('VDA') or '').upper()
+                val = pd.to_numeric(r.get('n') or r.get('TOT') or 0, errors='coerce')
+                if code:
+                    totals[code] = totals.get(code, 0) + float(val)
+            labels, values = [], []
+            for code in ['LAP','COE','ROB']:
+                if code in totals and totals[code] > 0:
+                    labels.append(approach_names.get(code, code))
+                    values.append(totals[code])
+            if not values:
+                st.info(f"No data available for {title.lower()}.")
+            return
+            fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=0.4, marker_colors=approach_colors[:len(labels)])])
+            fig.update_layout(title=title, height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='white'))
+            st.plotly_chart(fig, use_container_width=True)
+
+        # 1) Hospital (HOP_YEAR) — latest year
+        app_hop_year = csv_data.get('app_hop_year', pd.DataFrame())
+        if not app_hop_year.empty:
+            hop = app_hop_year[app_hop_year['finessGeoDP'] == str(selected_hospital_id)]
+            if not hop.empty:
+                latest_y = pd.to_numeric(hop['annee'], errors='coerce').max()
+                _pie_from_df(hop[hop['annee'] == latest_y], f"Hospital ({int(latest_y)})")
             else:
-                st.info(f"No approach data found for hospital {selected_hospital_id}")
+                st.info(f"No hospital approach data for {selected_hospital_id}.")
         else:
-            st.warning("Approach data not available")
+            st.info("Hospital approach CSV not loaded.")
+
+        # Two columns: National and Regional/Category side-by-side
+        ncol, rcol = st.columns(2)
+        with ncol:
+            nat = csv_data.get('app_nat_year', pd.DataFrame())
+            if not nat.empty:
+                latest_y = pd.to_numeric(nat['annee'], errors='coerce').max()
+                _pie_from_df(nat[nat['annee'] == latest_y], f"National ({int(latest_y)})")
+            else:
+                st.info("National approach CSV not loaded.")
+
+        # Resolve region and status for the selected hospital
+        region_name = None
+        status_val = None
+        try:
+            # Prefer mapping via REV_HOP_12M (as provided)
+            rev12 = csv_data.get('rev_hop_12m', pd.DataFrame())
+            if not rev12.empty:
+                row = rev12[rev12['finessGeoDP'] == str(selected_hospital_id)].head(1)
+                if not row.empty:
+                    region_name = str(row.iloc[0].get('lib_reg') or row.iloc[0].get('region') or '').strip()
+                    status_val = str(row.iloc[0].get('statut') or row.iloc[0].get('status') or '').strip()
+        except Exception:
+            region_name = None
+            status_val = None
+
+            with rcol:
+                # 2) Regional
+                reg = csv_data.get('app_reg_year', pd.DataFrame())
+                if not reg.empty and region_name:
+                    reg = reg[reg['lib_reg'].astype(str).str.strip() == region_name]
+                    if not reg.empty:
+                        latest_y = pd.to_numeric(reg['annee'], errors='coerce').max()
+                        _pie_from_df(reg[reg['annee'] == latest_y], f"Regional — {region_name} ({int(latest_y)})")
+                    else:
+                        st.info("No regional rows for hospital's region.")
+                else:
+                    st.info("Regional approach CSV not loaded or region not found.")
+
+                # 3) Same category hospitals
+                app_status = csv_data.get('app_status_year', pd.DataFrame())
+                if not app_status.empty and status_val:
+                    st.markdown("#### Same category hospitals (share %)")
+                    st.caption(f"Category: {status_val}")
+                    cat = app_status[app_status['statut'].astype(str).str.strip() == status_val]
+                    if not cat.empty:
+                        latest_y = pd.to_numeric(cat['annee'], errors='coerce').max()
+                        _pie_from_df(cat[cat['annee'] == latest_y], f"Same category ({int(latest_y)})")
+                    else:
+                        st.info("No rows for this category.")
+                else:
+                    st.info("Same-category approach CSV not loaded or status not found.")
     
     with col4:
         st.markdown("#### Revision Rate")
@@ -3881,6 +3911,20 @@ if use_clinical_charts:
 st.header("📊 Complications Statistics")
 # Get complications data for this hospital
 hospital_complications = _get_hospital_complications(complications, str(selected_hospital_id))
+# Ensure quarter label exists and values are numeric
+if 'quarter' not in hospital_complications.columns:
+    if 'quarter_date' in hospital_complications.columns:
+        hospital_complications['quarter'] = pd.to_datetime(
+            hospital_complications['quarter_date'], errors='coerce'
+        ).dt.to_period('Q').astype(str)
+    elif 'year' in hospital_complications.columns:
+        hospital_complications['quarter'] = hospital_complications['year'].astype(int).astype(str)
+
+for col in ['rolling_rate', 'national_average']:
+    if col in hospital_complications.columns:
+        hospital_complications[col] = pd.to_numeric(hospital_complications[col], errors='coerce')
+
+recent_data = hospital_complications.tail(4)
 if not hospital_complications.empty:
     # Sort by available date column
     if 'quarter_date' in hospital_complications.columns:
@@ -3913,7 +3957,7 @@ if not hospital_complications.empty:
         
         # Create trend visualization
         fig = go.Figure()
-        
+    
         # Add hospital rolling rate
         fig.add_trace(go.Scatter(
             x=recent_data['quarter'],
