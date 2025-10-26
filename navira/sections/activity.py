@@ -123,18 +123,22 @@ def render_activity(hospital_id: str, repo: DataRepo):
         g["year"] = pd.to_numeric(g["year"], errors="coerce").astype("Int64")
         return g.dropna(subset=["year"]) if not g.empty else g
 
-    def _diff_vs_hospital_label(group_totals: pd.DataFrame, hosp_totals: pd.DataFrame) -> str | None:
+    def _diff_vs_hospital_label(group_totals: pd.DataFrame, hosp_totals: pd.DataFrame, preferred_year: int = 2024) -> str | None:
         try:
             if group_totals is None or group_totals.empty or hosp_totals is None or hosp_totals.empty:
                 return None
             gy = pd.to_numeric(group_totals["year"], errors="coerce").dropna().astype(int)
             hy = pd.to_numeric(hosp_totals["year"], errors="coerce").dropna().astype(int)
-            common_years = sorted(set(gy.tolist()).intersection(set(hy.tolist())))
-            if not common_years:
+            common = sorted(set(gy.tolist()).intersection(set(hy.tolist())))
+            if not common:
                 return None
-            latest = common_years[-1]
-            gv = float(group_totals[group_totals["year"] == latest]["total"].iloc[0])
-            hv = float(hosp_totals[hosp_totals["year"] == latest]["total"].iloc[0])
+            # Prefer 2024; if absent, use latest common year <= preferred_year
+            year_candidates = [y for y in common if y <= preferred_year]
+            if not year_candidates:
+                return None
+            year = year_candidates[-1]
+            gv = float(group_totals[group_totals["year"] == year]["total"].iloc[0])
+            hv = float(hosp_totals[hosp_totals["year"] == year]["total"].iloc[0])
             if gv <= 0:
                 return None
             diff = (hv / gv - 1.0) * 100.0
@@ -166,10 +170,10 @@ def render_activity(hospital_id: str, repo: DataRepo):
                 fig_n.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                 st.plotly_chart(fig_n, use_container_width=True)
             with s2:
-                lbl = _diff_vs_hospital_label(nat_tot, _hosp_totals)
+                lbl = _diff_vs_hospital_label(nat_tot, _hosp_totals, preferred_year=2024)
                 if lbl:
                     st.markdown(f"<div class='nv-bubble' style='background:#E9A23B;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
-                    st.caption('Hospital vs National')
+                    st.caption('Hospital vs National (2024)')
         else:
             st.info("No national APP CSV data.")
 
@@ -192,10 +196,10 @@ def render_activity(hospital_id: str, repo: DataRepo):
                     fig_r.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                     st.plotly_chart(fig_r, use_container_width=True)
                 with s2:
-                    lbl = _diff_vs_hospital_label(reg_tot, _hosp_totals)
+                    lbl = _diff_vs_hospital_label(reg_tot, _hosp_totals, preferred_year=2024)
                     if lbl:
                         st.markdown(f"<div class='nv-bubble' style='background:#4ECDC4;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
-                        st.caption('Hospital vs Regional')
+                        st.caption('Hospital vs Regional (2024)')
             else:
                 st.info("No regional APP rows for this region.")
         else:
@@ -219,10 +223,10 @@ def render_activity(hospital_id: str, repo: DataRepo):
                     fig_c.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                     st.plotly_chart(fig_c, use_container_width=True)
                 with s2:
-                    lbl = _diff_vs_hospital_label(cat_tot, _hosp_totals)
+                    lbl = _diff_vs_hospital_label(cat_tot, _hosp_totals, preferred_year=2024)
                     if lbl:
                         st.markdown(f"<div class='nv-bubble' style='background:#A78BFA;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
-                        st.caption('Hospital vs Same category')
+                        st.caption('Hospital vs Same category (2024)')
             else:
                 st.info("No same-category APP rows for this status.")
         else:
