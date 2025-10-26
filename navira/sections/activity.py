@@ -184,6 +184,67 @@ def render_activity(hospital_id: str):
         except Exception:
             return None
 
+    # Median-based comparison helpers (preferred): Hospital vs group median (per-hospital), 2024
+    def _hospital_vs_median_labels(vol_hop_df: pd.DataFrame, rev_df: pd.DataFrame, hid: str, region_val: str | None, status_val: str | None, year: int = 2024) -> dict[str, str | None]:
+        out = {"national": None, "regional": None, "status": None}
+        try:
+            if vol_hop_df is None or vol_hop_df.empty:
+                return out
+            v = vol_hop_df.copy()
+            year_col = "annee" if "annee" in v.columns else ("year" if "year" in v.columns else None)
+            if year_col is None:
+                return out
+            v = v[pd.to_numeric(v[year_col], errors="coerce") == year]
+            if v.empty or "finessGeoDP" not in v.columns or "n" not in v.columns:
+                return out
+            # Sum per hospital for the year
+            v = v.groupby("finessGeoDP", as_index=False)["n"].sum()
+            # Attach region/status mapping
+            if rev_df is not None and not rev_df.empty:
+                m = rev_df[[c for c in ["finessGeoDP","lib_reg","statut","region","status"] if c in rev_df.columns]].copy()
+                m["finessGeoDP"] = m["finessGeoDP"].astype(str)
+                # Prefer lib_reg/statut; fallback to region/status if needed
+                if "lib_reg" not in m.columns and "region" in m.columns:
+                    m["lib_reg"] = m["region"].astype(str)
+                if "statut" not in m.columns and "status" in m.columns:
+                    m["statut"] = m["status"].astype(str)
+                m = m.drop_duplicates(subset=["finessGeoDP"])  # one row per hospital
+                v = v.merge(m[["finessGeoDP","lib_reg","statut"]], on="finessGeoDP", how="left")
+            # Hospital value
+            try:
+                hv = float(v[v["finessGeoDP"].astype(str) == str(hid)]["n"].iloc[0])
+            except Exception:
+                hv = None
+            if hv is None or hv <= 0:
+                return out
+            # National median
+            try:
+                nat_med = float(v["n"].median())
+                out["national"] = f"{((hv / nat_med - 1.0) * 100.0):+.0f}%" if nat_med and nat_med > 0 else None
+            except Exception:
+                out["national"] = None
+            # Regional median (same lib_reg as selected hospital)
+            try:
+                if region_val:
+                    reg_med_series = v[v.get("lib_reg").astype(str) == str(region_val)]["n"]
+                    if not reg_med_series.empty:
+                        reg_med = float(reg_med_series.median())
+                        out["regional"] = f"{((hv / reg_med - 1.0) * 100.0):+.0f}%" if reg_med and reg_med > 0 else None
+            except Exception:
+                out["regional"] = None
+            # Status median (same statut)
+            try:
+                if status_val:
+                    cat_med_series = v[v.get("statut").astype(str) == str(status_val)]["n"]
+                    if not cat_med_series.empty:
+                        cat_med = float(cat_med_series.median())
+                        out["status"] = f"{((hv / cat_med - 1.0) * 100.0):+.0f}%" if cat_med and cat_med > 0 else None
+            except Exception:
+                out["status"] = None
+        except Exception:
+            pass
+        return out
+
     st.markdown("---")
     st.markdown("#### National / Regional / Same category — Procedures per year")
     c_nat, c_reg, c_cat = st.columns(3)
@@ -192,6 +253,9 @@ def render_activity(hospital_id: str):
     hosp_totals_df = vol_hop_year[vol_hop_year.get("finessGeoDP").astype(str) == str(hospital_id)].copy()
 
     # National
+    # Compute median-based labels once
+    median_labels = _hospital_vs_median_labels(vol_hop_year, rev_hop_12m, str(hospital_id), region_name, status_val, year=2024)
+
     with c_nat:
         nat_tot = vol_nat_year.copy()
         if not nat_tot.empty:
@@ -208,10 +272,10 @@ def render_activity(hospital_id: str):
                 fig_n.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                 st.plotly_chart(fig_n, use_container_width=True)
             with s2:
-                lbl = _diff_vs_hospital_label(nat_tot, hosp_totals_df, preferred_year=2024)
+                lbl = median_labels.get("national")
                 if lbl:
                     st.markdown(f"<div class='nv-bubble' style='background:#E9A23B;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
-                    st.caption('Hospital vs National (2024)')
+                    st.caption('Hospital vs National median (2024)')
         else:
             st.info("No national APP CSV data.")
 
@@ -240,10 +304,10 @@ def render_activity(hospital_id: str):
                     fig_r.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                     st.plotly_chart(fig_r, use_container_width=True)
                 with s2:
-                    lbl = _diff_vs_hospital_label(reg, hosp_totals_df, preferred_year=2024)
+                    lbl = median_labels.get("regional")
                     if lbl:
                         st.markdown(f"<div class='nv-bubble' style='background:#4ECDC4;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
-                        st.caption('Hospital vs Regional (2024)')
+                        st.caption('Hospital vs Regional median (2024)')
             else:
                 st.info("No regional APP rows for this region.")
         else:
@@ -266,10 +330,10 @@ def render_activity(hospital_id: str):
                     fig_c.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                     st.plotly_chart(fig_c, use_container_width=True)
                 with s2:
-                    lbl = _diff_vs_hospital_label(cat, hosp_totals_df, preferred_year=2024)
+                    lbl = median_labels.get("status")
                     if lbl:
                         st.markdown(f"<div class='nv-bubble' style='background:#A78BFA;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
-                        st.caption('Hospital vs Same category (2024)')
+                        st.caption('Hospital vs Same category median (2024)')
             else:
                 st.info("No same-category APP rows for this status.")
         else:
