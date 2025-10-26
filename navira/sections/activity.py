@@ -111,23 +111,43 @@ def render_activity(hospital_id: str, repo: DataRepo):
         g = g.dropna(subset=["year"])  # keep valid years only
         return g
 
-    def _yoy_label(totals: pd.DataFrame) -> str | None:
+    def _hospital_totals_by_year(vol_df: pd.DataFrame, hid: str) -> pd.DataFrame:
+        if vol_df is None or vol_df.empty:
+            return pd.DataFrame(columns=["year", "total"])
+        d = vol_df[vol_df.get("finessGeoDP").astype(str) == str(hid)].copy()
+        d = DataRepo.ensure_year_column(d)
+        val_col = "n" if "n" in d.columns else ("TOT" if "TOT" in d.columns else None)
+        if val_col is None or d.empty or "year" not in d.columns:
+            return pd.DataFrame(columns=["year", "total"])
+        g = d.groupby("year", as_index=False)[val_col].sum().rename(columns={val_col: "total"})
+        g["year"] = pd.to_numeric(g["year"], errors="coerce").astype("Int64")
+        return g.dropna(subset=["year"]) if not g.empty else g
+
+    def _diff_vs_hospital_label(group_totals: pd.DataFrame, hosp_totals: pd.DataFrame) -> str | None:
         try:
-            if totals is None or totals.empty:
+            if group_totals is None or group_totals.empty or hosp_totals is None or hosp_totals.empty:
                 return None
-            def _val(y: int) -> float | None:
-                m = totals[totals["year"] == y]
-                return float(m["total"].iloc[0]) if not m.empty else None
-            v24, v25 = _val(2024), _val(2025)
-            if v24 and v25 is not None and v24 > 0:
-                return f"{((v25 / v24 - 1.0) * 100.0):+.0f}%"
+            gy = pd.to_numeric(group_totals["year"], errors="coerce").dropna().astype(int)
+            hy = pd.to_numeric(hosp_totals["year"], errors="coerce").dropna().astype(int)
+            common_years = sorted(set(gy.tolist()).intersection(set(hy.tolist())))
+            if not common_years:
+                return None
+            latest = common_years[-1]
+            gv = float(group_totals[group_totals["year"] == latest]["total"].iloc[0])
+            hv = float(hosp_totals[hosp_totals["year"] == latest]["total"].iloc[0])
+            if gv <= 0:
+                return None
+            diff = (hv / gv - 1.0) * 100.0
+            return f"{diff:+.0f}%"
         except Exception:
             return None
-        return None
 
     st.markdown("---")
     st.markdown("#### National / Regional / Same category — Procedures per year")
     c_nat, c_reg, c_cat = st.columns(3)
+
+    # Precompute hospital totals once
+    _hosp_totals = _hospital_totals_by_year(vol_hop_year, hospital_id)
 
     # National
     with c_nat:
@@ -146,10 +166,10 @@ def render_activity(hospital_id: str, repo: DataRepo):
                 fig_n.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                 st.plotly_chart(fig_n, use_container_width=True)
             with s2:
-                lbl = _yoy_label(nat_tot)
+                lbl = _diff_vs_hospital_label(nat_tot, _hosp_totals)
                 if lbl:
                     st.markdown(f"<div class='nv-bubble' style='background:#E9A23B;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
-                    st.caption('2025 vs 2024')
+                    st.caption('Hospital vs National')
         else:
             st.info("No national APP CSV data.")
 
@@ -172,10 +192,10 @@ def render_activity(hospital_id: str, repo: DataRepo):
                     fig_r.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                     st.plotly_chart(fig_r, use_container_width=True)
                 with s2:
-                    lbl = _yoy_label(reg_tot)
+                    lbl = _diff_vs_hospital_label(reg_tot, _hosp_totals)
                     if lbl:
                         st.markdown(f"<div class='nv-bubble' style='background:#4ECDC4;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
-                        st.caption('2025 vs 2024')
+                        st.caption('Hospital vs Regional')
             else:
                 st.info("No regional APP rows for this region.")
         else:
@@ -199,10 +219,10 @@ def render_activity(hospital_id: str, repo: DataRepo):
                     fig_c.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                     st.plotly_chart(fig_c, use_container_width=True)
                 with s2:
-                    lbl = _yoy_label(cat_tot)
+                    lbl = _diff_vs_hospital_label(cat_tot, _hosp_totals)
                     if lbl:
                         st.markdown(f"<div class='nv-bubble' style='background:#A78BFA;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
-                        st.caption('2025 vs 2024')
+                        st.caption('Hospital vs Same category')
             else:
                 st.info("No same-category APP rows for this status.")
         else:
