@@ -804,6 +804,7 @@ with tab_activity:
     col3, col4 = st.columns([1, 1])
     
     with col3:
+        # --- Approaches Section — restore Version 2 layout ---
         st.markdown("#### Surgical Approaches (Hospital / National / Regional / Same category)")
 
         # Base mapping for approach codes
@@ -832,21 +833,23 @@ with tab_activity:
             fig.update_layout(title=title, height=320, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='white'))
             st.plotly_chart(fig, use_container_width=True)
 
-        # 1) Hospital (HOP_YEAR) — latest year
+        # Row 1 (center, large) — Hospital pie (latest year)
         app_hop_year = csv_data.get('app_hop_year', pd.DataFrame())
         if not app_hop_year.empty:
             hop = app_hop_year[app_hop_year['finessGeoDP'] == str(selected_hospital_id)]
             if not hop.empty:
                 latest_y = pd.to_numeric(hop['annee'], errors='coerce').max()
-                _pie_from_df(hop[hop['annee'] == latest_y], f"Hospital ({int(latest_y)})")
+                _sp_l, _center, _sp_r = st.columns([1, 1.6, 1])
+                with _center:
+                    _pie_from_df(hop[hop['annee'] == latest_y], f"Hospital ({int(latest_y)})")
             else:
                 st.info(f"No hospital approach data for {selected_hospital_id}.")
         else:
             st.info("Hospital approach CSV not loaded.")
 
-        # Two columns: National and Regional/Category side-by-side
-        ncol, rcol = st.columns(2)
-        with ncol:
+        # Row 2 — three small charts: National, Regional, Same category
+        c_nat, c_reg, c_cat = st.columns(3)
+        with c_nat:
             nat = csv_data.get('app_nat_year', pd.DataFrame())
             if not nat.empty:
                 latest_y = pd.to_numeric(nat['annee'], errors='coerce').max()
@@ -866,36 +869,34 @@ with tab_activity:
                     region_name = str(row.iloc[0].get('lib_reg') or row.iloc[0].get('region') or '').strip()
                     status_val = str(row.iloc[0].get('statut') or row.iloc[0].get('status') or '').strip()
         except Exception:
-            region_name = None
-            status_val = None
+                region_name = None
+                status_val = None
 
-            with rcol:
-                # 2) Regional
-                reg = csv_data.get('app_reg_year', pd.DataFrame())
-                if not reg.empty and region_name:
-                    reg = reg[reg['lib_reg'].astype(str).str.strip() == region_name]
-                    if not reg.empty:
-                        latest_y = pd.to_numeric(reg['annee'], errors='coerce').max()
-                        _pie_from_df(reg[reg['annee'] == latest_y], f"Regional — {region_name} ({int(latest_y)})")
+                with c_reg:
+                    reg = csv_data.get('app_reg_year', pd.DataFrame())
+                    if not reg.empty and region_name:
+                        reg = reg[reg['lib_reg'].astype(str).str.strip() == region_name]
+                        if not reg.empty:
+                            latest_y = pd.to_numeric(reg['annee'], errors='coerce').max()
+                            _pie_from_df(reg[reg['annee'] == latest_y], f"Regional — {region_name} ({int(latest_y)})")
+                        else:
+                            st.info("No regional rows for hospital's region.")
                     else:
-                        st.info("No regional rows for hospital's region.")
-                else:
-                    st.info("Regional approach CSV not loaded or region not found.")
+                        st.info("Regional approach CSV not loaded or region not found.")
 
-                # 3) Same category hospitals
-                app_status = csv_data.get('app_status_year', pd.DataFrame())
-                if not app_status.empty and status_val:
-                    st.markdown("#### Same category hospitals (share %)")
-                    st.caption(f"Category: {status_val}")
-                    cat = app_status[app_status['statut'].astype(str).str.strip() == status_val]
-                    if not cat.empty:
-                        latest_y = pd.to_numeric(cat['annee'], errors='coerce').max()
-                        _pie_from_df(cat[cat['annee'] == latest_y], f"Same category ({int(latest_y)})")
+                    # 3) Same category hospitals
+                    app_status = csv_data.get('app_status_year', pd.DataFrame())
+                with c_cat:
+                    if not app_status.empty and status_val:
+                        cat = app_status[app_status['statut'].astype(str).str.strip() == status_val]
+                        if not cat.empty:
+                            latest_y = pd.to_numeric(cat['annee'], errors='coerce').max()
+                            _pie_from_df(cat[cat['annee'] == latest_y], f"Same category ({int(latest_y)})")
+                        else:
+                            st.info("No rows for this category.")
                     else:
-                        st.info("No rows for this category.")
-                else:
-                    st.info("Same-category approach CSV not loaded or status not found.")
-    
+                        st.info("Same-category approach CSV not loaded or status not found.")
+        
     with col4:
         st.markdown("#### Revision Rate")
         
@@ -3957,7 +3958,7 @@ if not hospital_complications.empty:
         
         # Create trend visualization
         fig = go.Figure()
-    
+        
         # Add hospital rolling rate
         fig.add_trace(go.Scatter(
             x=recent_data['quarter'],
