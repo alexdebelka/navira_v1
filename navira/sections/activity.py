@@ -252,6 +252,15 @@ def render_activity(hospital_id: str):
     # Slice hospital totals once
     hosp_totals_df = vol_hop_year[vol_hop_year.get("finessGeoDP").astype(str) == str(hospital_id)].copy()
 
+    # Resolve region/status from REV 12M file (before computing labels)
+    try:
+        _row = rev_hop_12m[rev_hop_12m.get("finessGeoDP").astype(str) == str(hospital_id)].head(1)
+        region_name = str(_row.iloc[0].get("lib_reg") or _row.iloc[0].get("region") or "").strip() if not _row.empty else None
+        status_val = str(_row.iloc[0].get("statut") or _row.iloc[0].get("status") or "").strip() if not _row.empty else None
+    except Exception:
+        region_name = None
+        status_val = None
+
     # National
     # Compute median-based labels once
     median_labels = _hospital_vs_median_labels(vol_hop_year, rev_hop_12m, str(hospital_id), region_name, status_val, year=2024)
@@ -280,14 +289,6 @@ def render_activity(hospital_id: str):
             st.info("No national APP CSV data.")
 
     # Regional
-    # Resolve region/status from REV 12M file
-    try:
-        _row = rev_hop_12m[rev_hop_12m.get("finessGeoDP").astype(str) == str(hospital_id)].head(1)
-        region_name = str(_row.iloc[0].get("lib_reg") or _row.iloc[0].get("region") or "").strip() if not _row.empty else None
-        status_val = str(_row.iloc[0].get("statut") or _row.iloc[0].get("status") or "").strip() if not _row.empty else None
-    except Exception:
-        region_name = None
-        status_val = None
     with c_reg:
         if region_name and not app_reg_year.empty:
             reg = vol_reg_year[vol_reg_year.get("lib_reg").astype(str).str.strip() == str(region_name)]
