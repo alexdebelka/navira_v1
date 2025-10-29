@@ -423,6 +423,66 @@ def render_activity(hospital_id: str):
             st.plotly_chart(fig_ll, use_container_width=True)
             st.caption(f"Scope: {scope}; Year: {int(target_year)}")
 
+    # Monthly procedure volume trends — hospital line + 12‑month average
+    st.markdown("---")
+    st.markdown("#### Monthly Procedure Volume Trends")
+    vol_hop_month = _read_csv("TAB_VOL_HOP_MONTH.csv")
+    if vol_hop_month is None or vol_hop_month.empty:
+        st.info("Monthly CSV (TAB_VOL_HOP_MONTH.csv) not found or empty.")
+    else:
+        try:
+            dfm = vol_hop_month.copy()
+            # Normalize columns
+            if "finessGeoDP" in dfm.columns:
+                dfm["finessGeoDP"] = dfm["finessGeoDP"].astype(str).str.strip()
+            # Determine year/month columns
+            ycol = "annee" if "annee" in dfm.columns else ("year" if "year" in dfm.columns else None)
+            mcol = "mois" if "mois" in dfm.columns else ("month" if "month" in dfm.columns else None)
+            # Value column detection
+            vcol = None
+            for c in ["n", "TOT_month", "TOT_month_tcn", "TOT", "value"]:
+                if c in dfm.columns:
+                    vcol = c
+                    break
+            if ycol is None or mcol is None or vcol is None:
+                st.info("Monthly CSV is missing required columns (year/month/value).")
+            else:
+                # Filter to hospital
+                dfm = dfm[dfm["finessGeoDP"].astype(str) == str(hospital_id)].copy()
+                if dfm.empty:
+                    st.info("No monthly rows for this hospital.")
+                else:
+                    dfm[ycol] = pd.to_numeric(dfm[ycol], errors="coerce")
+                    dfm[mcol] = pd.to_numeric(dfm[mcol], errors="coerce")
+                    dfm[vcol] = pd.to_numeric(dfm[vcol], errors="coerce").fillna(0)
+                    dfm = dfm.dropna(subset=[ycol, mcol])
+                    # Build date column and sort
+                    dfm["date"] = pd.to_datetime(dfm[ycol].astype(int).astype(str) + "-" + dfm[mcol].astype(int).astype(str).str.zfill(2) + "-01", errors="coerce")
+                    dfm = dfm.dropna(subset=["date"]).sort_values("date")
+                    if dfm.empty:
+                        st.info("No valid monthly dates after cleaning.")
+                    else:
+                        # 12‑month rolling average
+                        dfm["rolling12"] = dfm[vcol].rolling(window=12, min_periods=1).mean()
+                        fig_month = go.Figure()
+                        fig_month.add_trace(go.Scatter(
+                            x=dfm["date"], y=dfm[vcol], mode="lines+markers",
+                            name="Monthly Total", line=dict(color="#1f77b4", width=2), marker=dict(size=4),
+                            hovertemplate='%{x|%b %Y}<br>Procedures: %{y:.0f}<extra></extra>'
+                        ))
+                        fig_month.add_trace(go.Scatter(
+                            x=dfm["date"], y=dfm["rolling12"], mode="lines",
+                            name="12‑month Average", line=dict(color="#ff7f0e", width=3, dash="dash"),
+                            hovertemplate='%{x|%b %Y}<br>12‑mo Avg: %{y:.1f}<extra></extra>'
+                        ))
+                        fig_month.update_layout(
+                            height=380, xaxis_title="Month", yaxis_title="Number of procedures",
+                            hovermode='x unified', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+                        )
+                        st.plotly_chart(fig_month, use_container_width=True)
+        except Exception as _e:
+            st.info(f"Could not render monthly trend: {_e}")
+
     # Row 2: Approaches pies
     st.markdown("#### Surgical Approaches (Hospital / National / Regional / Same category)")
     # Hospital (center, latest year)
