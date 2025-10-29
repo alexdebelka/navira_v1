@@ -342,6 +342,87 @@ def render_activity(hospital_id: str):
 
     st.markdown("---")
 
+    # Lollipop — Number of procedures per hospital (2024), with scope toggle
+    st.markdown("#### Number of procedures per hospital — lollipop (2024)")
+    scope = st.radio(
+        "Compare against",
+        ["National", "Regional", "Same status"],
+        horizontal=True,
+        index=0,
+        key=f"lollipop_scope_{hospital_id}"
+    )
+
+    # Choose target year: 2024 if present else latest ≤ 2024
+    year_col = "annee" if "annee" in vol_hop_year.columns else ("year" if "year" in vol_hop_year.columns else None)
+    if year_col is None:
+        st.info("Hospital totals file missing year column.")
+    else:
+        years_available = pd.to_numeric(vol_hop_year[year_col], errors="coerce").dropna().astype(int)
+        target_year = 2024 if (years_available == 2024).any() else (years_available[years_available <= 2024].max() if not years_available[years_available <= 2024].empty else years_available.max())
+
+        # Build id filters for scopes from REV mapping
+        all_ids = vol_hop_year.get("finessGeoDP").astype(str).unique().tolist() if "finessGeoDP" in vol_hop_year.columns else []
+        reg_ids = []
+        status_ids = []
+        try:
+            if not rev_hop_12m.empty and "finessGeoDP" in rev_hop_12m.columns:
+                if region_name:
+                    reg_ids = rev_hop_12m[rev_hop_12m.get("lib_reg").astype(str) == str(region_name)]["finessGeoDP"].astype(str).unique().tolist()
+                if status_val:
+                    status_ids = rev_hop_12m[rev_hop_12m.get("statut").astype(str) == str(status_val)]["finessGeoDP"].astype(str).unique().tolist()
+        except Exception:
+            reg_ids = []
+            status_ids = []
+
+        if scope == "Regional":
+            ids_scope = reg_ids
+        elif scope == "Same status":
+            ids_scope = status_ids
+        else:
+            ids_scope = all_ids
+
+        # Build per-hospital totals for target year
+        df_year = vol_hop_year[pd.to_numeric(vol_hop_year[year_col], errors="coerce") == target_year].copy()
+        if ids_scope:
+            df_year = df_year[df_year.get("finessGeoDP").astype(str).isin([str(i) for i in ids_scope])]
+        if df_year.empty or "n" not in df_year.columns:
+            st.info("No data to build lollipop for this scope/year.")
+        else:
+            totals = (df_year.groupby("finessGeoDP", as_index=False)["n"].sum().rename(columns={"n":"total"}))
+            # Sort ascending and produce x positions
+            totals = totals.sort_values("total").reset_index(drop=True)
+            x_pos = list(range(1, len(totals) + 1))
+            # Colors: highlight selected hospital
+            colors = ["#FF8C00" if str(h) == str(hospital_id) else "#5DA5DA" for h in totals["finessGeoDP"].astype(str)]
+
+            fig_ll = go.Figure()
+            # Stems
+            for xi, yi, col in zip(x_pos, totals["total"], colors):
+                fig_ll.add_trace(go.Scatter(x=[xi, xi], y=[0, yi], mode="lines", line=dict(color=col, width=2), showlegend=False, hoverinfo='skip'))
+            # Heads (markers)
+            fig_ll.add_trace(go.Scatter(
+                x=x_pos,
+                y=totals["total"],
+                mode="markers",
+                marker=dict(color=colors, size=8),
+                showlegend=False,
+                hovertemplate='Hospital: %{x}<br>Procedures: %{y:,}<extra></extra>'
+            ))
+            # Legend via dummy markers
+            fig_ll.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(color='#FF8C00', size=8), name='Selected hospital'))
+            fig_ll.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(color='#5DA5DA', size=8), name='Other hospitals'))
+
+            fig_ll.update_layout(
+                height=360,
+                xaxis_title='Hospitals',
+                yaxis_title='Number of procedures',
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(showticklabels=False)
+            )
+            st.plotly_chart(fig_ll, use_container_width=True)
+            st.caption(f"Scope: {scope}; Year: {int(target_year)}")
+
     # Row 2: Approaches pies
     st.markdown("#### Surgical Approaches (Hospital / National / Regional / Same category)")
     # Hospital (center, latest year)
