@@ -525,4 +525,85 @@ def render_activity(hospital_id: str):
         else:
             st.info("Same-category approach CSV not loaded or status not found.")
 
+    # --- Procedure casemix (TCN) — hospital centered, peers below; toggle 12M ---
+    st.markdown("---")
+    st.markdown("#### Procedure casemix")
+    use_12m = st.toggle("Show last 12 months", value=False, key=f"tcn_12m_{hospital_id}")
+
+    # Load TCN datasets depending on toggle
+    tcn_hop = _read_csv("TAB_TCN_HOP_12M.csv" if use_12m else "TAB_TCN_HOP_YEAR.csv")
+    tcn_nat = _read_csv("TAB_TCN_NATL_12M.csv" if use_12m else "TAB_TCN_NATL_YEAR.csv")
+    tcn_reg = _read_csv("TAB_TCN_REG_12M.csv" if use_12m else "TAB_TCN_REG_YEAR.csv")
+    tcn_status = _read_csv("TAB_TCN_STATUS_12M.csv" if use_12m else "TAB_TCN_STATUS_YEAR.csv")
+
+    PROC_LABELS = {
+        'SLE': 'Sleeve',
+        'BPG': 'Gastric Bypass',
+        'ANN': 'Other',
+        'DBP': 'Other',
+        'GVC': 'Other',
+        'NDD': 'Other'
+    }
+    PROC_COLORS = {
+        'Sleeve': '#1f77b4',
+        'Gastric Bypass': '#ff7f0e',
+        'Other': '#2ca02c'
+    }
+
+    def _tcn_pie(df: pd.DataFrame, title: str, filters: dict | None = None):
+        if df is None or df.empty:
+            st.info(f"No data for {title}.")
+            return
+        d = df.copy()
+        if filters:
+            for k, v in filters.items():
+                if k in d.columns and v is not None and str(v):
+                    d = d[d[k].astype(str).str.strip() == str(v)]
+        if d.empty:
+            st.info(f"No data for {title}.")
+            return
+        # Choose latest year if YEAR file
+        if not use_12m and ('annee' in d.columns or 'year' in d.columns):
+            ycol = 'annee' if 'annee' in d.columns else 'year'
+            d[ycol] = pd.to_numeric(d[ycol], errors='coerce')
+            maxy = int(d[ycol].dropna().max()) if not d[ycol].dropna().empty else None
+            if maxy is not None:
+                d = d[d[ycol] == maxy]
+        # Aggregate counts by procedure
+        if 'n' not in d.columns and 'TOT' in d.columns:
+            d['n'] = pd.to_numeric(d['TOT'], errors='coerce')
+        d['n'] = pd.to_numeric(d.get('n', 0), errors='coerce').fillna(0)
+        if 'baria_t' not in d.columns:
+            st.info(f"No procedure type column for {title}.")
+            return
+        grp = d.groupby('baria_t', as_index=False)['n'].sum()
+        # Map to three buckets
+        totals = {'Sleeve': 0.0, 'Gastric Bypass': 0.0, 'Other': 0.0}
+        for _, r in grp.iterrows():
+            code = str(r['baria_t']).upper().strip()
+            label = PROC_LABELS.get(code, 'Other')
+            totals[label] += float(r['n'])
+        vals = {k: v for k, v in totals.items() if v > 0}
+        if not vals:
+            st.info(f"No data for {title}.")
+            return
+        dfp = pd.DataFrame({'Procedure': list(vals.keys()), 'Count': list(vals.values())})
+        figp = px.pie(dfp, values='Count', names='Procedure', hole=0.55, color='Procedure', color_discrete_map=PROC_COLORS)
+        figp.update_traces(textposition='inside', textinfo='percent+label')
+        figp.update_layout(title=title, height=260, showlegend=False, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(figp, use_container_width=True)
+
+    # Layout: hospital centered (large), then three small pies below
+    _sp_l, _center, _sp_r = st.columns([1, 1.2, 1])
+    with _center:
+        _tcn_pie(tcn_hop, "Hospital", { 'finessGeoDP': str(hospital_id) })
+
+    c_nat2, c_reg2, c_cat2 = st.columns(3)
+    with c_nat2:
+        _tcn_pie(tcn_nat, "National", None)
+    with c_reg2:
+        _tcn_pie(tcn_reg, f"Regional", { 'lib_reg': region_name })
+    with c_cat2:
+        _tcn_pie(tcn_status, "Same category", { 'statut': status_val })
+
 
