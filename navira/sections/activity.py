@@ -614,4 +614,89 @@ def render_activity(hospital_id: str):
     with c_cat2:
         _tcn_pie(tcn_status, "Same category", { 'statut': status_val })
 
+    # --- Sleeve & Bypass share (%) — last 12 months scatter ---
+    st.markdown("---")
+    st.markdown("#### Sleeve & Bypass share (%) — last 12 months")
+    scope_sc = st.radio(
+        "Compare against",
+        ["National", "Regional", "Same status"],
+        horizontal=True,
+        index=0,
+        key=f"tcn_scatter_scope_{hospital_id}"
+    )
+
+    # Build per-hospital SLE/BPG shares from last 12 months
+    tcn12 = _read_csv("TAB_TCN_HOP_12M.csv")
+    if tcn12 is None or tcn12.empty or "baria_t" not in tcn12.columns:
+        st.info("No TCN 12-month dataset available for scatter.")
+    else:
+        d = tcn12.copy()
+        d["finessGeoDP"] = d.get("finessGeoDP").astype(str)
+        d["n"] = pd.to_numeric(d.get("n", 0), errors="coerce").fillna(0)
+        # Pivot to SLE/BPG columns per hospital
+        piv = d[d["baria_t"].isin(["SLE","BPG"])].pivot_table(index="finessGeoDP", columns="baria_t", values="n", aggfunc="sum").fillna(0)
+        piv = piv.reset_index().rename_axis(None, axis=1)
+        if "SLE" not in piv.columns:
+            piv["SLE"] = 0
+        if "BPG" not in piv.columns:
+            piv["BPG"] = 0
+        piv["den"] = piv["SLE"] + piv["BPG"]
+        piv = piv[piv["den"] > 0]
+        piv["sleeve_pct"] = piv["SLE"] / piv["den"] * 100.0
+        piv["bypass_pct"] = piv["BPG"] / piv["den"] * 100.0
+
+        # Scope filtering via REV mapping
+        ids_natl = piv["finessGeoDP"].astype(str).unique().tolist()
+        ids_reg = []
+        ids_status = []
+        try:
+            if not rev_hop_12m.empty and "finessGeoDP" in rev_hop_12m.columns:
+                if region_name:
+                    ids_reg = rev_hop_12m[rev_hop_12m.get("lib_reg").astype(str) == str(region_name)]["finessGeoDP"].astype(str).unique().tolist()
+                if status_val:
+                    ids_status = rev_hop_12m[rev_hop_12m.get("statut").astype(str) == str(status_val)]["finessGeoDP"].astype(str).unique().tolist()
+        except Exception:
+            ids_reg = []
+            ids_status = []
+
+        if scope_sc == "Regional":
+            ids_scope = ids_reg
+        elif scope_sc == "Same status":
+            ids_scope = ids_status
+        else:
+            ids_scope = ids_natl
+
+        if ids_scope:
+            piv_sc = piv[piv["finessGeoDP"].astype(str).isin([str(i) for i in ids_scope])].copy()
+        else:
+            piv_sc = piv.copy()
+
+        if piv_sc.empty:
+            st.info("No data to build sleeve/bypass scatter for this scope.")
+        else:
+            sel = piv_sc[piv_sc["finessGeoDP"].astype(str) == str(hospital_id)]
+            oth = piv_sc[piv_sc["finessGeoDP"].astype(str) != str(hospital_id)]
+            fig_sc = go.Figure()
+            # Others
+            fig_sc.add_trace(go.Scatter(
+                x=oth["sleeve_pct"], y=oth["bypass_pct"], mode="markers",
+                marker=dict(color="#222", size=6, opacity=0.75), name="Other hospitals",
+                hovertemplate='Sleeve: %{x:.0f}%<br>Bypass: %{y:.0f}%<extra></extra>'
+            ))
+            # Selected
+            if not sel.empty:
+                fig_sc.add_trace(go.Scatter(
+                    x=sel["sleeve_pct"], y=sel["bypass_pct"], mode="markers",
+                    marker=dict(color="#FF8C00", size=12, line=dict(color="white", width=1)), name="Selected hospital",
+                    hovertemplate='Sleeve: %{x:.0f}%<br>Bypass: %{y:.0f}%<extra></extra>'
+                ))
+            fig_sc.update_layout(
+                height=420,
+                xaxis_title="Sleeve rate (%)", yaxis_title="Bypass rate (%)",
+                xaxis=dict(range=[0,100]), yaxis=dict(range=[0,100]),
+                plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+            )
+            st.plotly_chart(fig_sc, use_container_width=True)
+            st.caption("Based on TCN last 12 months (HOP_12M)")
+
 
