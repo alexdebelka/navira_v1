@@ -680,7 +680,7 @@ def render_activity(hospital_id: str):
             # Others
             fig_sc.add_trace(go.Scatter(
                 x=oth["sleeve_pct"], y=oth["bypass_pct"], mode="markers",
-                marker=dict(color="#222", size=6, opacity=0.75), name="Other hospitals",
+                marker=dict(color="#1f77b4", size=6, opacity=0.75), name="Other hospitals",
                 hovertemplate='Sleeve: %{x:.0f}%<br>Bypass: %{y:.0f}%<extra></extra>'
             ))
             # Selected
