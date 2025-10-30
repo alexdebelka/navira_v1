@@ -699,4 +699,63 @@ def render_activity(hospital_id: str):
             st.plotly_chart(fig_sc, use_container_width=True)
             st.caption("Based on TCN last 12 months (HOP_12M)")
 
+    # --- Surgical approach (stacked bars % over years) ---
+    st.markdown("---")
+    st.markdown("#### Surgical approach")
+
+    APPROACH_LABELS = { 'COE': 'Coelioscopy', 'ROB': 'Robotic', 'LAP': 'Open Surgery' }
+    APPROACH_COLORS = { 'Coelioscopy': '#2E86AB', 'Robotic': '#F7931E', 'Open Surgery': '#A23B72' }
+
+    def _approach_bars(df: pd.DataFrame, title: str, filters: dict | None = None, height: int = 260):
+        if df is None or df.empty:
+            st.info(f"No data for {title}.")
+            return
+        d = df.copy()
+        if filters:
+            for k, v in filters.items():
+                if k in d.columns and v is not None and str(v):
+                    d = d[d[k].astype(str).str.strip() == str(v)]
+        if d.empty:
+            st.info(f"No data for {title}.")
+            return
+        if 'annee' not in d.columns or 'vda' not in d.columns:
+            st.info(f"Missing columns for {title}.")
+            return
+        d['n'] = pd.to_numeric(d.get('n', 0), errors='coerce').fillna(0)
+        agg = d.groupby(['annee','vda'], as_index=False)['n'].sum()
+        # Map labels and compute shares per year
+        agg['Approach'] = agg['vda'].astype(str).str.upper().map(APPROACH_LABELS).fillna(agg['vda'])
+        totals = agg.groupby('annee', as_index=False)['n'].sum().rename(columns={'n':'tot'})
+        merged = agg.merge(totals, on='annee', how='left')
+        merged = merged[merged['tot'] > 0]
+        merged['Share'] = merged['n'] / merged['tot'] * 100.0
+        merged['annee'] = pd.to_numeric(merged['annee'], errors='coerce').astype('Int64')
+        merged = merged.dropna(subset=['annee'])
+        if merged.empty:
+            st.info(f"No data for {title}.")
+            return
+        fig = px.bar(
+            merged.sort_values('annee').assign(annee=lambda x: x['annee'].astype(int).astype(str)),
+            x='annee', y='Share', color='Approach', barmode='stack',
+            color_discrete_map=APPROACH_COLORS
+        )
+        fig.update_layout(height=height, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', title=title)
+        fig.update_traces(hovertemplate='%{x}<br>%{fullData.name}: %{y:.0f}%<extra></extra>')
+        fig.update_yaxes(range=[0,100])
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Hospital big chart
+    _sp_l, _center, _sp_r = st.columns([1, 1.6, 1])
+    with _center:
+        _approach_bars(app_hop_year, 'Hospital', { 'finessGeoDP': str(hospital_id) }, height=300)
+
+    # Three small charts: national, regional, same category
+    c_nat3, c_reg3, c_cat3 = st.columns(3)
+    with c_nat3:
+        _approach_bars(app_nat_year, 'National', None)
+    with c_reg3:
+        _approach_bars(app_reg_year, 'Regional', { 'lib_reg': region_name } if region_name else None)
+    with c_cat3:
+        _approach_bars(app_status_year, 'Same category', { 'statut': status_val } if status_val else None)
+
 
