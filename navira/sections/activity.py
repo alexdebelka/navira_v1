@@ -588,8 +588,16 @@ def render_activity(hospital_id: str):
             st.info(f"No data for {title}.")
             return
         dfp = pd.DataFrame({'Procedure': list(vals.keys()), 'Count': list(vals.values())})
+        # Determine smallest slice to place label outside for better legibility
+        try:
+            min_idx = int(dfp['Count'].astype(float).idxmin())
+        except Exception:
+            min_idx = 0
+        positions = ['inside'] * len(dfp)
+        if 0 <= min_idx < len(positions):
+            positions[min_idx] = 'outside'
         figp = px.pie(dfp, values='Count', names='Procedure', hole=0.55, color='Procedure', color_discrete_map=PROC_COLORS)
-        figp.update_traces(textposition='inside', textinfo='percent+label')
+        figp.update_traces(textposition=positions, textinfo='percent+label', insidetextfont=dict(size=12), outsidetextfont=dict(size=16))
         figp.update_layout(title=title, height=390, showlegend=False, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(figp, use_container_width=True)
 
