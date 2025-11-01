@@ -146,21 +146,17 @@ SURGICAL_APPROACH_NAMES = {
     'LAP': 'Open Surgery', 'COE': 'Coelioscopy', 'ROB': 'Robotic'
 }
 
-# --- Load Data (CSV with Parquet fallback) ---
-try:
-    establishments, annual = get_dataframes()
-    # Load additional datasets
-    all_data = get_all_dataframes()
-    competitors = all_data.get('competitors', pd.DataFrame())
-    complications = all_data.get('complications', pd.DataFrame())
-    procedure_details = all_data.get('procedure_details', pd.DataFrame())
-    los_90 = all_data.get('los_90', pd.DataFrame())
-    clavien = all_data.get('clavien', pd.DataFrame())
-    
-    
-except Exception as e:
-    st.error(f"Data loading failed: {e}")
-    st.stop()
+# Activity-only data mode: do not load any CSV/Parquet here; rely on session_state or no-op
+ONLY_ACTIVITY_DATA = True
+
+# --- Load Data (from session only; no disk I/O here) ---
+establishments = st.session_state.get('establishments', pd.DataFrame())
+annual = st.session_state.get('annual', pd.DataFrame())
+competitors = st.session_state.get('competitors', pd.DataFrame())
+complications = st.session_state.get('complications', pd.DataFrame())
+procedure_details = st.session_state.get('procedure_details', pd.DataFrame())
+los_90 = st.session_state.get('los_90', pd.DataFrame())
+clavien = st.session_state.get('clavien', pd.DataFrame())
 
 # Navigation is now handled by the sidebar
 
@@ -254,21 +250,31 @@ def _get_hospital_complications(complications_df: pd.DataFrame, hospital_id: str
 # Establishment details and annual series
 est_row = establishments[establishments['id'] == str(selected_hospital_id)]
 if est_row.empty:
-    st.error("Could not find data for the selected hospital.")
-    st.stop()
-selected_hospital_details = est_row.iloc[0]
-selected_hospital_all_data = annual[annual['id'] == str(selected_hospital_id)]
+    if ONLY_ACTIVITY_DATA:
+        # Fallback minimal details without blocking the page
+        selected_hospital_details = pd.Series({
+            'id': str(selected_hospital_id),
+            'name': f"Hospital {selected_hospital_id}",
+            'city': '',
+            'code_postal': '',
+            'adresse': '',
+            'status': ''
+        })
+        selected_hospital_all_data = pd.DataFrame(columns=['annee', 'total_procedures_year'])
+    else:
+        st.error("Could not find data for the selected hospital.")
+        st.stop()
+else:
+    selected_hospital_details = est_row.iloc[0]
+    selected_hospital_all_data = annual[annual['id'] == str(selected_hospital_id)]
 
 if selected_hospital_all_data.empty:
     st.warning(f"No annual data found for hospital {selected_hospital_id}")
     # Create empty DataFrame with expected columns
     selected_hospital_all_data = pd.DataFrame(columns=['annee', 'total_procedures_year'])
 
-# Load new CSV complications data for this hospital
-try:
-    from navira.csv_data_loader import get_complications_data
-    complications = get_complications_data(str(selected_hospital_id), 'HOP', 'YEAR')
-except Exception as e:
+# Do NOT load additional CSV complications here (Activity-only mode)
+if complications is None or isinstance(complications, type(None)):
     complications = pd.DataFrame()
 
 # Year helpers for dynamic 2025 inclusion (YTD)
@@ -313,6 +319,8 @@ st.markdown("### Summary")
 # Helper to load monthly data for YoY estimate (YTD)
 @st.cache_data(show_spinner=False)
 def _load_monthly_volumes_summary(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.csv", cache_buster: str = "") -> pd.DataFrame:
+    if ONLY_ACTIVITY_DATA:
+        return pd.DataFrame()
     try:
         df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int, 'mois': int})
         df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
@@ -323,6 +331,8 @@ def _load_monthly_volumes_summary(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.
 # Read VDA file that includes ongoing year (e.g., 2025) totals and approach split
 @st.cache_data(show_spinner=False)
 def _load_vda_year_totals_summary(path: str = "data/export_TAB_VDA_HOP.csv", cache_buster: str = "") -> pd.DataFrame:
+    if ONLY_ACTIVITY_DATA:
+        return pd.DataFrame()
     try:
         df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int})
         df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
@@ -596,7 +606,7 @@ username_ctx = (user_ctx or {}).get('username', '')
 _limited = bool(st.session_state.get('_limited_user'))
 # Pilot override: enable Geography for pilot user even if limited
 _pilot_geo_override = username_ctx == 'andrea.lazzati'
-show_geography = (not _limited) or _pilot_geo_override
+show_geography = ((not _limited) or _pilot_geo_override) and (not ONLY_ACTIVITY_DATA)
 
 if show_geography:
     tab_activity, tab_complications, tab_geo = st.tabs(["📈 Activity", "🧪 Complications", "🗺️ Geography"])
@@ -1199,6 +1209,8 @@ with tab_complications:
         """, unsafe_allow_html=True)
         @st.cache_data(show_spinner=False)
         def _load_monthly_volumes(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.csv") -> pd.DataFrame:
+            if ONLY_ACTIVITY_DATA:
+                return pd.DataFrame()
             try:
                 df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int, 'mois': int})
                 df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
@@ -1354,6 +1366,8 @@ with tab_complications:
 
         @st.cache_data(show_spinner=False)
         def _load_monthly_for_casemix(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.csv") -> pd.DataFrame:
+            if ONLY_ACTIVITY_DATA:
+                return pd.DataFrame()
             try:
                 df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int, 'mois': int})
                 df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
@@ -1516,6 +1530,8 @@ with tab_complications:
             return best[['hid','total_procedures_year','_robot_share']], int(best_year or 2024)
 
         def _robot_share_from_vda_2025(ids: list[str]) -> pd.DataFrame:
+            if ONLY_ACTIVITY_DATA:
+                return pd.DataFrame()
             vda = _load_vda_year_totals_summary()
             if vda.empty:
                 return pd.DataFrame()
@@ -1624,6 +1640,8 @@ with tab_complications:
 
         def _sum_rev_from_vda_2025(ids: list[str] | None) -> tuple[float, float]:
             # Numerator from REDO file, denominator from VDA TOT
+            if ONLY_ACTIVITY_DATA:
+                return 0.0, 0.0
             try:
                 redo = pd.read_csv('data/export_TAB_REDO_HOP.csv', dtype={'finessGeoDP': str, 'annee': int})
             except Exception:
@@ -1745,6 +1763,8 @@ with tab_complications:
 
         # Helpers to compute revisional rate per hospital for a given year
         def _rev_rate_year_2025(ids: list[str]) -> pd.DataFrame:
+            if ONLY_ACTIVITY_DATA:
+                return pd.DataFrame(columns=['hid','rate'])
             try:
                 redo = pd.read_csv('data/export_TAB_REDO_HOP.csv', dtype={'finessGeoDP': str, 'annee': int})
             except Exception:
@@ -2468,15 +2488,16 @@ with tab_complications:
             needs_fallback = (df_los is None or df_los.empty or any(c not in df_los.columns for c in required_cols))
             if needs_fallback:
                 loaded = False
-                for sep in [',',';']:
-                    try:
-                        tmp = pd.read_csv('data/export_TAB_LOS_HOP_90.csv', sep=sep)
-                        if not tmp.empty and all(c in tmp.columns for c in required_cols):
-                            df_los = tmp
-                            loaded = True
-                            break
-                    except Exception:
-                        continue
+                if not ONLY_ACTIVITY_DATA:
+                    for sep in [',',';']:
+                        try:
+                            tmp = pd.read_csv('data/export_TAB_LOS_HOP_90.csv', sep=sep)
+                            if not tmp.empty and all(c in tmp.columns for c in required_cols):
+                                df_los = tmp
+                                loaded = True
+                                break
+                        except Exception:
+                            continue
                 if not loaded:
                     df_los = pd.DataFrame()
             if not df_los.empty and all(c in df_los.columns for c in required_cols):
@@ -2716,6 +2737,8 @@ with tab_complications:
 
             @st.cache_data(show_spinner=False)
             def _load_external_rolling_csv(path: str = "data/22_complication_trimestre.csv") -> pd.DataFrame:
+                if ONLY_ACTIVITY_DATA:
+                    return pd.DataFrame()
                 try:
                     df = pd.read_csv(path, sep=';', dtype=str)
                     # Normalize column names
