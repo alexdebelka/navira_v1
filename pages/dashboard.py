@@ -247,26 +247,35 @@ def _get_hospital_complications(complications_df: pd.DataFrame, hospital_id: str
     except Exception:
         return pd.DataFrame()
 
-# Establishment details and annual series
-est_row = establishments[establishments['id'] == str(selected_hospital_id)]
-if est_row.empty:
-    if ONLY_ACTIVITY_DATA:
-        # Fallback minimal details without blocking the page
-        selected_hospital_details = pd.Series({
-            'id': str(selected_hospital_id),
-            'name': f"Hospital {selected_hospital_id}",
-            'city': '',
-            'code_postal': '',
-            'adresse': '',
-            'status': ''
-        })
-        selected_hospital_all_data = pd.DataFrame(columns=['annee', 'total_procedures_year'])
+# Establishment details and annual series (robust to missing data)
+try:
+    if establishments is None or establishments.empty or ('id' not in establishments.columns):
+        est_row = pd.DataFrame()
     else:
-        st.error("Could not find data for the selected hospital.")
-        st.stop()
+        est_row = establishments[establishments['id'].astype(str) == str(selected_hospital_id)]
+except Exception:
+    est_row = pd.DataFrame()
+
+if est_row.empty:
+    # Fallback minimal details without blocking the page
+    selected_hospital_details = pd.Series({
+        'id': str(selected_hospital_id),
+        'name': f"Hospital {selected_hospital_id}",
+        'city': '',
+        'code_postal': '',
+        'adresse': '',
+        'status': ''
+    })
+    selected_hospital_all_data = pd.DataFrame(columns=['annee', 'total_procedures_year'])
 else:
     selected_hospital_details = est_row.iloc[0]
-    selected_hospital_all_data = annual[annual['id'] == str(selected_hospital_id)]
+    try:
+        if annual is not None and not annual.empty and ('id' in annual.columns):
+            selected_hospital_all_data = annual[annual['id'].astype(str) == str(selected_hospital_id)]
+        else:
+            selected_hospital_all_data = pd.DataFrame(columns=['annee', 'total_procedures_year'])
+    except Exception:
+        selected_hospital_all_data = pd.DataFrame(columns=['annee', 'total_procedures_year'])
 
 if selected_hospital_all_data.empty:
     st.warning(f"No annual data found for hospital {selected_hospital_id}")
