@@ -107,6 +107,9 @@ def render_activity(hospital_id: str):
                 df["lib_reg"] = df["lib_reg"].astype(str).str.strip()
             if "statut" in df.columns:
                 df["statut"] = df["statut"].astype(str).str.strip()
+            # Handle diff_pct column in trend files (may contain "NA" strings)
+            if "diff_pct" in df.columns:
+                df["diff_pct"] = pd.to_numeric(df["diff_pct"], errors="coerce")
             return df
         except Exception:
             return pd.DataFrame()
@@ -123,6 +126,11 @@ def render_activity(hospital_id: str):
     app_status_year = _read_csv("TAB_APP_STATUS_YEAR.csv")
     # Region/Status mapping for this hospital
     rev_hop_12m = _read_csv("TAB_REV_HOP_12M.csv")
+    # Trend data for YoY bubbles
+    trend_hop = _read_csv("TAB_TREND_HOP.csv")
+    trend_natl = _read_csv("TAB_TREND_NATL.csv")
+    trend_reg = _read_csv("TAB_TREND_REG.csv")
+    trend_status = _read_csv("TAB_TRENDS_STATUS.csv")
 
     # Row 1: Hospital volume per year (bar)
     col1, col2 = st.columns([2, 1])
@@ -145,105 +153,20 @@ def render_activity(hospital_id: str):
             st.warning("Volume data not available")
 
     with col2:
-        # Simple YoY bubble 2025 vs 2024 using vol_hop_year if available
+        # YoY bubble 2025 vs 2024 from trend data
         yoy_text = "—"
         try:
-            h = vol_hop_year[vol_hop_year["finessGeoDP"] == str(hospital_id)]
-            if not h.empty:
-                by_year = h.groupby("annee" if "annee" in h.columns else "year", as_index=False)["n" if "n" in h.columns else "TOT"].sum()
-                y24 = float(by_year[by_year.iloc[:, 0] == 2024].iloc[0, 1]) if (by_year.iloc[:, 0] == 2024).any() else None
-                y25 = float(by_year[by_year.iloc[:, 0] == 2025].iloc[0, 1]) if (by_year.iloc[:, 0] == 2025).any() else None
-                if y24 and y25 is not None and y24 > 0:
-                    yoy_text = f"{((y25 / y24 - 1.0) * 100.0):+.0f}%"
+            if not trend_hop.empty and "finessGeoDP" in trend_hop.columns and "diff_pct" in trend_hop.columns:
+                hosp_trend = trend_hop[trend_hop["finessGeoDP"].astype(str) == str(hospital_id)]
+                if not hosp_trend.empty:
+                    diff_val = hosp_trend.iloc[0]["diff_pct"]
+                    if pd.notna(diff_val):
+                        yoy_text = f"{float(diff_val):+.1f}%"
         except Exception:
             pass
         st.markdown(f"<div class='nv-bubble teal' style='width:110px;height:110px;font-size:1.6rem'>{yoy_text}</div>", unsafe_allow_html=True)
-        st.caption('2025 YTD vs 2024 (based on CSV totals)')
+        st.caption('2025 YTD vs 2024 (% change)')
 
-    # National / Regional / Same-category — Procedures per year directly from VOL CSVs
-    def _diff_vs_hospital_label(group_df: pd.DataFrame, hosp_df: pd.DataFrame, preferred_year: int = 2024) -> str | None:
-        try:
-            if group_df is None or group_df.empty or hosp_df is None or hosp_df.empty:
-                return None
-            # Determine available years
-            gy = pd.to_numeric((group_df.get("annee") if "annee" in group_df.columns else group_df.get("year")), errors="coerce").dropna().astype(int)
-            hy = pd.to_numeric((hosp_df.get("annee") if "annee" in hosp_df.columns else hosp_df.get("year")), errors="coerce").dropna().astype(int)
-            common = sorted(set(gy.tolist()).intersection(set(hy.tolist())))
-            if not common:
-                return None
-            year_candidates = [y for y in common if y <= preferred_year]
-            if not year_candidates:
-                return None
-            year = year_candidates[-1]
-            gv = float(group_df[(group_df.get("annee", group_df.get("year")) == year)]["n"].sum())
-            hv = float(hosp_df[(hosp_df.get("annee", hosp_df.get("year")) == year)]["n"].sum())
-            if gv <= 0:
-                return None
-            diff = (hv / gv - 1.0) * 100.0
-            return f"{diff:+.0f}%"
-        except Exception:
-            return None
-
-    # Median-based comparison helpers (preferred): Hospital vs group median (per-hospital), 2024
-    def _hospital_vs_median_labels(vol_hop_df: pd.DataFrame, rev_df: pd.DataFrame, hid: str, region_val: str | None, status_val: str | None, year: int = 2024) -> dict[str, str | None]:
-        out = {"national": None, "regional": None, "status": None}
-        try:
-            if vol_hop_df is None or vol_hop_df.empty:
-                return out
-            v = vol_hop_df.copy()
-            year_col = "annee" if "annee" in v.columns else ("year" if "year" in v.columns else None)
-            if year_col is None:
-                return out
-            v = v[pd.to_numeric(v[year_col], errors="coerce") == year]
-            if v.empty or "finessGeoDP" not in v.columns or "n" not in v.columns:
-                return out
-            # Sum per hospital for the year
-            v = v.groupby("finessGeoDP", as_index=False)["n"].sum()
-            # Attach region/status mapping
-            if rev_df is not None and not rev_df.empty:
-                m = rev_df[[c for c in ["finessGeoDP","lib_reg","statut","region","status"] if c in rev_df.columns]].copy()
-                m["finessGeoDP"] = m["finessGeoDP"].astype(str)
-                # Prefer lib_reg/statut; fallback to region/status if needed
-                if "lib_reg" not in m.columns and "region" in m.columns:
-                    m["lib_reg"] = m["region"].astype(str)
-                if "statut" not in m.columns and "status" in m.columns:
-                    m["statut"] = m["status"].astype(str)
-                m = m.drop_duplicates(subset=["finessGeoDP"])  # one row per hospital
-                v = v.merge(m[["finessGeoDP","lib_reg","statut"]], on="finessGeoDP", how="left")
-            # Hospital value
-            try:
-                hv = float(v[v["finessGeoDP"].astype(str) == str(hid)]["n"].iloc[0])
-            except Exception:
-                hv = None
-            if hv is None or hv <= 0:
-                return out
-            # National median
-            try:
-                nat_med = float(v["n"].median())
-                out["national"] = f"{((hv / nat_med - 1.0) * 100.0):+.0f}%" if nat_med and nat_med > 0 else None
-            except Exception:
-                out["national"] = None
-            # Regional median (same lib_reg as selected hospital)
-            try:
-                if region_val:
-                    reg_med_series = v[v.get("lib_reg").astype(str) == str(region_val)]["n"]
-                    if not reg_med_series.empty:
-                        reg_med = float(reg_med_series.median())
-                        out["regional"] = f"{((hv / reg_med - 1.0) * 100.0):+.0f}%" if reg_med and reg_med > 0 else None
-            except Exception:
-                out["regional"] = None
-            # Status median (same statut)
-            try:
-                if status_val:
-                    cat_med_series = v[v.get("statut").astype(str) == str(status_val)]["n"]
-                    if not cat_med_series.empty:
-                        cat_med = float(cat_med_series.median())
-                        out["status"] = f"{((hv / cat_med - 1.0) * 100.0):+.0f}%" if cat_med and cat_med > 0 else None
-            except Exception:
-                out["status"] = None
-        except Exception:
-            pass
-        return out
 
     st.markdown("---")
     st.markdown("#### National / Regional / Same category — Procedures per year")
@@ -262,9 +185,6 @@ def render_activity(hospital_id: str):
         status_val = None
 
     # National
-    # Compute median-based labels once
-    median_labels = _hospital_vs_median_labels(vol_hop_year, rev_hop_12m, str(hospital_id), region_name, status_val, year=2024)
-
     with c_nat:
         nat_tot = vol_nat_year.copy()
         if not nat_tot.empty:
@@ -281,10 +201,18 @@ def render_activity(hospital_id: str):
                 fig_n.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                 st.plotly_chart(fig_n, use_container_width=True)
             with s2:
-                lbl = median_labels.get("national")
-                if lbl:
-                    st.markdown(f"<div class='nv-bubble' style='background:#E9A23B;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
-                    st.caption('Hospital vs National median (2024)')
+                # Get YoY change from trend data
+                nat_yoy = "—"
+                try:
+                    if not trend_natl.empty and "diff_pct" in trend_natl.columns:
+                        diff_val = trend_natl.iloc[0]["diff_pct"]
+                        if pd.notna(diff_val):
+                            nat_yoy = f"{float(diff_val):+.1f}%"
+                except Exception:
+                    pass
+                if nat_yoy != "—":
+                    st.markdown(f"<div class='nv-bubble' style='background:#E9A23B;width:90px;height:90px;font-size:1.2rem'>{nat_yoy}</div>", unsafe_allow_html=True)
+                    st.caption('2025 YTD vs 2024 (% change)')
         else:
             st.info("No national APP CSV data.")
 
@@ -305,10 +233,20 @@ def render_activity(hospital_id: str):
                     fig_r.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                     st.plotly_chart(fig_r, use_container_width=True)
                 with s2:
-                    lbl = median_labels.get("regional")
-                    if lbl:
-                        st.markdown(f"<div class='nv-bubble' style='background:#4ECDC4;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
-                        st.caption('Hospital vs Regional median (2024)')
+                    # Get YoY change from trend data
+                    reg_yoy = "—"
+                    try:
+                        if not trend_reg.empty and "lib_reg" in trend_reg.columns and "diff_pct" in trend_reg.columns:
+                            reg_trend = trend_reg[trend_reg["lib_reg"].astype(str).str.strip() == str(region_name)]
+                            if not reg_trend.empty:
+                                diff_val = reg_trend.iloc[0]["diff_pct"]
+                                if pd.notna(diff_val):
+                                    reg_yoy = f"{float(diff_val):+.1f}%"
+                    except Exception:
+                        pass
+                    if reg_yoy != "—":
+                        st.markdown(f"<div class='nv-bubble' style='background:#4ECDC4;width:90px;height:90px;font-size:1.2rem'>{reg_yoy}</div>", unsafe_allow_html=True)
+                        st.caption('2025 YTD vs 2024 (% change)')
             else:
                 st.info("No regional APP rows for this region.")
         else:
@@ -331,10 +269,20 @@ def render_activity(hospital_id: str):
                     fig_c.update_traces(hovertemplate='Year: %{x}<br>Procedures: %{y:,}<extra></extra>')
                     st.plotly_chart(fig_c, use_container_width=True)
                 with s2:
-                    lbl = median_labels.get("status")
-                    if lbl:
-                        st.markdown(f"<div class='nv-bubble' style='background:#A78BFA;width:90px;height:90px;font-size:1.2rem'>{lbl}</div>", unsafe_allow_html=True)
-                        st.caption('Hospital vs Same category median (2024)')
+                    # Get YoY change from trend data
+                    status_yoy = "—"
+                    try:
+                        if not trend_status.empty and "statut" in trend_status.columns and "diff_pct" in trend_status.columns:
+                            status_trend = trend_status[trend_status["statut"].astype(str).str.strip() == str(status_val)]
+                            if not status_trend.empty:
+                                diff_val = status_trend.iloc[0]["diff_pct"]
+                                if pd.notna(diff_val):
+                                    status_yoy = f"{float(diff_val):+.1f}%"
+                    except Exception:
+                        pass
+                    if status_yoy != "—":
+                        st.markdown(f"<div class='nv-bubble' style='background:#A78BFA;width:90px;height:90px;font-size:1.2rem'>{status_yoy}</div>", unsafe_allow_html=True)
+                        st.caption('2025 YTD vs 2024 (% change)')
             else:
                 st.info("No same-category APP rows for this status.")
         else:
@@ -483,47 +431,70 @@ def render_activity(hospital_id: str):
         except Exception as _e:
             st.info(f"Could not render monthly trend: {_e}")
 
-    # Row 2: Approaches pies
-    st.markdown("#### Surgical Approaches (Hospital / National / Regional / Same category)")
-    # Hospital (center, latest year)
-    latest_h = _latest_year(app_hop_year[app_hop_year["finessGeoDP"] == str(hospital_id)]) if not app_hop_year.empty else None
-    if latest_h is not None:
-        _sp_l, _center, _sp_r = st.columns([1, 1.6, 1])
-        with _center:
-            _pie_from(app_hop_year[(app_hop_year["finessGeoDP"] == str(hospital_id)) & ((app_hop_year.get("annee", app_hop_year.get("year"))) == latest_h)], f"Hospital ({latest_h})")
-    else:
-        st.info("No hospital approach data available.")
+    # --- Surgical approach (stacked bars % over years) ---
+    st.markdown("#### Surgical approach")
 
+    APPROACH_LABELS_BARS = { 'COE': 'Coelioscopy', 'ROB': 'Robotic', 'LAP': 'Open Surgery' }
+    # Default approach colors for hospital chart
+    APPROACH_COLORS_DEFAULT = { 'Coelioscopy': '#2E86AB', 'Robotic': '#F7931E', 'Open Surgery': '#A23B72' }
+    # Theme-based colors matching procedures per year: National (#E9A23B), Regional (#4ECDC4), Same category (#A78BFA)
+    # Create variations of theme colors for the three approaches
+    APPROACH_COLORS_NATIONAL = { 'Coelioscopy': '#FFB84D', 'Robotic': '#E9A23B', 'Open Surgery': '#CC7A00' }
+    APPROACH_COLORS_REGIONAL = { 'Coelioscopy': '#6EDDD4', 'Robotic': '#4ECDC4', 'Open Surgery': '#2E9D95' }
+    APPROACH_COLORS_CATEGORY = { 'Coelioscopy': '#C4A8FF', 'Robotic': '#A78BFA', 'Open Surgery': '#8B6FD4' }
+
+    def _approach_bars(df: pd.DataFrame, title: str, filters: dict | None = None, height: int = 260, color_map: dict | None = None):
+        if df is None or df.empty:
+            st.info(f"No data for {title}.")
+            return
+        d = df.copy()
+        if filters:
+            for k, v in filters.items():
+                if k in d.columns and v is not None and str(v):
+                    d = d[d[k].astype(str).str.strip() == str(v)]
+        if d.empty:
+            st.info(f"No data for {title}.")
+            return
+        if 'annee' not in d.columns or 'vda' not in d.columns:
+            st.info(f"Missing columns for {title}.")
+            return
+        d['n'] = pd.to_numeric(d.get('n', 0), errors='coerce').fillna(0)
+        agg = d.groupby(['annee','vda'], as_index=False)['n'].sum()
+        # Map labels and compute shares per year
+        agg['Approach'] = agg['vda'].astype(str).str.upper().map(APPROACH_LABELS_BARS).fillna(agg['vda'])
+        totals = agg.groupby('annee', as_index=False)['n'].sum().rename(columns={'n':'tot'})
+        merged = agg.merge(totals, on='annee', how='left')
+        merged = merged[merged['tot'] > 0]
+        merged['Share'] = merged['n'] / merged['tot'] * 100.0
+        merged['annee'] = pd.to_numeric(merged['annee'], errors='coerce').astype('Int64')
+        merged = merged.dropna(subset=['annee'])
+        if merged.empty:
+            st.info(f"No data for {title}.")
+            return
+        colors = color_map if color_map else APPROACH_COLORS_DEFAULT
+        fig = px.bar(
+            merged.sort_values('annee').assign(annee=lambda x: x['annee'].astype(int).astype(str)),
+            x='annee', y='Share', color='Approach', barmode='stack',
+            color_discrete_map=colors
+        )
+        fig.update_layout(height=height, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', title=title)
+        fig.update_traces(hovertemplate='%{x}<br>%{fullData.name}: %{y:.0f}%<extra></extra>')
+        fig.update_yaxes(range=[0,100])
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Hospital big chart
+    _sp_l, _center, _sp_r = st.columns([1, 1.6, 1])
+    with _center:
+        _approach_bars(app_hop_year, 'Hospital', { 'finessGeoDP': str(hospital_id) }, height=300, color_map=APPROACH_COLORS_DEFAULT)
+
+    # Three small charts: national, regional, same category (with theme colors matching procedures per year)
     c_nat, c_reg, c_cat = st.columns(3)
     with c_nat:
-        ly = _latest_year(app_nat_year)
-        if ly is not None:
-            _pie_from(app_nat_year[(app_nat_year.get("annee", app_nat_year.get("year"))) == ly], f"National ({ly})")
-        else:
-            st.info("National approach CSV not loaded.")
-
-    # Region and status derived from REV 12M (already loaded above)
+        _approach_bars(app_nat_year, 'National', None, color_map=APPROACH_COLORS_NATIONAL)
     with c_reg:
-        if region_name and not app_reg_year.empty:
-            reg = app_reg_year[app_reg_year.get("lib_reg").astype(str).str.strip() == str(region_name)]
-            ly = _latest_year(reg)
-            if ly is not None:
-                _pie_from(reg[(reg.get("annee", reg.get("year"))) == ly], f"Regional — {region_name} ({ly})")
-            else:
-                st.info("No regional rows for hospital's region.")
-        else:
-            st.info("Regional approach CSV not loaded or region not found.")
-
+        _approach_bars(app_reg_year, 'Regional', { 'lib_reg': region_name } if region_name else None, color_map=APPROACH_COLORS_REGIONAL)
     with c_cat:
-        if status_val and not app_status_year.empty:
-            cat = app_status_year[app_status_year.get("statut").astype(str).str.strip() == str(status_val)]
-            ly = _latest_year(cat)
-            if ly is not None:
-                _pie_from(cat[(cat.get("annee", cat.get("year"))) == ly], f"Same category ({ly})")
-            else:
-                st.info("No rows for this category.")
-        else:
-            st.info("Same-category approach CSV not loaded or status not found.")
+        _approach_bars(app_status_year, 'Same category', { 'statut': status_val } if status_val else None, color_map=APPROACH_COLORS_CATEGORY)
 
     # --- Procedure casemix (TCN) — hospital centered, peers below; toggle 12M ---
     st.markdown("---")
@@ -544,13 +515,31 @@ def render_activity(hospital_id: str):
         'GVC': 'Other',
         'NDD': 'Other'
     }
-    PROC_COLORS = {
+    # Default procedure colors for hospital chart
+    PROC_COLORS_DEFAULT = {
         'Sleeve': '#1f77b4',
         'Gastric Bypass': '#ff7f0e',
         'Other': '#2ca02c'
     }
+    # Theme-based colors matching procedures per year: National (#E9A23B), Regional (#4ECDC4), Same category (#A78BFA)
+    # Create variations of theme colors for the three procedure types
+    PROC_COLORS_NATIONAL = {
+        'Sleeve': '#FFB84D',
+        'Gastric Bypass': '#E9A23B',
+        'Other': '#CC7A00'
+    }
+    PROC_COLORS_REGIONAL = {
+        'Sleeve': '#6EDDD4',
+        'Gastric Bypass': '#4ECDC4',
+        'Other': '#2E9D95'
+    }
+    PROC_COLORS_CATEGORY = {
+        'Sleeve': '#C4A8FF',
+        'Gastric Bypass': '#A78BFA',
+        'Other': '#8B6FD4'
+    }
 
-    def _tcn_pie(df: pd.DataFrame, title: str, filters: dict | None = None):
+    def _tcn_pie(df: pd.DataFrame, title: str, filters: dict | None = None, color_map: dict | None = None):
         if df is None or df.empty:
             st.info(f"No data for {title}.")
             return
@@ -596,7 +585,8 @@ def render_activity(hospital_id: str):
         positions = ['inside'] * len(dfp)
         if 0 <= min_idx < len(positions):
             positions[min_idx] = 'outside'
-        figp = px.pie(dfp, values='Count', names='Procedure', hole=0.55, color='Procedure', color_discrete_map=PROC_COLORS)
+        colors = color_map if color_map else PROC_COLORS_DEFAULT
+        figp = px.pie(dfp, values='Count', names='Procedure', hole=0.55, color='Procedure', color_discrete_map=colors)
         figp.update_traces(textposition=positions, textinfo='percent+label', insidetextfont=dict(size=12), outsidetextfont=dict(size=16))
         figp.update_layout(title=title, height=390, showlegend=False, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(figp, use_container_width=True)
@@ -604,15 +594,15 @@ def render_activity(hospital_id: str):
     # Layout: hospital centered (large), then three small pies below
     _sp_l, _center, _sp_r = st.columns([1, 1.2, 1])
     with _center:
-        _tcn_pie(tcn_hop, "Hospital", { 'finessGeoDP': str(hospital_id) })
+        _tcn_pie(tcn_hop, "Hospital", { 'finessGeoDP': str(hospital_id) }, color_map=PROC_COLORS_DEFAULT)
 
     c_nat2, c_reg2, c_cat2 = st.columns(3)
     with c_nat2:
-        _tcn_pie(tcn_nat, "National", None)
+        _tcn_pie(tcn_nat, "National", None, color_map=PROC_COLORS_NATIONAL)
     with c_reg2:
-        _tcn_pie(tcn_reg, f"Regional", { 'lib_reg': region_name })
+        _tcn_pie(tcn_reg, f"Regional", { 'lib_reg': region_name }, color_map=PROC_COLORS_REGIONAL)
     with c_cat2:
-        _tcn_pie(tcn_status, "Same category", { 'statut': status_val })
+        _tcn_pie(tcn_status, "Same category", { 'statut': status_val }, color_map=PROC_COLORS_CATEGORY)
 
     # --- Sleeve & Bypass share (%) — last 12 months scatter ---
     st.markdown("---")
@@ -698,64 +688,5 @@ def render_activity(hospital_id: str):
             )
             st.plotly_chart(fig_sc, use_container_width=True)
             st.caption("Based on TCN last 12 months (HOP_12M)")
-
-    # --- Surgical approach (stacked bars % over years) ---
-    st.markdown("---")
-    st.markdown("#### Surgical approach")
-
-    APPROACH_LABELS = { 'COE': 'Coelioscopy', 'ROB': 'Robotic', 'LAP': 'Open Surgery' }
-    APPROACH_COLORS = { 'Coelioscopy': '#2E86AB', 'Robotic': '#F7931E', 'Open Surgery': '#A23B72' }
-
-    def _approach_bars(df: pd.DataFrame, title: str, filters: dict | None = None, height: int = 260):
-        if df is None or df.empty:
-            st.info(f"No data for {title}.")
-            return
-        d = df.copy()
-        if filters:
-            for k, v in filters.items():
-                if k in d.columns and v is not None and str(v):
-                    d = d[d[k].astype(str).str.strip() == str(v)]
-        if d.empty:
-            st.info(f"No data for {title}.")
-            return
-        if 'annee' not in d.columns or 'vda' not in d.columns:
-            st.info(f"Missing columns for {title}.")
-            return
-        d['n'] = pd.to_numeric(d.get('n', 0), errors='coerce').fillna(0)
-        agg = d.groupby(['annee','vda'], as_index=False)['n'].sum()
-        # Map labels and compute shares per year
-        agg['Approach'] = agg['vda'].astype(str).str.upper().map(APPROACH_LABELS).fillna(agg['vda'])
-        totals = agg.groupby('annee', as_index=False)['n'].sum().rename(columns={'n':'tot'})
-        merged = agg.merge(totals, on='annee', how='left')
-        merged = merged[merged['tot'] > 0]
-        merged['Share'] = merged['n'] / merged['tot'] * 100.0
-        merged['annee'] = pd.to_numeric(merged['annee'], errors='coerce').astype('Int64')
-        merged = merged.dropna(subset=['annee'])
-        if merged.empty:
-            st.info(f"No data for {title}.")
-            return
-        fig = px.bar(
-            merged.sort_values('annee').assign(annee=lambda x: x['annee'].astype(int).astype(str)),
-            x='annee', y='Share', color='Approach', barmode='stack',
-            color_discrete_map=APPROACH_COLORS
-        )
-        fig.update_layout(height=height, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', title=title)
-        fig.update_traces(hovertemplate='%{x}<br>%{fullData.name}: %{y:.0f}%<extra></extra>')
-        fig.update_yaxes(range=[0,100])
-        st.plotly_chart(fig, use_container_width=True)
-
-    # Hospital big chart
-    _sp_l, _center, _sp_r = st.columns([1, 1.6, 1])
-    with _center:
-        _approach_bars(app_hop_year, 'Hospital', { 'finessGeoDP': str(hospital_id) }, height=300)
-
-    # Three small charts: national, regional, same category
-    c_nat3, c_reg3, c_cat3 = st.columns(3)
-    with c_nat3:
-        _approach_bars(app_nat_year, 'National', None)
-    with c_reg3:
-        _approach_bars(app_reg_year, 'Regional', { 'lib_reg': region_name } if region_name else None)
-    with c_cat3:
-        _approach_bars(app_status_year, 'Same category', { 'statut': status_val } if status_val else None)
 
 
