@@ -117,6 +117,11 @@ def render_activity(hospital_id: str):
                 df["TOT_rev"] = pd.to_numeric(df["TOT_rev"], errors="coerce")
             if "TOT" in df.columns:
                 df["TOT"] = pd.to_numeric(df["TOT"], errors="coerce")
+            # Handle complications columns
+            if "COMPL_pct" in df.columns:
+                df["COMPL_pct"] = pd.to_numeric(df["COMPL_pct"], errors="coerce")
+            if "COMPL_nb" in df.columns:
+                df["COMPL_nb"] = pd.to_numeric(df["COMPL_nb"], errors="coerce")
             return df
         except Exception:
             return pd.DataFrame()
@@ -490,10 +495,10 @@ def render_activity(hospital_id: str):
         st.plotly_chart(fig, use_container_width=True)
 
     # Hospital big chart
+    # Hospital big chart
     _sp_l, _center, _sp_r = st.columns([1, 1.6, 1])
     with _center:
         _approach_bars(app_hop_year, 'Hospital', { 'finessGeoDP': str(hospital_id) }, height=300, color_map=APPROACH_COLORS_DEFAULT)
-
     # Three small charts: national, regional, same category (with theme colors matching procedures per year)
     c_nat, c_reg, c_cat = st.columns(3)
     with c_nat:
@@ -944,5 +949,109 @@ def render_activity(hospital_id: str):
             )
             st.plotly_chart(fig_rev, use_container_width=True)
             st.caption(f"Scope: {scope_rev}; {'Last 12 months' if use_12m_rev else 'Full period (2021-2025)'}")
+
+    # --- Complications ---
+    st.markdown("---")
+    st.markdown("#### Complications")
+    st.markdown("##### Clavien-Dindo Complication Categories (90 days)")
+    use_12m_compl = st.toggle("Show last 12 months", value=False, key=f"compl_12m_{hospital_id}")
+
+    # Load complications data based on toggle
+    compl_hop = _read_csv("TAB_COMPL_HOP_ROLL12.csv" if use_12m_compl else "TAB_COMPL_HOP_YEAR.csv")
+    compl_natl = _read_csv("TAB_COMPL_NATL_ROLL12.csv" if use_12m_compl else "TAB_COMPL_NATL_YEAR.csv")
+    compl_reg = _read_csv("TAB_COMPL_REG_ROLL12.csv" if use_12m_compl else "TAB_COMPL_REG_YEAR.csv")
+    compl_status = _read_csv("TAB_COMPL_STATUS_ROLL12.csv" if use_12m_compl else "TAB_COMPL_STATUS_YEAR.csv")
+
+    # Color scheme matching procedures per year
+    COMPL_COLORS = {
+        "hospital": "#1f4e79",  # Dark teal/blue for hospital
+        "national": "#E9A23B",  # Orange
+        "regional": "#4ECDC4",  # Turquoise/teal
+        "status": "#A78BFA"     # Purple
+    }
+
+    # Bubble display: Hospital, National, Regional, Same category
+    col_hosp, col_nat, col_reg, col_cat = st.columns(4)
+    
+    # Hospital bubble
+    with col_hosp:
+        hosp_compl = "—"
+        try:
+            if not compl_hop.empty and "finessGeoDP" in compl_hop.columns and "COMPL_pct" in compl_hop.columns:
+                hosp_rows = compl_hop[compl_hop["finessGeoDP"].astype(str) == str(hospital_id)]
+                if not hosp_rows.empty:
+                    # If YEAR file, get latest year; if ROLL12, should be a single row
+                    if not use_12m_compl and "annee" in hosp_rows.columns:
+                        hosp_rows["annee"] = pd.to_numeric(hosp_rows["annee"], errors="coerce")
+                        latest_year = hosp_rows["annee"].max()
+                        hosp_rows = hosp_rows[hosp_rows["annee"] == latest_year]
+                    if not hosp_rows.empty:
+                        compl_val = hosp_rows.iloc[0]["COMPL_pct"]
+                        if pd.notna(compl_val):
+                            hosp_compl = f"{float(compl_val):.1f}%"
+        except Exception:
+            pass
+        st.markdown(f"<div class='nv-bubble' style='background:{COMPL_COLORS['hospital']};width:120px;height:120px;font-size:1.8rem'>{hosp_compl}</div>", unsafe_allow_html=True)
+        st.caption("Hospital")
+
+    # National bubble
+    with col_nat:
+        nat_compl = "—"
+        try:
+            if not compl_natl.empty and "COMPL_pct" in compl_natl.columns:
+                natl_rows = compl_natl.copy()
+                # If YEAR file, get latest year
+                if not use_12m_compl and "annee" in natl_rows.columns:
+                    natl_rows["annee"] = pd.to_numeric(natl_rows["annee"], errors="coerce")
+                    latest_year = natl_rows["annee"].max()
+                    natl_rows = natl_rows[natl_rows["annee"] == latest_year]
+                if not natl_rows.empty:
+                    compl_val = natl_rows.iloc[0]["COMPL_pct"]
+                    if pd.notna(compl_val):
+                        nat_compl = f"{float(compl_val):.1f}%"
+        except Exception:
+            pass
+        st.markdown(f"<div class='nv-bubble' style='background:{COMPL_COLORS['national']};width:120px;height:120px;font-size:1.8rem'>{nat_compl}</div>", unsafe_allow_html=True)
+        st.caption("National")
+
+    # Regional bubble
+    with col_reg:
+        reg_compl = "—"
+        try:
+            if region_name and not compl_reg.empty and "lib_reg" in compl_reg.columns and "COMPL_pct" in compl_reg.columns:
+                reg_rows = compl_reg[compl_reg["lib_reg"].astype(str).str.strip() == str(region_name)]
+                # If YEAR file, get latest year
+                if not use_12m_compl and not reg_rows.empty and "annee" in reg_rows.columns:
+                    reg_rows["annee"] = pd.to_numeric(reg_rows["annee"], errors="coerce")
+                    latest_year = reg_rows["annee"].max()
+                    reg_rows = reg_rows[reg_rows["annee"] == latest_year]
+                if not reg_rows.empty:
+                    compl_val = reg_rows.iloc[0]["COMPL_pct"]
+                    if pd.notna(compl_val):
+                        reg_compl = f"{float(compl_val):.1f}%"
+        except Exception:
+            pass
+        st.markdown(f"<div class='nv-bubble' style='background:{COMPL_COLORS['regional']};width:120px;height:120px;font-size:1.8rem'>{reg_compl}</div>", unsafe_allow_html=True)
+        st.caption("Regional")
+
+    # Same category bubble
+    with col_cat:
+        status_compl = "—"
+        try:
+            if status_val and not compl_status.empty and "statut" in compl_status.columns and "COMPL_pct" in compl_status.columns:
+                status_rows = compl_status[compl_status["statut"].astype(str).str.strip() == str(status_val)]
+                # If YEAR file, get latest year
+                if not use_12m_compl and not status_rows.empty and "annee" in status_rows.columns:
+                    status_rows["annee"] = pd.to_numeric(status_rows["annee"], errors="coerce")
+                    latest_year = status_rows["annee"].max()
+                    status_rows = status_rows[status_rows["annee"] == latest_year]
+                if not status_rows.empty:
+                    compl_val = status_rows.iloc[0]["COMPL_pct"]
+                    if pd.notna(compl_val):
+                        status_compl = f"{float(compl_val):.1f}%"
+        except Exception:
+            pass
+        st.markdown(f"<div class='nv-bubble' style='background:{COMPL_COLORS['status']};width:120px;height:120px;font-size:1.8rem'>{status_compl}</div>", unsafe_allow_html=True)
+        st.caption("Same category Hospitals")
 
 
