@@ -496,6 +496,70 @@ def render_activity(hospital_id: str):
     with c_cat:
         _approach_bars(app_status_year, 'Same category', { 'statut': status_val } if status_val else None, color_map=APPROACH_COLORS_CATEGORY)
 
+    # --- Robot share (%) — last 12 months scatter ---
+    st.markdown("---")
+    st.markdown("#### Robot share")
+    scope_rob = st.radio(
+        "Compare against",
+        ["National", "Regional", "Same status"],
+        horizontal=True,
+        index=0,
+        key=f"rob_scatter_scope_{hospital_id}"
+    )
+
+    # Load robotic data from TAB_ROB_HOP_12M.csv
+    rob_data = _read_csv("TAB_ROB_HOP_12M.csv")
+    if rob_data is None or rob_data.empty or "TOT" not in rob_data.columns or "PCT_app" not in rob_data.columns:
+        st.info("No robotic dataset available for scatter.")
+    else:
+        d = rob_data.copy()
+        d["finessGeoDP"] = d.get("finessGeoDP").astype(str)
+        d["TOT"] = pd.to_numeric(d.get("TOT", 0), errors="coerce").fillna(0)
+        d["PCT_app"] = pd.to_numeric(d.get("PCT_app", 0), errors="coerce").fillna(0)
+
+        # Scope filtering - rob_data already contains lib_reg and statut columns
+        if scope_rob == "Regional":
+            if region_name and "lib_reg" in d.columns:
+                d_sc = d[d.get("lib_reg").astype(str).str.strip() == str(region_name)].copy()
+            else:
+                d_sc = pd.DataFrame()
+        elif scope_rob == "Same status":
+            if status_val and "statut" in d.columns:
+                d_sc = d[d.get("statut").astype(str).str.strip() == str(status_val)].copy()
+            else:
+                d_sc = pd.DataFrame()
+        else:
+            d_sc = d.copy()
+
+        if d_sc.empty:
+            st.info("No data to build robot share scatter for this scope.")
+        else:
+            sel = d_sc[d_sc["finessGeoDP"].astype(str) == str(hospital_id)]
+            oth = d_sc[d_sc["finessGeoDP"].astype(str) != str(hospital_id)]
+            fig_rob = go.Figure()
+            # Others
+            if not oth.empty:
+                fig_rob.add_trace(go.Scatter(
+                    x=oth["TOT"], y=oth["PCT_app"], mode="markers",
+                    marker=dict(color="#000000", size=6, opacity=0.75), name="Other hospitals",
+                    hovertemplate='Procedures: %{x:.0f}<br>Robot share: %{y:.1f}%<extra></extra>'
+                ))
+            # Selected
+            if not sel.empty:
+                fig_rob.add_trace(go.Scatter(
+                    x=sel["TOT"], y=sel["PCT_app"], mode="markers",
+                    marker=dict(color="#FF8C00", size=12, line=dict(color="white", width=1)), name="Selected hospital",
+                    hovertemplate='Procedures: %{x:.0f}<br>Robot share: %{y:.1f}%<extra></extra>'
+                ))
+            fig_rob.update_layout(
+                height=420,
+                xaxis_title="Number of procedure per year (any approach)", yaxis_title="Robot share (%)",
+                xaxis=dict(range=[0, None]), yaxis=dict(range=[0, 100]),
+                plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+            )
+            st.plotly_chart(fig_rob, use_container_width=True)
+            st.caption("Based on robotic procedures last 12 months (TAB_ROB_HOP_12M)")
+
     # --- Procedure casemix (TCN) — hospital centered, peers below; toggle 12M ---
     st.markdown("---")
     st.markdown("#### Procedure casemix")
