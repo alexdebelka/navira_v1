@@ -110,6 +110,13 @@ def render_activity(hospital_id: str):
             # Handle diff_pct column in trend files (may contain "NA" strings)
             if "diff_pct" in df.columns:
                 df["diff_pct"] = pd.to_numeric(df["diff_pct"], errors="coerce")
+            # Handle PCT_rev and TOT_rev columns in revisional files
+            if "PCT_rev" in df.columns:
+                df["PCT_rev"] = pd.to_numeric(df["PCT_rev"], errors="coerce")
+            if "TOT_rev" in df.columns:
+                df["TOT_rev"] = pd.to_numeric(df["TOT_rev"], errors="coerce")
+            if "TOT" in df.columns:
+                df["TOT"] = pd.to_numeric(df["TOT"], errors="coerce")
             return df
         except Exception:
             return pd.DataFrame()
@@ -752,5 +759,190 @@ def render_activity(hospital_id: str):
             )
             st.plotly_chart(fig_sc, use_container_width=True)
             st.caption("Based on TCN last 12 months (HOP_12M)")
+
+    # --- Revisional rate ---
+    st.markdown("---")
+    st.markdown("#### Revisional rate")
+    use_12m_rev = st.toggle("Show last 12 months", value=False, key=f"rev_12m_{hospital_id}")
+
+    # Load revisional data based on toggle
+    rev_hop = _read_csv("TAB_REV_HOP_12M.csv" if use_12m_rev else "TAB_REV_HOP.csv")
+    rev_natl = _read_csv("TAB_REV_NATL_12M.csv" if use_12m_rev else "TAB_REV_NATL.csv")
+    rev_reg = _read_csv("TAB_REV_REG_12M.csv" if use_12m_rev else "TAB_REV_REG.csv")
+    rev_status = _read_csv("TAB_REV_STATUS_12M.csv" if use_12m_rev else "TAB_REV_STATUS.csv")
+
+    # Color scheme matching procedures per year
+    REV_COLORS = {
+        "hospital": "#1f4e79",  # Dark teal/blue for hospital
+        "national": "#E9A23B",  # Orange
+        "regional": "#4ECDC4",  # Turquoise/teal
+        "status": "#A78BFA"     # Purple
+    }
+
+    # Bubble display: Hospital, National, Regional, Same category
+    col_hosp, col_nat, col_reg, col_cat = st.columns(4)
+    
+    # Hospital bubble
+    with col_hosp:
+        hosp_rev = "—"
+        try:
+            if not rev_hop.empty and "finessGeoDP" in rev_hop.columns and "PCT_rev" in rev_hop.columns:
+                hosp_row = rev_hop[rev_hop["finessGeoDP"].astype(str) == str(hospital_id)]
+                if not hosp_row.empty:
+                    rev_val = hosp_row.iloc[0]["PCT_rev"]
+                    if pd.notna(rev_val):
+                        hosp_rev = f"{float(rev_val):.0f}%"
+        except Exception:
+            pass
+        st.markdown(f"<div class='nv-bubble' style='background:{REV_COLORS['hospital']};width:120px;height:120px;font-size:1.8rem'>{hosp_rev}</div>", unsafe_allow_html=True)
+        st.caption("Hospital")
+
+    # National bubble
+    with col_nat:
+        nat_rev = "—"
+        try:
+            if not rev_natl.empty and "PCT_rev" in rev_natl.columns:
+                rev_val = rev_natl.iloc[0]["PCT_rev"]
+                if pd.notna(rev_val):
+                    nat_rev = f"{float(rev_val):.0f}%"
+        except Exception:
+            pass
+        st.markdown(f"<div class='nv-bubble' style='background:{REV_COLORS['national']};width:120px;height:120px;font-size:1.8rem'>{nat_rev}</div>", unsafe_allow_html=True)
+        st.caption("National")
+
+    # Regional bubble
+    with col_reg:
+        reg_rev = "—"
+        try:
+            if region_name and not rev_reg.empty and "lib_reg" in rev_reg.columns and "PCT_rev" in rev_reg.columns:
+                reg_row = rev_reg[rev_reg["lib_reg"].astype(str).str.strip() == str(region_name)]
+                if not reg_row.empty:
+                    rev_val = reg_row.iloc[0]["PCT_rev"]
+                    if pd.notna(rev_val):
+                        reg_rev = f"{float(rev_val):.0f}%"
+        except Exception:
+            pass
+        st.markdown(f"<div class='nv-bubble' style='background:{REV_COLORS['regional']};width:120px;height:120px;font-size:1.8rem'>{reg_rev}</div>", unsafe_allow_html=True)
+        st.caption("Regional")
+
+    # Same category bubble
+    with col_cat:
+        status_rev = "—"
+        try:
+            if status_val and not rev_status.empty and "statut" in rev_status.columns and "PCT_rev" in rev_status.columns:
+                status_row = rev_status[rev_status["statut"].astype(str).str.strip() == str(status_val)]
+                if not status_row.empty:
+                    rev_val = status_row.iloc[0]["PCT_rev"]
+                    if pd.notna(rev_val):
+                        status_rev = f"{float(rev_val):.0f}%"
+        except Exception:
+            pass
+        st.markdown(f"<div class='nv-bubble' style='background:{REV_COLORS['status']};width:120px;height:120px;font-size:1.8rem'>{status_rev}</div>", unsafe_allow_html=True)
+        st.caption("Same category Hospitals")
+
+    # Bar chart: Revisional rate per hospital
+    st.markdown("---")
+    st.markdown("#### Revisional rate")
+    scope_rev = st.radio(
+        "Compare against",
+        ["National", "Regional", "Same status"],
+        horizontal=True,
+        index=0,
+        key=f"rev_bar_scope_{hospital_id}"
+    )
+
+    if rev_hop is None or rev_hop.empty or "PCT_rev" not in rev_hop.columns:
+        st.info("No revisional dataset available.")
+    else:
+        d = rev_hop.copy()
+        d["finessGeoDP"] = d.get("finessGeoDP").astype(str)
+        d["PCT_rev"] = pd.to_numeric(d.get("PCT_rev", 0), errors="coerce").fillna(0)
+
+        # Scope filtering
+        if scope_rev == "Regional":
+            if region_name and "lib_reg" in d.columns:
+                d_sc = d[d.get("lib_reg").astype(str).str.strip() == str(region_name)].copy()
+            else:
+                d_sc = pd.DataFrame()
+        elif scope_rev == "Same status":
+            if status_val and "statut" in d.columns:
+                d_sc = d[d.get("statut").astype(str).str.strip() == str(status_val)].copy()
+            else:
+                d_sc = pd.DataFrame()
+        else:
+            d_sc = d.copy()
+
+        if d_sc.empty:
+            st.info("No data to build revisional rate bar chart for this scope.")
+        else:
+            # Sort by revisional rate (ascending)
+            d_sc = d_sc.sort_values("PCT_rev").reset_index(drop=True)
+            x_pos = list(range(1, len(d_sc) + 1))
+
+            fig_rev = go.Figure()
+            
+            # Create separate lists for selected and other hospitals
+            sel_x, sel_y = [], []
+            oth_x, oth_y = [], []
+            
+            for i, (idx, row) in enumerate(d_sc.iterrows()):
+                x_val = x_pos[i]
+                y_val = row["PCT_rev"]
+                if str(row["finessGeoDP"]) == str(hospital_id):
+                    sel_x.append(x_val)
+                    sel_y.append(y_val)
+                else:
+                    oth_x.append(x_val)
+                    oth_y.append(y_val)
+            
+            # Other hospitals bars
+            if oth_x:
+                fig_rev.add_trace(go.Bar(
+                    x=oth_x,
+                    y=oth_y,
+                    marker=dict(color='#A78BFA'),
+                    name='Other hospitals',
+                    hovertemplate='Hospital: %{x}<br>Revisional rate: %{y:.1f}%<extra></extra>'
+                ))
+                # Markers on top for other hospitals
+                fig_rev.add_trace(go.Scatter(
+                    x=oth_x,
+                    y=oth_y,
+                    mode="markers",
+                    marker=dict(color='#A78BFA', size=6),
+                    showlegend=False,
+                    hoverinfo='skip'
+                ))
+            
+            # Selected hospital bar
+            if sel_x:
+                fig_rev.add_trace(go.Bar(
+                    x=sel_x,
+                    y=sel_y,
+                    marker=dict(color='#00FF00'),
+                    name='Selected hospital',
+                    hovertemplate='Hospital: %{x}<br>Revisional rate: %{y:.1f}%<extra></extra>'
+                ))
+                # Marker on top for selected hospital
+                fig_rev.add_trace(go.Scatter(
+                    x=sel_x,
+                    y=sel_y,
+                    mode="markers",
+                    marker=dict(color='#00FF00', size=6),
+                    showlegend=False,
+                    hoverinfo='skip'
+                ))
+
+            fig_rev.update_layout(
+                height=420,
+                xaxis_title="Hospitals",
+                yaxis_title="Revisional rate (%)",
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(showticklabels=False),
+                yaxis=dict(range=[0, 100])
+            )
+            st.plotly_chart(fig_rev, use_container_width=True)
+            st.caption(f"Scope: {scope_rev}; {'Last 12 months' if use_12m_rev else 'Full period (2021-2025)'}")
 
 
