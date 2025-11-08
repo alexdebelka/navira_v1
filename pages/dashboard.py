@@ -165,7 +165,6 @@ if establishments.empty:
         from navira.csv_data_loader import load_establishments_from_csv
         establishments = load_establishments_from_csv()
         st.session_state.establishments = establishments
-        st.info("Loaded establishments data directly (session state was empty)")
     except Exception as e:
         st.error(f"Could not load establishments data: {e}")
         st.stop()
@@ -290,7 +289,6 @@ else:
         selected_hospital_all_data = pd.DataFrame(columns=['annee', 'total_procedures_year'])
 
 if selected_hospital_all_data.empty:
-    st.warning(f"No annual data found for hospital {selected_hospital_id}")
     # Create empty DataFrame with expected columns
     selected_hospital_all_data = pd.DataFrame(columns=['annee', 'total_procedures_year'])
 
@@ -501,6 +499,7 @@ with m3:
     st.metric(label=f"Expected trend for ongoing year ({_suffix_t})", value=yoy_text)
 
 # Second row: Type of procedures, robotic share, rates
+# Second row: Type of procedures, robotic share, rates
 c_donut, c_robot, c_rates = st.columns([1.2, 1.2, 1.5])
 
 with c_donut:
@@ -538,7 +537,6 @@ with c_robot:
     # Use APP data for approach shares (latest year with data - 2024)
     if not app_hop_summary.empty and 'vda' in app_hop_summary.columns:
         hosp_app = app_hop_summary[app_hop_summary['finessGeoDP'] == str(selected_hospital_id)]
-        # Get latest year (prefer 2024 for complete data)
         if not hosp_app.empty:
             latest_yr = 2024 if (hosp_app['annee'] == 2024).any() else hosp_app['annee'].max()
             hosp_app_yr = hosp_app[hosp_app['annee'] == latest_yr]

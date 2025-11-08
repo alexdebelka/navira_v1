@@ -145,16 +145,6 @@ def render_complications(hospital_id: str):
     except Exception:
         pass
 
-    # Load complications data
-    compl_hop_init = _read_csv_complications("TAB_COMPL_HOP_ROLL12.csv")
-    
-    # Debug: Check if data was loaded
-    if st.checkbox("Show Complications data status", value=False, key=f"compl_data_status_{hospital_id}"):
-        st.write(f"📁 Complications directory: `{complications_data_dir}`")
-        st.write(f"📊 Initial data loaded:")
-        st.write(f"- Hospital complications: {len(compl_hop_init)} rows")
-        st.write(f"- Region mapping: {len(rev_hop_12m)} rows")
-    
     # --- Overall complication rate (90 days) — bubble quartet ---
     st.markdown("### Overall complication rate (90 days)")
     use_12m_compl = st.toggle("Show last 12 months", value=False, key=f"compl_tab_12m_{hospital_id}")
