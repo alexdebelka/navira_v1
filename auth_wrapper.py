@@ -14,6 +14,18 @@ def check_auth():
         st.session_state.authenticated = True
 
     if not st.session_state.authenticated:
+        # Hide the sidebar for unauthenticated users
+        st.markdown("""
+            <style>
+                [data-testid="stSidebar"] {
+                    display: none;
+                }
+                [data-testid="collapsedControl"] {
+                    display: none;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+        
         st.error("🔐 Please login to access this page.")
         st.markdown("---")
         st.markdown("### Login Required")
