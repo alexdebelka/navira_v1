@@ -211,6 +211,13 @@ def render_activity(hospital_id: str):
         except Exception:
             return pd.DataFrame()
 
+    # Check data directory
+    activity_data_dir = _resolve_activity_dir()
+    if activity_data_dir is None:
+        st.error("❌ Activity data directory not found. Please ensure new_data/ACTIVITY exists.")
+        st.info(f"Looking for directory at: new_data/ACTIVITY")
+        st.stop()
+    
     # Load totals CSVs directly
     vol_hop_year = _read_csv("TAB_VOL_HOP_YEAR.csv")
     vol_reg_year = _read_csv("TAB_VOL_REG_YEAR.csv")
@@ -228,6 +235,15 @@ def render_activity(hospital_id: str):
     trend_natl = _read_csv("TAB_TREND_NATL.csv")
     trend_reg = _read_csv("TAB_TREND_REG.csv")
     trend_status = _read_csv("TAB_TRENDS_STATUS.csv")
+    
+    # Debug: Check if key files were loaded
+    if st.checkbox("Show Activity data status", value=False, key=f"activity_data_status_{hospital_id}"):
+        st.write(f"📁 Activity directory: `{activity_data_dir}`")
+        st.write(f"📊 Data loaded:")
+        st.write(f"- Hospital volumes: {len(vol_hop_year)} rows")
+        st.write(f"- Hospital approaches: {len(app_hop_year)} rows")
+        st.write(f"- National volumes: {len(vol_nat_year)} rows")
+        st.write(f"- Trend data: {len(trend_hop)} rows")
 
     # Row 1: Hospital volume per year (bar)
     col1, col2 = st.columns([2, 1])

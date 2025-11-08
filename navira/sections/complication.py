@@ -18,7 +18,7 @@ def render_complications(hospital_id: str):
       - Length of stay distribution and scatter plots
     """
     st.subheader("Complications Overview")
-
+    
     def _resolve_complications_dir() -> str | None:
         """Resolve path to new_data/COMPLICATIONS directory."""
         candidates: list[str] = []
@@ -127,6 +127,13 @@ def render_complications(hospital_id: str):
         return pd.DataFrame()
 
     rev_hop_12m = _read_csv_activity("TAB_REV_HOP_12M.csv")
+    
+    # Check complications directory
+    complications_data_dir = _resolve_complications_dir()
+    if complications_data_dir is None:
+        st.error("❌ Complications data directory not found. Please ensure new_data/COMPLICATIONS exists.")
+        st.info(f"Looking for directory at: new_data/COMPLICATIONS")
+        st.stop()
 
     # Resolve region/status for this hospital
     region_name = None
@@ -138,6 +145,16 @@ def render_complications(hospital_id: str):
     except Exception:
         pass
 
+    # Load complications data
+    compl_hop_init = _read_csv_complications("TAB_COMPL_HOP_ROLL12.csv")
+    
+    # Debug: Check if data was loaded
+    if st.checkbox("Show Complications data status", value=False, key=f"compl_data_status_{hospital_id}"):
+        st.write(f"📁 Complications directory: `{complications_data_dir}`")
+        st.write(f"📊 Initial data loaded:")
+        st.write(f"- Hospital complications: {len(compl_hop_init)} rows")
+        st.write(f"- Region mapping: {len(rev_hop_12m)} rows")
+    
     # --- Overall complication rate (90 days) — bubble quartet ---
     st.markdown("### Overall complication rate (90 days)")
     use_12m_compl = st.toggle("Show last 12 months", value=False, key=f"compl_tab_12m_{hospital_id}")

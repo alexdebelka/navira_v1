@@ -150,7 +150,7 @@ SURGICAL_APPROACH_NAMES = {
 # Activity-only data mode: do not load any CSV/Parquet here; rely on session_state or no-op
 ONLY_ACTIVITY_DATA = True
 
-# --- Load Data (from session only; no disk I/O here) ---
+# --- Load Data (from session or fallback to direct loading) ---
 establishments = st.session_state.get('establishments', pd.DataFrame())
 annual = st.session_state.get('annual', pd.DataFrame())
 competitors = st.session_state.get('competitors', pd.DataFrame())
@@ -158,6 +158,17 @@ complications = st.session_state.get('complications', pd.DataFrame())
 procedure_details = st.session_state.get('procedure_details', pd.DataFrame())
 los_90 = st.session_state.get('los_90', pd.DataFrame())
 clavien = st.session_state.get('clavien', pd.DataFrame())
+
+# Fallback: Load essential data if session state is empty
+if establishments.empty:
+    try:
+        from navira.csv_data_loader import load_establishments_from_csv
+        establishments = load_establishments_from_csv()
+        st.session_state.establishments = establishments
+        st.info("Loaded establishments data directly (session state was empty)")
+    except Exception as e:
+        st.error(f"Could not load establishments data: {e}")
+        st.stop()
 
 # Navigation is now handled by the sidebar
 
@@ -325,6 +336,15 @@ st.markdown("---")
 
 # --- New SUMMARY (layout inspired by slide) ---
 st.markdown("### Summary")
+
+# Debug info (can be removed later)
+if st.checkbox("Show debug info", value=False):
+    st.write(f"**Data Status:**")
+    st.write(f"- Establishments loaded: {not establishments.empty} ({len(establishments)} rows)")
+    st.write(f"- Annual data loaded: {not annual.empty} ({len(annual)} rows)")
+    st.write(f"- Selected hospital ID: {selected_hospital_id}")
+    st.write(f"- Hospital details keys: {list(selected_hospital_details.keys()) if not est_row.empty else 'N/A'}")
+    st.write(f"- Selected hospital all data: {len(selected_hospital_all_data)} rows")
 
 # Helper to load monthly data for YoY estimate (YTD)
 @st.cache_data(show_spinner=False)
