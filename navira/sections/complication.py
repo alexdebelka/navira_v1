@@ -140,7 +140,7 @@ def render_complications(hospital_id: str):
 
     # --- Overall complication rate (90 days) — bubble quartet ---
     st.markdown("### Overall complication rate (90 days)")
-    use_12m_compl = st.toggle("Show last 12 months", value=False, key=f"compl_12m_{hospital_id}")
+    use_12m_compl = st.toggle("Show last 12 months", value=False, key=f"compl_tab_12m_{hospital_id}")
 
     # Reload data based on toggle
     if use_12m_compl:
@@ -256,7 +256,7 @@ def render_complications(hospital_id: str):
         ["National", "Regional", "Same status"],
         horizontal=True,
         index=0,
-        key=f"funnel_scope_{hospital_id}"
+        key=f"compl_tab_funnel_scope_{hospital_id}"
     )
 
     # Load monthly hospital data to get last 3 months (90 days)
@@ -339,7 +339,7 @@ def render_complications(hospital_id: str):
                         if not others.empty:
                             fig_funnel.add_trace(go.Scatter(
                                 x=others["total"], y=others["rate"], mode="markers",
-                                marker=dict(color="#808080", size=6, opacity=0.75), name="Other hospitals",
+                                marker=dict(color="#60a5fa", size=6, opacity=0.75), name="Other hospitals",
                                 hovertemplate='Volume: %{x:,}<br>Rate: %{y:.1%}<extra></extra>'
                             ))
                         
@@ -354,27 +354,27 @@ def render_complications(hospital_id: str):
                         # Mean line
                         fig_funnel.add_trace(go.Scatter(
                             x=[vol.min(), vol.max()], y=[p_bar, p_bar], mode="lines",
-                            line=dict(color="#888", width=2, dash="solid"), name="Overall mean"
+                            line=dict(color="#4A90E2", width=2, dash="solid"), name="Overall mean"
                         ))
                         
                         # 95% CI (dashed)
                         fig_funnel.add_trace(go.Scatter(
                             x=vol, y=upper95, mode="lines",
-                            line=dict(color="#aaa", width=1, dash="dash"), name="95% CI"
+                            line=dict(color="#7FB3D5", width=1, dash="dash"), name="95% CI"
                         ))
                         fig_funnel.add_trace(go.Scatter(
                             x=vol, y=lower95, mode="lines",
-                            line=dict(color="#aaa", width=1, dash="dash"), showlegend=False
+                            line=dict(color="#7FB3D5", width=1, dash="dash"), showlegend=False
                         ))
                         
                         # 99% CI (dotted)
                         fig_funnel.add_trace(go.Scatter(
                             x=vol, y=upper99, mode="lines",
-                            line=dict(color="#aaa", width=1, dash="dot"), name="99% CI"
+                            line=dict(color="#9DC6E0", width=1, dash="dot"), name="99% CI"
                         ))
                         fig_funnel.add_trace(go.Scatter(
                             x=vol, y=lower99, mode="lines",
-                            line=dict(color="#aaa", width=1, dash="dot"), showlegend=False
+                            line=dict(color="#9DC6E0", width=1, dash="dot"), showlegend=False
                         ))
                         
                         fig_funnel.update_layout(
@@ -691,7 +691,7 @@ def render_complications(hospital_id: str):
         ["National", "Regional", "Same status"],
         horizontal=True,
         index=0,
-        key=f"los7_scatter_scope_{hospital_id}"
+        key=f"compl_tab_los7_scatter_scope_{hospital_id}"
     )
 
     # Load >7 days LOS data
@@ -733,7 +733,7 @@ def render_complications(hospital_id: str):
             if not oth.empty:
                 fig_los7.add_trace(go.Scatter(
                     x=oth["TOT"], y=oth["LOS_7_pct"], mode="markers",
-                    marker=dict(color="#000000", size=6, opacity=0.75), name="Other hospitals",
+                    marker=dict(color="#60a5fa", size=6, opacity=0.75), name="Other hospitals",
                     hovertemplate='Procedures: %{x:.0f}<br>>7 day admission: %{y:.1f}%<extra></extra>'
                 ))
             
