@@ -441,17 +441,25 @@ def login_page():
                     save_session_to_file(session_token, user)
                     
                     st.success("Login successful!")
-                    # For limited pilot user, go straight to hospital dashboard with Avicenne
+                    # For limited pilot users, go straight to hospital dashboard with their assigned hospital
+                    # Mapping of pilot users to their FINESS codes
+                    pilot_user_hospitals = {
+                        'andrea.lazzati': '930100037',      # Hôpital Avicenne
+                        'federica.papini': '940000573',     # CHIC DE CRETEIL
+                        'adriana.torcivia': '750100125',    # GROUPEMENT HOSPITALIER PITIE-SALPETRIERE
+                        'sergio.carandina': '830100459'     # CLINIQUE SAINT MICHEL
+                    }
+                    
                     try:
                         uname = (user or {}).get('username', '')
-                        mail = (user or {}).get('email', '')
-                        is_limited = uname == 'andrea.lazzati' or str(mail).startswith('andrea.lazzati')
+                        is_limited = uname in pilot_user_hospitals
                     except Exception:
                         is_limited = False
+                    
                     if is_limited:
                         try:
                             st.session_state._limited_user = True
-                            st.session_state.selected_hospital_id = '930100037'
+                            st.session_state.selected_hospital_id = pilot_user_hospitals.get(uname)
                             st.session_state.current_page = "hospital"
                             from navigation_utils import navigate_to_hospital_dashboard
                             navigate_to_hospital_dashboard()

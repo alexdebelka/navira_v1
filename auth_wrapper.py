@@ -37,14 +37,22 @@ def check_auth():
         pass
 
     # Limited access mode for specific pilot users
+    # Mapping of pilot users to their FINESS codes
+    pilot_user_hospitals = {
+        'andrea.lazzati': '930100037',      # Hôpital Avicenne
+        'federica.papini': '940000573',     # CHIC DE CRETEIL
+        'adriana.torcivia': '750100125',    # GROUPEMENT HOSPITALIER PITIE-SALPETRIERE
+        'sergio.carandina': '830100459'     # CLINIQUE SAINT MICHEL
+    }
+    
     try:
         user = st.session_state.get('user') or {}
         username = (user or {}).get('username', '')
-        email = (user or {}).get('email', '')
-        is_limited_user = username == 'andrea.lazzati' or email.startswith('andrea.lazzati')
+        is_limited_user = username in pilot_user_hospitals
+        
         if is_limited_user:
-            # Force-select Avicenne hospital (FINESS id)
-            st.session_state.selected_hospital_id = '930100037'
+            # Force-select their assigned hospital (FINESS id)
+            st.session_state.selected_hospital_id = pilot_user_hospitals.get(username)
             st.session_state._limited_user = True
             # If we're not already on the hospital dashboard, redirect there
             if not st.session_state.get('_on_hospital_dashboard', False):
