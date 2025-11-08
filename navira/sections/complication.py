@@ -385,7 +385,7 @@ def render_complications(hospital_id: str):
                             plot_bgcolor='rgba(0,0,0,0)',
                             paper_bgcolor='rgba(0,0,0,0)'
                         )
-                        st.plotly_chart(fig_funnel, use_container_width=True)
+                        st.plotly_chart(fig_funnel, use_container_width=True, key=f"compl_funnel_chart_{hospital_id}")
                         st.caption("Dashed = 95% CI; dotted = 99% CI; solid = overall mean")
         except Exception as e:
             st.info(f"Could not render funnel plot: {e}")
@@ -520,7 +520,7 @@ def render_complications(hospital_id: str):
         )
         fig_grade.update_yaxes(range=[0, max(8, df_bar['Rate'].max() * 1.3)])
         fig_grade.update_traces(hovertemplate='%{fullData.name}<br>%{x}: %{y:.1f}%<extra></extra>')
-        st.plotly_chart(fig_grade, use_container_width=True)
+        st.plotly_chart(fig_grade, use_container_width=True, key=f"compl_grade_chart_{hospital_id}")
     
     with right:
         # Never events table
@@ -605,7 +605,7 @@ def render_complications(hospital_id: str):
         '(6,225]': '≥7'
     }
     
-    def _los_bars(df: pd.DataFrame, title: str, filters: dict | None = None, height: int = 260, color_map: dict | None = None):
+    def _los_bars(df: pd.DataFrame, title: str, filters: dict | None = None, height: int = 260, color_map: dict | None = None, chart_key: str = ""):
         """Create stacked bar chart for length of stay distribution by year."""
         if df is None or df.empty:
             st.info(f"No data for {title}.")
@@ -665,22 +665,22 @@ def render_complications(hospital_id: str):
             if trace.name in LOS_BUCKET_LABELS:
                 trace.name = LOS_BUCKET_LABELS[trace.name]
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key=chart_key if chart_key else None)
     
     # Hospital big chart (centered)
     st.markdown("##### Length of stay distribution by year (share %)")
     _sp_l2, _center2, _sp_r2 = st.columns([1, 1.6, 1])
     with _center2:
-        _los_bars(los_hop, 'Hospital', {'finessGeoDP': str(hospital_id)}, height=300, color_map=LOS_COLORS_HOSPITAL)
+        _los_bars(los_hop, 'Hospital', {'finessGeoDP': str(hospital_id)}, height=300, color_map=LOS_COLORS_HOSPITAL, chart_key=f"compl_los_hosp_{hospital_id}")
     
     # Three small charts: national, regional, same category (with theme colors)
     c_nat2, c_reg2, c_cat2 = st.columns(3)
     with c_nat2:
-        _los_bars(los_natl, 'National', None, color_map=LOS_COLORS_NATIONAL)
+        _los_bars(los_natl, 'National', None, color_map=LOS_COLORS_NATIONAL, chart_key=f"compl_los_natl_{hospital_id}")
     with c_reg2:
-        _los_bars(los_reg, 'Regional', {'lib_reg': region_name} if region_name else None, color_map=LOS_COLORS_REGIONAL)
+        _los_bars(los_reg, 'Regional', {'lib_reg': region_name} if region_name else None, color_map=LOS_COLORS_REGIONAL, chart_key=f"compl_los_reg_{hospital_id}")
     with c_cat2:
-        _los_bars(los_status, 'Same category Hospitals', {'statut': status_val} if status_val else None, color_map=LOS_COLORS_CATEGORY)
+        _los_bars(los_status, 'Same category Hospitals', {'statut': status_val} if status_val else None, color_map=LOS_COLORS_CATEGORY, chart_key=f"compl_los_cat_{hospital_id}")
 
     # --- 90d-LOS: Scatter plot for >7 days length of stay ---
     st.markdown("---")
@@ -754,6 +754,6 @@ def render_complications(hospital_id: str):
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)'
             )
-            st.plotly_chart(fig_los7, use_container_width=True)
+            st.plotly_chart(fig_los7, use_container_width=True, key=f"compl_los7_scatter_{hospital_id}")
             st.caption(f"Scope: {scope_los7}; Hospitals with >7 days length of stay (90-day period)")
 
