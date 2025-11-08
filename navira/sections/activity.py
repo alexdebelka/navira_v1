@@ -87,6 +87,74 @@ def render_activity(hospital_id: str):
                 continue
         return None
 
+    def _resolve_complications_dir() -> str | None:
+        """Resolve path to new_data/COMPLICATIONS directory."""
+        candidates: list[str] = []
+        try:
+            candidates.append(str(Path.cwd() / "new_data" / "COMPLICATIONS"))
+        except Exception:
+            pass
+        try:
+            here = Path(__file__).resolve()
+            candidates.append(str((here.parent / ".." / "new_data" / "COMPLICATIONS").resolve()))
+            candidates.append(str((here.parent.parent / "new_data" / "COMPLICATIONS").resolve()))
+        except Exception:
+            pass
+        candidates.append("/Users/alexdebelka/Downloads/navira/new_data/COMPLICATIONS")
+        for c in candidates:
+            if Path(c).is_dir():
+                return c
+        return None
+
+    @st.cache_data(show_spinner=False)
+    def _read_csv_complications(filename: str) -> pd.DataFrame:
+        """Read CSV from COMPLICATIONS folder."""
+        base = _resolve_complications_dir()
+        if not base:
+            return pd.DataFrame()
+        p = Path(base) / filename
+        try:
+            df = pd.read_csv(p)
+            # Same normalization as _read_csv
+            if "annee" in df.columns:
+                df["annee"] = pd.to_numeric(df["annee"], errors="coerce").astype("Int64")
+            if "year" in df.columns:
+                df["year"] = pd.to_numeric(df["year"], errors="coerce").astype("Int64")
+            if "n" in df.columns:
+                df["n"] = pd.to_numeric(df["n"], errors="coerce")
+            if "finessGeoDP" in df.columns:
+                df["finessGeoDP"] = df["finessGeoDP"].astype(str).str.strip()
+            if "lib_reg" in df.columns:
+                df["lib_reg"] = df["lib_reg"].astype(str).str.strip()
+            if "statut" in df.columns:
+                df["statut"] = df["statut"].astype(str).str.strip()
+            # Handle complications columns
+            if "COMPL_pct" in df.columns:
+                df["COMPL_pct"] = pd.to_numeric(df["COMPL_pct"], errors="coerce")
+            if "COMPL_nb" in df.columns:
+                df["COMPL_nb"] = pd.to_numeric(df["COMPL_nb"], errors="coerce")
+            if "clav_cat_90" in df.columns:
+                df["clav_cat_90"] = pd.to_numeric(df["clav_cat_90"], errors="coerce")
+            # Handle never events columns
+            if "NEVER_nb" in df.columns:
+                df["NEVER_nb"] = pd.to_numeric(df["NEVER_nb"], errors="coerce")
+            if "NEVER_pct" in df.columns:
+                df["NEVER_pct"] = pd.to_numeric(df["NEVER_pct"], errors="coerce")
+            # Handle length of stay columns
+            if "LOS_nb" in df.columns:
+                df["LOS_nb"] = pd.to_numeric(df["LOS_nb"], errors="coerce")
+            if "LOS_pct" in df.columns:
+                df["LOS_pct"] = pd.to_numeric(df["LOS_pct"], errors="coerce")
+            if "LOS_7_nb" in df.columns:
+                df["LOS_7_nb"] = pd.to_numeric(df["LOS_7_nb"], errors="coerce")
+            if "LOS_7_pct" in df.columns:
+                df["LOS_7_pct"] = pd.to_numeric(df["LOS_7_pct"], errors="coerce")
+            if "TOT" in df.columns:
+                df["TOT"] = pd.to_numeric(df["TOT"], errors="coerce")
+            return df
+        except Exception:
+            return pd.DataFrame()
+
     @st.cache_data(show_spinner=False)
     def _read_csv(filename: str) -> pd.DataFrame:
         base = _resolve_activity_dir()
@@ -973,10 +1041,10 @@ def render_activity(hospital_id: str):
     use_12m_compl = st.toggle("Show last 12 months", value=False, key=f"compl_12m_{hospital_id}")
 
     # Load complications data based on toggle
-    compl_hop = _read_csv("TAB_COMPL_HOP_ROLL12.csv" if use_12m_compl else "TAB_COMPL_HOP_YEAR.csv")
-    compl_natl = _read_csv("TAB_COMPL_NATL_ROLL12.csv" if use_12m_compl else "TAB_COMPL_NATL_YEAR.csv")
-    compl_reg = _read_csv("TAB_COMPL_REG_ROLL12.csv" if use_12m_compl else "TAB_COMPL_REG_YEAR.csv")
-    compl_status = _read_csv("TAB_COMPL_STATUS_ROLL12.csv" if use_12m_compl else "TAB_COMPL_STATUS_YEAR.csv")
+    compl_hop = _read_csv_complications("TAB_COMPL_HOP_ROLL12.csv" if use_12m_compl else "TAB_COMPL_HOP_YEAR.csv")
+    compl_natl = _read_csv_complications("TAB_COMPL_NATL_ROLL12.csv" if use_12m_compl else "TAB_COMPL_NATL_YEAR.csv")
+    compl_reg = _read_csv_complications("TAB_COMPL_REG_ROLL12.csv" if use_12m_compl else "TAB_COMPL_REG_YEAR.csv")
+    compl_status = _read_csv_complications("TAB_COMPL_STATUS_ROLL12.csv" if use_12m_compl else "TAB_COMPL_STATUS_YEAR.csv")
 
     # Color scheme matching procedures per year
     COMPL_COLORS = {
@@ -1084,7 +1152,7 @@ def render_activity(hospital_id: str):
     )
 
     # Load monthly hospital data to get last 3 months (90 days)
-    compl_hop_monthly = _read_csv("TAB_COMPL_HOP_ROLL12.csv")
+    compl_hop_monthly = _read_csv_complications("TAB_COMPL_HOP_ROLL12.csv")
     
     if compl_hop_monthly is None or compl_hop_monthly.empty or "COMPL_nb" not in compl_hop_monthly.columns:
         st.info("No monthly complications data available for funnel plot.")
@@ -1219,16 +1287,16 @@ def render_activity(hospital_id: str):
     st.markdown("#### Complication rate by Clavien-Dindo grade (90 days)")
 
     # Load Clavien-Dindo grade data
-    grade_hop = _read_csv("TAB_COMPL_GRADE_HOP_YEAR.csv")
-    grade_natl = _read_csv("TAB_COMPL_GRADE_NATL_YEAR.csv")
-    grade_reg = _read_csv("TAB_COMPL_GRADE_REG_YEAR.csv")
-    grade_status = _read_csv("TAB_COMPL_GRADE_STATUS_YEAR.csv")
+    grade_hop = _read_csv_complications("TAB_COMPL_GRADE_HOP_YEAR.csv")
+    grade_natl = _read_csv_complications("TAB_COMPL_GRADE_NATL_YEAR.csv")
+    grade_reg = _read_csv_complications("TAB_COMPL_GRADE_REG_YEAR.csv")
+    grade_status = _read_csv_complications("TAB_COMPL_GRADE_STATUS_YEAR.csv")
 
     # Load Never events data
-    never_hop = _read_csv("TAB_NEVER_HOP.csv")
-    never_natl = _read_csv("TAB_NEVER_NATL.csv")
-    never_reg = _read_csv("TAB_NEVER_REG.csv")
-    never_status = _read_csv("TAB_NEVER_STATUS.csv")
+    never_hop = _read_csv_complications("TAB_NEVER_HOP.csv")
+    never_natl = _read_csv_complications("TAB_NEVER_NATL.csv")
+    never_reg = _read_csv_complications("TAB_NEVER_REG.csv")
+    never_status = _read_csv_complications("TAB_NEVER_STATUS.csv")
 
     # Color scheme for bar plot
     GRADE_COLORS = {
@@ -1386,10 +1454,10 @@ def render_activity(hospital_id: str):
     st.markdown("#### Length of stay – index admission")
     
     # Load LOS data
-    los_hop = _read_csv("TAB_LOS_HOP.csv")
-    los_natl = _read_csv("TAB_LOS_NATL.csv")
-    los_reg = _read_csv("TAB_LOS_REG.csv")
-    los_status = _read_csv("TAB_LOS_STATUS.csv")
+    los_hop = _read_csv_complications("TAB_LOS_HOP.csv")
+    los_natl = _read_csv_complications("TAB_LOS_NATL.csv")
+    los_reg = _read_csv_complications("TAB_LOS_REG.csv")
+    los_status = _read_csv_complications("TAB_LOS_STATUS.csv")
     
     # Color schemes matching the procedures per year section
     # Hospital: variations of dark blue (#1f4e79)
@@ -1519,7 +1587,7 @@ def render_activity(hospital_id: str):
     )
 
     # Load >7 days LOS data
-    los7_hop = _read_csv("TAB_LOS7_HOP.csv")
+    los7_hop = _read_csv_complications("TAB_LOS7_HOP.csv")
     
     if los7_hop is None or los7_hop.empty or "TOT" not in los7_hop.columns or "LOS_7_pct" not in los7_hop.columns:
         st.info("No >7 days LOS dataset available for scatter.")
