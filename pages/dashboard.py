@@ -439,26 +439,32 @@ except Exception:
 left, m1, m2, m3 = st.columns([1.3, 1, 1, 1.05])
 with left:
     st.markdown("#### Labels & Affiliations")
+    
+    # University/Academic status
     if selected_hospital_details.get('university') == 1:
         st.success("🎓 University Hospital")
     else:
-        st.warning("➖ No University Affiliation")
+        st.info("➖ No University Affiliation")
+    
+    # SOFFCO label (French Bariatric Society)
     if selected_hospital_details.get('LAB_SOFFCO') == 1:
         st.success("✅ Centre of Excellence (SOFFCO)")
     else:
-        st.warning("➖ No SOFFCO Centre Label")
+        st.info("➖ No SOFFCO Centre Label")
+    
+    # Health Ministry label
     if selected_hospital_details.get('cso') == 1:
         st.success("✅ Centre of Excellence (Health Ministry)")
     else:
-        st.warning("➖ No Health Ministry Centre Label")
+        st.info("➖ No Health Ministry Centre Label")
 
 with m1:
-    st.metric(label="Number of procedures (2021–2024)", value=f"{period_total:,}")
+    st.metric(label="Nb procedures (2021–2024)", value=f"{period_total:,}")
 with m2:
     _suffix = f"{ongoing_year_display}"
     if ongoing_year_display == 2025:
         _suffix = f"{ongoing_year_display} — until July"
-    st.metric(label=f"Number procedures ongoing year ({_suffix})", value=f"{ongoing_total:,}")
+    st.metric(label=f"Nb procedures ongoing year ({_suffix})", value=f"{ongoing_total:,}")
 with m3:
     _suffix_t = f"{ongoing_year_display}"
     if ongoing_year_display == 2025:

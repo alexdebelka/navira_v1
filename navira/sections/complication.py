@@ -667,24 +667,91 @@ def render_complications(hospital_id: str):
         
         st.plotly_chart(fig, use_container_width=True, key=chart_key if chart_key else None)
     
-    # Hospital big chart (centered)
-    st.markdown("##### Length of stay distribution by year (share %)")
-    _sp_l2, _center2, _sp_r2 = st.columns([1, 1.6, 1])
-    with _center2:
-        _los_bars(los_hop, 'Hospital', {'finessGeoDP': str(hospital_id)}, height=300, color_map=LOS_COLORS_HOSPITAL, chart_key=f"compl_los_hosp_{hospital_id}")
+    # Load >7 days LOS data for bubble panel (before column split)
+    los7_hop_bubble = _read_csv_complications("TAB_LOS7_HOP.csv")
+    los7_natl_bubble = _read_csv_complications("TAB_LOS7_NATL.csv")
+    los7_reg_bubble = _read_csv_complications("TAB_LOS7_REG.csv")
+    los7_status_bubble = _read_csv_complications("TAB_LOS7_STATUS.csv")
     
-    # Three small charts: national, regional, same category (with theme colors)
-    c_nat2, c_reg2, c_cat2 = st.columns(3)
-    with c_nat2:
-        _los_bars(los_natl, 'National', None, color_map=LOS_COLORS_NATIONAL, chart_key=f"compl_los_natl_{hospital_id}")
-    with c_reg2:
-        _los_bars(los_reg, 'Regional', {'lib_reg': region_name} if region_name else None, color_map=LOS_COLORS_REGIONAL, chart_key=f"compl_los_reg_{hospital_id}")
-    with c_cat2:
-        _los_bars(los_status, 'Same category Hospitals', {'statut': status_val} if status_val else None, color_map=LOS_COLORS_CATEGORY, chart_key=f"compl_los_cat_{hospital_id}")
+    # Layout: LOS distribution charts on left, bubble panel on right
+    left_charts, right_bubbles = st.columns([2.5, 1])
+    
+    with left_charts:
+        st.markdown("##### Length of stay distribution by year (share %)")
+        
+        # Hospital chart (larger)
+        _los_bars(los_hop, 'Hospital', {'finessGeoDP': str(hospital_id)}, height=240, color_map=LOS_COLORS_HOSPITAL, chart_key=f"compl_los_hosp_{hospital_id}")
+        
+        # Three small charts: national, regional, same category (with theme colors)
+        c_nat2, c_reg2, c_cat2 = st.columns(3)
+        with c_nat2:
+            _los_bars(los_natl, 'National', None, color_map=LOS_COLORS_NATIONAL, chart_key=f"compl_los_natl_{hospital_id}")
+        with c_reg2:
+            _los_bars(los_reg, 'Regional', {'lib_reg': region_name} if region_name else None, color_map=LOS_COLORS_REGIONAL, chart_key=f"compl_los_reg_{hospital_id}")
+        with c_cat2:
+            _los_bars(los_status, 'Same category Hospitals', {'statut': status_val} if status_val else None, color_map=LOS_COLORS_CATEGORY, chart_key=f"compl_los_cat_{hospital_id}")
+    
+    with right_bubbles:
+        
+        st.markdown("##### Patients >7 days of 90d-LOS")
+        
+        # Hospital >7 days percentage
+        hosp_los7_pct = "—"
+        try:
+            if not los7_hop_bubble.empty and "finessGeoDP" in los7_hop_bubble.columns and "LOS_7_pct" in los7_hop_bubble.columns:
+                hosp_row = los7_hop_bubble[los7_hop_bubble["finessGeoDP"].astype(str) == str(hospital_id)]
+                if not hosp_row.empty:
+                    pct_val = hosp_row.iloc[0]["LOS_7_pct"]
+                    if pd.notna(pct_val):
+                        hosp_los7_pct = f"{float(pct_val):.1f}%"
+        except Exception:
+            pass
+        st.markdown(f"<div class='nv-bubble' style='background:#1f4e79;width:110px;height:110px;font-size:1.6rem'>{hosp_los7_pct}</div>", unsafe_allow_html=True)
+        st.caption("Hospital")
+        
+        # National >7 days percentage
+        natl_los7_pct = "—"
+        try:
+            if not los7_natl_bubble.empty and "LOS_7_pct" in los7_natl_bubble.columns:
+                pct_val = los7_natl_bubble.iloc[0]["LOS_7_pct"]
+                if pd.notna(pct_val):
+                    natl_los7_pct = f"{float(pct_val):.1f}%"
+        except Exception:
+            pass
+        st.markdown(f"<div class='nv-bubble' style='background:#E9A23B;width:110px;height:110px;font-size:1.6rem'>{natl_los7_pct}</div>", unsafe_allow_html=True)
+        st.caption("National")
+        
+        # Regional >7 days percentage
+        reg_los7_pct = "—"
+        try:
+            if region_name and not los7_reg_bubble.empty and "lib_reg" in los7_reg_bubble.columns and "LOS_7_pct" in los7_reg_bubble.columns:
+                reg_row = los7_reg_bubble[los7_reg_bubble["lib_reg"].astype(str).str.strip() == str(region_name)]
+                if not reg_row.empty:
+                    pct_val = reg_row.iloc[0]["LOS_7_pct"]
+                    if pd.notna(pct_val):
+                        reg_los7_pct = f"{float(pct_val):.1f}%"
+        except Exception:
+            pass
+        st.markdown(f"<div class='nv-bubble' style='background:#4ECDC4;width:110px;height:110px;font-size:1.6rem'>{reg_los7_pct}</div>", unsafe_allow_html=True)
+        st.caption("Regional")
+        
+        # Same category >7 days percentage
+        status_los7_pct = "—"
+        try:
+            if status_val and not los7_status_bubble.empty and "statut" in los7_status_bubble.columns and "LOS_7_pct" in los7_status_bubble.columns:
+                status_row = los7_status_bubble[los7_status_bubble["statut"].astype(str).str.strip() == str(status_val)]
+                if not status_row.empty:
+                    pct_val = status_row.iloc[0]["LOS_7_pct"]
+                    if pd.notna(pct_val):
+                        status_los7_pct = f"{float(pct_val):.1f}%"
+        except Exception:
+            pass
+        st.markdown(f"<div class='nv-bubble' style='background:#A78BFA;width:110px;height:110px;font-size:1.6rem'>{status_los7_pct}</div>", unsafe_allow_html=True)
+        st.caption("Same category")
 
-    # --- 90d-LOS: Scatter plot for >7 days length of stay ---
+    # --- Scatter plot for >7 days length of stay ---
     st.markdown("---")
-    st.markdown("#### 90d-LOS")
+    st.markdown("#### Scatter plot: >7 days LOS vs procedure volume")
     
     scope_los7 = st.radio(
         "Compare against",
@@ -694,8 +761,8 @@ def render_complications(hospital_id: str):
         key=f"compl_tab_los7_scatter_scope_{hospital_id}"
     )
 
-    # Load >7 days LOS data
-    los7_hop = _read_csv_complications("TAB_LOS7_HOP.csv")
+    # Use already loaded >7 days LOS data from bubble panel
+    los7_hop = los7_hop_bubble
     
     if los7_hop is None or los7_hop.empty or "TOT" not in los7_hop.columns or "LOS_7_pct" not in los7_hop.columns:
         st.info("No >7 days LOS dataset available for scatter.")
@@ -755,5 +822,5 @@ def render_complications(hospital_id: str):
                 paper_bgcolor='rgba(0,0,0,0)'
             )
             st.plotly_chart(fig_los7, use_container_width=True, key=f"compl_los7_scatter_{hospital_id}")
-            st.caption(f"Scope: {scope_los7}; Hospitals with >7 days length of stay (90-day period)")
+            st.caption(f"Scope: {scope_los7}; Each point represents a hospital's procedure volume vs. percentage of patients with >7 days LOS in 90-day period")
 
