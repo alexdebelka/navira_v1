@@ -319,10 +319,13 @@ st.markdown(f"## 🏥 {selected_hospital_details['name']}")
 
 # Address section
 if 'adresse' in selected_hospital_details and pd.notna(selected_hospital_details['adresse']):
-    address_line = f"📍 {selected_hospital_details['adresse']}, {selected_hospital_details['code_postal']} {selected_hospital_details['city']}"
+    # Format postal code as integer (remove decimals)
+    postal = str(int(float(selected_hospital_details['code_postal']))) if pd.notna(selected_hospital_details.get('code_postal')) else ''
+    address_line = f"📍 {selected_hospital_details['adresse']}, {postal} {selected_hospital_details['city']}"
     st.markdown(f"**Address:** {address_line}")
 else:
-    st.markdown(f"**Address:** {selected_hospital_details['code_postal']} {selected_hospital_details['city']}")
+    postal = str(int(float(selected_hospital_details['code_postal']))) if pd.notna(selected_hospital_details.get('code_postal')) else ''
+    st.markdown(f"**Address:** {postal} {selected_hospital_details['city']}")
 
 st.markdown("---")
 
@@ -337,123 +340,129 @@ st.markdown("---")
 # --- New SUMMARY (layout inspired by slide) ---
 st.markdown("### Summary")
 
-# Debug info (can be removed later)
-if st.checkbox("Show debug info", value=False):
-    st.write(f"**Data Status:**")
-    st.write(f"- Establishments loaded: {not establishments.empty} ({len(establishments)} rows)")
-    st.write(f"- Annual data loaded: {not annual.empty} ({len(annual)} rows)")
-    st.write(f"- Selected hospital ID: {selected_hospital_id}")
-    st.write(f"- Hospital details keys: {list(selected_hospital_details.keys()) if not est_row.empty else 'N/A'}")
-    st.write(f"- Selected hospital all data: {len(selected_hospital_all_data)} rows")
-
-# Helper to load monthly data for YoY estimate (YTD)
+# Load data from new CSV sources for Summary
 @st.cache_data(show_spinner=False)
-def _load_monthly_volumes_summary(path: str = "data/export_TAB_VOL_MOIS_TCN_HOP.csv", cache_buster: str = "") -> pd.DataFrame:
-    if ONLY_ACTIVITY_DATA:
-        return pd.DataFrame()
+def _load_summary_data():
+    """Load all data needed for Summary section from new_data CSVs."""
+    from pathlib import Path
+    
+    # Find new_data directory
+    candidates = []
     try:
-        df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int, 'mois': int})
-        df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
-        return df
+        candidates.append(Path.cwd() / "new_data")
     except Exception:
-        return pd.DataFrame()
-
-# Read VDA file that includes ongoing year (e.g., 2025) totals and approach split
-@st.cache_data(show_spinner=False)
-def _load_vda_year_totals_summary(path: str = "data/export_TAB_VDA_HOP.csv", cache_buster: str = "") -> pd.DataFrame:
-    if ONLY_ACTIVITY_DATA:
-        return pd.DataFrame()
+        pass
     try:
-        df = pd.read_csv(path, dtype={'finessGeoDP': str, 'annee': int})
-        df['finessGeoDP'] = df['finessGeoDP'].astype(str).str.strip()
-        # Ensure numeric
-        for c in ['VOL','TOT','PCT']:
-            if c in df.columns:
-                df[c] = pd.to_numeric(df[c], errors='coerce')
-        return df
+        candidates.append(Path(__file__).parent.parent / "new_data")
     except Exception:
-        return pd.DataFrame()
+        pass
+    candidates.append(Path("/Users/alexdebelka/Downloads/navira/new_data"))
+    
+    base_dir = None
+    for c in candidates:
+        if c.is_dir():
+            base_dir = c
+            break
+    
+    if base_dir is None:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    
+    # Load volume data
+    try:
+        vol_hop = pd.read_csv(base_dir / "ACTIVITY" / "TAB_VOL_HOP_YEAR.csv", dtype={'finessGeoDP': str})
+        vol_hop['finessGeoDP'] = vol_hop['finessGeoDP'].astype(str).str.strip()
+        vol_hop['annee'] = pd.to_numeric(vol_hop['annee'], errors='coerce')
+        vol_hop['n'] = pd.to_numeric(vol_hop['n'], errors='coerce')
+    except Exception:
+        vol_hop = pd.DataFrame()
+    
+    # Load trend data
+    try:
+        trend_hop = pd.read_csv(base_dir / "ACTIVITY" / "TAB_TREND_HOP.csv", dtype={'finessGeoDP': str})
+        trend_hop['finessGeoDP'] = trend_hop['finessGeoDP'].astype(str).str.strip()
+        trend_hop['diff_pct'] = pd.to_numeric(trend_hop['diff_pct'], errors='coerce')
+    except Exception:
+        trend_hop = pd.DataFrame()
+    
+    # Load TCN data for procedure mix
+    try:
+        tcn_hop = pd.read_csv(base_dir / "ACTIVITY" / "TAB_TCN_HOP_12M.csv", dtype={'finessGeoDP': str})
+        tcn_hop['finessGeoDP'] = tcn_hop['finessGeoDP'].astype(str).str.strip()
+        tcn_hop['n'] = pd.to_numeric(tcn_hop.get('n', 0), errors='coerce')
+    except Exception:
+        tcn_hop = pd.DataFrame()
+    
+    # Load approach data (for robotic share bar)
+    try:
+        app_hop = pd.read_csv(base_dir / "ACTIVITY" / "TAB_APP_HOP_YEAR.csv", dtype={'finessGeoDP': str})
+        app_hop['finessGeoDP'] = app_hop['finessGeoDP'].astype(str).str.strip()
+        app_hop['annee'] = pd.to_numeric(app_hop.get('annee', 0), errors='coerce')
+        app_hop['n'] = pd.to_numeric(app_hop.get('n', 0), errors='coerce')
+    except Exception:
+        app_hop = pd.DataFrame()
+    
+    # Load revisional data
+    try:
+        rev_hop = pd.read_csv(base_dir / "ACTIVITY" / "TAB_REV_HOP_12M.csv", dtype={'finessGeoDP': str})
+        rev_hop['finessGeoDP'] = rev_hop['finessGeoDP'].astype(str).str.strip()
+        rev_hop['PCT_rev'] = pd.to_numeric(rev_hop.get('PCT_rev', 0), errors='coerce')
+    except Exception:
+        rev_hop = pd.DataFrame()
+    
+    # Load complications data
+    try:
+        compl_hop = pd.read_csv(base_dir / "COMPLICATIONS" / "TAB_COMPL_HOP_ROLL12.csv", dtype={'finessGeoDP': str})
+        compl_hop['finessGeoDP'] = compl_hop['finessGeoDP'].astype(str).str.strip()
+        compl_hop['COMPL_pct'] = pd.to_numeric(compl_hop.get('COMPL_pct', 0), errors='coerce')
+    except Exception:
+        compl_hop = pd.DataFrame()
+    
+    return vol_hop, trend_hop, tcn_hop, app_hop, rev_hop, compl_hop
 
-# Core aggregates
-if 'total_procedures_year' in selected_hospital_all_data.columns:
-    total_proc_hospital = float(selected_hospital_all_data['total_procedures_year'].sum())
-else:
-    total_proc_hospital = 0.0
-total_rev_hospital = int(selected_hospital_details.get('revision_surgeries_n', 0))
-hospital_revision_pct = (total_rev_hospital / total_proc_hospital) * 100 if total_proc_hospital > 0 else 0.0
+vol_hop_summary, trend_hop_summary, tcn_hop_summary, app_hop_summary, rev_hop_summary, compl_hop_summary = _load_summary_data()
 
-# Period totals (2021–2024)
-if 'annee' in selected_hospital_all_data.columns:
-    _period_mask = (selected_hospital_all_data['annee'] >= 2021) & (selected_hospital_all_data['annee'] <= 2024)
-    period_21_24 = selected_hospital_all_data[_period_mask]
-else:
-    period_21_24 = selected_hospital_all_data
-if 'total_procedures_year' in period_21_24.columns:
-    period_total = int(pd.to_numeric(period_21_24['total_procedures_year'], errors='coerce').fillna(0).sum())
-else:
-    period_total = 0
+# Calculate metrics from CSV data
+# 1. Number of procedures 2021-2024
+period_total = 0
+if not vol_hop_summary.empty:
+    hosp_vol = vol_hop_summary[vol_hop_summary['finessGeoDP'] == str(selected_hospital_id)]
+    period_data = hosp_vol[(hosp_vol['annee'] >= 2021) & (hosp_vol['annee'] <= 2024)]
+    period_total = int(period_data['n'].fillna(0).sum())
 
-# Ongoing year total
-ongoing_year = int(latest_year_activity)
-if 'annee' in selected_hospital_all_data.columns:
-    ongoing_data = selected_hospital_all_data[selected_hospital_all_data['annee'] == ongoing_year]
-    if 'total_procedures_year' in ongoing_data.columns:
-        ongoing_total = int(pd.to_numeric(ongoing_data['total_procedures_year'], errors='coerce').fillna(0).sum())
-    else:
-        ongoing_total = 0
-else:
-    ongoing_total = 0
-ongoing_year_display = int(ongoing_year)
+# 2. Number of procedures ongoing year (2025)
+ongoing_total = 0
+ongoing_year_display = 2025
+if not vol_hop_summary.empty:
+    hosp_vol = vol_hop_summary[vol_hop_summary['finessGeoDP'] == str(selected_hospital_id)]
+    ongoing_data = hosp_vol[hosp_vol['annee'] == 2025]
+    ongoing_total = int(ongoing_data['n'].fillna(0).sum())
 
-# Expected trend (YoY YTD vs same months last year)
+# 3. Expected trend from TREND file
 yoy_text = "—"
-try:
-    mv = _load_monthly_volumes_summary(cache_buster=str(_build_id or ""))
-    if not mv.empty:
-        hosp_mv = mv[mv['finessGeoDP'] == str(selected_hospital_id)]
-        if not hosp_mv.empty and (ongoing_year in hosp_mv['annee'].unique()) and ((ongoing_year-1) in hosp_mv['annee'].unique()):
-            last_m = int(hosp_mv[hosp_mv['annee'] == ongoing_year]['mois'].max())
-            cur = pd.to_numeric(hosp_mv[(hosp_mv['annee'] == ongoing_year) & (hosp_mv['mois'] <= last_m)]['TOT_month'], errors='coerce').fillna(0).sum()
-            prev = pd.to_numeric(hosp_mv[(hosp_mv['annee'] == ongoing_year-1) & (hosp_mv['mois'] <= last_m)]['TOT_month'], errors='coerce').fillna(0).sum()
-            if prev > 0:
-                yoy = (cur / prev - 1.0) * 100.0
-                yoy_text = f"{yoy:+.0f}%"
-except Exception:
-    pass
+if not trend_hop_summary.empty:
+    hosp_trend = trend_hop_summary[trend_hop_summary['finessGeoDP'] == str(selected_hospital_id)]
+    if not hosp_trend.empty and 'diff_pct' in hosp_trend.columns:
+        diff_val = hosp_trend.iloc[0]['diff_pct']
+        if pd.notna(diff_val):
+            yoy_text = f"{float(diff_val):+.1f}%"
 
-# Override ongoing year metrics using VDA (includes 2025)
-try:
-    vda = _load_vda_year_totals_summary(cache_buster=str(_build_id or ""))
-    if not vda.empty:
-        hosp_vda = vda[vda['finessGeoDP'] == str(selected_hospital_id)].copy()
-        if not hosp_vda.empty:
-            # Aggregate to year totals using TOT (once per year; take max to avoid duplicates across approaches)
-            year_totals = hosp_vda.groupby('annee', as_index=False)['TOT'].max().dropna()
-            if (year_totals['annee'] == 2025).any():
-                ongoing_year_display = 2025
-                ongoing_total = int(pd.to_numeric(year_totals[year_totals['annee'] == 2025]['TOT'], errors='coerce').fillna(0).iloc[0])
-                if (year_totals['annee'] == 2024).any():
-                    prev_total = float(pd.to_numeric(year_totals[year_totals['annee'] == 2024]['TOT'], errors='coerce').fillna(0).iloc[0])
-                    if prev_total > 0:
-                        yoy = (ongoing_total / prev_total - 1.0) * 100.0
-                        yoy_text = f"{yoy:+.0f}%"
-except Exception:
-    pass
+# 4. Revisional rate from REV file
+hospital_revision_pct = 0.0
+if not rev_hop_summary.empty:
+    hosp_rev = rev_hop_summary[rev_hop_summary['finessGeoDP'] == str(selected_hospital_id)]
+    if not hosp_rev.empty and 'PCT_rev' in hosp_rev.columns:
+        rev_val = hosp_rev.iloc[0]['PCT_rev']
+        if pd.notna(rev_val):
+            hospital_revision_pct = float(rev_val)
 
-# Prefer YTD trend using monthly data: compare 2025 YTD to 2024 YTD through same month
-try:
-    mv_pref = _load_monthly_volumes_summary()
-    if not mv_pref.empty:
-        mv_h = mv_pref[mv_pref['finessGeoDP'] == str(selected_hospital_id)]
-        if not mv_h.empty and (2025 in mv_h['annee'].unique()) and (2024 in mv_h['annee'].unique()):
-            m_cut = int(pd.to_numeric(mv_h[mv_h['annee'] == 2025]['mois'], errors='coerce').max())
-            cur = pd.to_numeric(mv_h[(mv_h['annee'] == 2025) & (mv_h['mois'] <= m_cut)]['TOT_month'], errors='coerce').fillna(0).sum()
-            prev = pd.to_numeric(mv_h[(mv_h['annee'] == 2024) & (mv_h['mois'] <= m_cut)]['TOT_month'], errors='coerce').fillna(0).sum()
-            if prev > 0:
-                yoy_monthly = (cur / prev - 1.0) * 100.0
-                yoy_text = f"{yoy_monthly:+.0f}%"
-except Exception:
-    pass
+# 5. Complication rate from COMPL file
+complication_rate = None
+if not compl_hop_summary.empty:
+    hosp_compl = compl_hop_summary[compl_hop_summary['finessGeoDP'] == str(selected_hospital_id)]
+    if not hosp_compl.empty and 'COMPL_pct' in hosp_compl.columns:
+        compl_val = hosp_compl.iloc[0]['COMPL_pct']
+        if pd.notna(compl_val):
+            complication_rate = float(compl_val)
 
 # First row: Left labels + three headline metrics
 left, m1, m2, m3 = st.columns([1.3, 1, 1, 1.05])
@@ -491,91 +500,87 @@ with m3:
         _suffix_t = f"{ongoing_year_display} — until July"
     st.metric(label=f"Expected trend for ongoing year ({_suffix_t})", value=yoy_text)
 
-# Second row: spacer under labels + donut, single-year robotic share bar, and two bubbles
+# Second row: Type of procedures, robotic share, rates
 c_donut, c_robot, c_rates = st.columns([1.2, 1.2, 1.5])
 
 with c_donut:
-    try:
-        st.markdown("##### Type of procedures")
-        proc_cols_present = [c for c in BARIATRIC_PROCEDURE_NAMES.keys() if c in selected_hospital_all_data.columns]
-        # Use 2021–2024 window to match headline period
-        if 'annee' in selected_hospital_all_data.columns:
-            dfp = selected_hospital_all_data[(selected_hospital_all_data['annee'] >= 2021) & (selected_hospital_all_data['annee'] <= 2024)]
+    st.markdown("##### Type of procedures")
+    # Use TCN data for procedure casemix (last 12 months)
+    if not tcn_hop_summary.empty and 'baria_t' in tcn_hop_summary.columns:
+        hosp_tcn = tcn_hop_summary[tcn_hop_summary['finessGeoDP'] == str(selected_hospital_id)]
+        if not hosp_tcn.empty:
+            # Map to three categories
+            PROC_MAP = {'SLE': 'Sleeve', 'BPG': 'Gastric Bypass'}
+            totals = {'Sleeve': 0.0, 'Gastric Bypass': 0.0, 'Other': 0.0}
+            for _, r in hosp_tcn.iterrows():
+                code = str(r['baria_t']).upper().strip()
+                label = PROC_MAP.get(code, 'Other')
+                totals[label] += float(r.get('n', 0))
+            
+            data_rows = [{'Procedure': k, 'Count': v} for k, v in totals.items() if v > 0]
+            if data_rows:
+                d = pd.DataFrame(data_rows)
+                fig = px.pie(d, values='Count', names='Procedure', hole=0.45, color='Procedure', 
+                            color_discrete_map={'Sleeve':'#1f77b4','Gastric Bypass':'#ff7f0e','Other':'#2ca02c'})
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                fig.update_layout(height=240, margin=dict(l=10, r=10, t=10, b=10), showlegend=False, 
+                                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True, key=f"summary_proc_pie_{selected_hospital_id}")
+            else:
+                st.info("No procedure data available.")
         else:
-            dfp = selected_hospital_all_data
-        sleeve_total = int(pd.to_numeric(dfp.get('SLE', 0), errors='coerce').fillna(0).sum()) if 'SLE' in proc_cols_present else 0
-        bypass_total = int(pd.to_numeric(dfp.get('BPG', 0), errors='coerce').fillna(0).sum()) if 'BPG' in proc_cols_present else 0
-        other_codes = [c for c in proc_cols_present if c not in ['SLE', 'BPG']]
-        other_total = int(pd.to_numeric(dfp[other_codes].sum().sum(), errors='coerce')) if other_codes else 0
-        data_rows = []
-        if sleeve_total > 0: data_rows.append({'Procedure': 'Sleeve', 'Count': sleeve_total})
-        if bypass_total > 0: data_rows.append({'Procedure': 'Gastric Bypass', 'Count': bypass_total})
-        if other_total > 0: data_rows.append({'Procedure': 'Other', 'Count': other_total})
-        if data_rows:
-            d = pd.DataFrame(data_rows)
-            fig = px.pie(d, values='Count', names='Procedure', hole=0.45, color='Procedure', color_discrete_map={'Sleeve':'#1f77b4','Gastric Bypass':'#ff7f0e','Other':'#2ca02c'})
-            fig.update_traces(textposition='inside', textinfo='percent+label')
-            fig.update_layout(height=240, margin=dict(l=10, r=10, t=10, b=10), showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No procedure data available.")
-    except Exception:
+            st.info("No procedure data for this hospital.")
+    else:
         st.info("Procedure mix unavailable.")
 
 with c_robot:
-    try:
-        st.markdown("##### Robotic share")
-        bar_year = 2024 if is_ytd_2025 else latest_year_activity
-        if 'annee' in selected_hospital_all_data.columns:
-            row = selected_hospital_all_data[selected_hospital_all_data['annee'] == bar_year]
+    st.markdown("##### Robotic share")
+    # Use APP data for approach shares (latest year with data - 2024)
+    if not app_hop_summary.empty and 'vda' in app_hop_summary.columns:
+        hosp_app = app_hop_summary[app_hop_summary['finessGeoDP'] == str(selected_hospital_id)]
+        # Get latest year (prefer 2024 for complete data)
+        if not hosp_app.empty:
+            latest_yr = 2024 if (hosp_app['annee'] == 2024).any() else hosp_app['annee'].max()
+            hosp_app_yr = hosp_app[hosp_app['annee'] == latest_yr]
+            
+            # Calculate shares by approach
+            totals = {}
+            for _, r in hosp_app_yr.iterrows():
+                approach = str(r.get('vda', '')).upper().strip()
+                count = float(r.get('n', 0))
+                totals[approach] = totals.get(approach, 0.0) + count
+            
+            total_all = sum(totals.values())
+            if total_all > 0:
+                # Map to display names
+                approach_map = {'ROB': 'Robotic', 'COE': 'Coelioscopy', 'LAP': 'Open Surgery'}
+                df_bar = pd.DataFrame([
+                    {'Year': str(int(latest_yr)), 'Approach': approach_map.get(k, k), 'Share': (v / total_all * 100)}
+                    for k, v in totals.items()
+                ])
+                figb = px.bar(df_bar, x='Year', y='Share', color='Approach', barmode='stack', 
+                             color_discrete_map={'Open Surgery':'#A23B72','Coelioscopy':'#2E86AB','Robotic':'#F7931E'},
+                             category_orders={'Approach': ['Robotic', 'Coelioscopy', 'Open Surgery']})
+                figb.update_layout(height=240, yaxis=dict(range=[0,100], title=''), xaxis_title=None, 
+                                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                figb.update_traces(hovertemplate='Approach: %{fullData.name}<br>%{y:.1f}%<extra></extra>')
+                st.plotly_chart(figb, use_container_width=True, key=f"summary_rob_bar_{selected_hospital_id}")
+            else:
+                st.info("No approach data for selected year.")
         else:
-            row = selected_hospital_all_data
-        if not row.empty:
-            v_lap = float(pd.to_numeric(row.get('LAP', 0), errors='coerce').fillna(0).sum())
-            v_coe = float(pd.to_numeric(row.get('COE', 0), errors='coerce').fillna(0).sum())
-            v_rob = float(pd.to_numeric(row.get('ROB', 0), errors='coerce').fillna(0).sum())
-            total = max(1.0, v_lap + v_coe + v_rob)
-            df_bar = pd.DataFrame({
-                'Year': [str(bar_year)]*3,
-                'Approach': ['Open Surgery','Coelioscopy','Robotic'],
-                'Share': [v_lap/total*100, v_coe/total*100, v_rob/total*100]
-            })
-            figb = px.bar(df_bar, x='Year', y='Share', color='Approach', barmode='stack', color_discrete_map={'Open Surgery':'#A23B72','Coelioscopy':'#2E86AB','Robotic':'#F7931E'})
-            figb.update_layout(height=240, yaxis=dict(range=[0,100], title=''), xaxis_title=None, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            figb.update_traces(hovertemplate='Approach: %{fullData.name}<br>%{y:.1f}%<extra></extra>')
-            st.plotly_chart(figb, use_container_width=True)
-        else:
-            st.info("No approach data for selected year.")
-    except Exception:
+            st.info("No approach data for this hospital.")
+    else:
         st.info("Robotic share unavailable.")
 
 with c_rates:
-    try:
-        r1, r2 = st.columns(2)
-        with r1:
-            st.markdown(f"<div class='nv-bubble teal'>{hospital_revision_pct:.0f}%</div>", unsafe_allow_html=True)
-            st.markdown("<div class='nv-bubble-label'>Revisional rate</div>", unsafe_allow_html=True)
-        with r2:
-            comp_df = _get_hospital_complications(complications, str(selected_hospital_id))
-            comp_rate = None
-            if not comp_df.empty:
-                if 'quarter_date' in comp_df.columns:
-                    comp_df = comp_df.dropna(subset=['quarter_date']).copy()
-                    comp_df['year'] = comp_df['quarter_date'].dt.year
-                if 'year' in comp_df.columns:
-                    sub = comp_df[(comp_df['year'] >= 2021) & (comp_df['year'] <= 2024)]
-                else:
-                    sub = comp_df
-                if {'complications_count','procedures_count'}.issubset(set(sub.columns)):
-                    num = pd.to_numeric(sub['complications_count'], errors='coerce').fillna(0).sum()
-                    den = pd.to_numeric(sub['procedures_count'], errors='coerce').fillna(0).sum()
-                    if den > 0:
-                        comp_rate = float(num/den*100.0)
-            pct = f"{comp_rate:.1f}%" if comp_rate is not None else "N/A"
-            st.markdown(f"<div class='nv-bubble purple'>{pct}</div>", unsafe_allow_html=True)
-            st.markdown("<div class='nv-bubble-label'>Complication rate</div>", unsafe_allow_html=True)
-    except Exception:
-        pass
+    r1, r2 = st.columns(2)
+    with r1:
+        st.markdown(f"<div class='nv-bubble teal'>{hospital_revision_pct:.0f}%</div>", unsafe_allow_html=True)
+        st.markdown("<div class='nv-bubble-label'>Revisional rate</div>", unsafe_allow_html=True)
+    with r2:
+        pct = f"{complication_rate:.1f}%" if complication_rate is not None else "N/A"
+        st.markdown(f"<div class='nv-bubble purple'>{pct}</div>", unsafe_allow_html=True)
+        st.markdown("<div class='nv-bubble-label'>Complication rate</div>", unsafe_allow_html=True)
 
 
 # --- New Tabbed Layout: Activity, Complications, Geography ---
