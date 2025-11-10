@@ -169,6 +169,24 @@ def render_complications(hospital_id: str):
         "status": "#A78BFA"     # Purple
     }
 
+    # Helper function to get latest complete year (exclude current partial year)
+    def _get_latest_complete_year(df: pd.DataFrame) -> int | None:
+        """Get the latest complete year, excluding current partial year."""
+        if df.empty or "annee" not in df.columns:
+            return None
+        df_copy = df.copy()
+        df_copy["annee"] = pd.to_numeric(df_copy["annee"], errors="coerce")
+        years = df_copy["annee"].dropna().unique()
+        if len(years) == 0:
+            return None
+        # Sort years descending
+        years_sorted = sorted(years, reverse=True)
+        # If we have multiple years, use second-to-last (skip partial current year)
+        if len(years_sorted) >= 2:
+            return int(years_sorted[1])
+        # If only one year, use it
+        return int(years_sorted[0])
+    
     # Bubble display: Hospital, National, Regional, Same category
     col_hosp, col_nat, col_reg, col_cat = st.columns(4)
     
@@ -176,18 +194,29 @@ def render_complications(hospital_id: str):
     with col_hosp:
         hosp_compl = "—"
         try:
-            if not compl_hop.empty and "finessGeoDP" in compl_hop.columns and "COMPL_pct" in compl_hop.columns:
+            if not compl_hop.empty and "finessGeoDP" in compl_hop.columns:
                 hosp_rows = compl_hop[compl_hop["finessGeoDP"].astype(str) == str(hospital_id)]
                 if not hosp_rows.empty:
-                    # If YEAR file, get latest year; if ROLL12, should be a single row
-                    if not use_12m_compl and "annee" in hosp_rows.columns:
-                        hosp_rows["annee"] = pd.to_numeric(hosp_rows["annee"], errors="coerce")
-                        latest_year = hosp_rows["annee"].max()
-                        hosp_rows = hosp_rows[hosp_rows["annee"] == latest_year]
-                    if not hosp_rows.empty:
-                        compl_val = hosp_rows.iloc[0]["COMPL_pct"]
-                        if pd.notna(compl_val):
-                            hosp_compl = f"{float(compl_val):.1f}%"
+                    if use_12m_compl:
+                        # ROLL12 file: get latest month, use COMPL_pct_roll12
+                        if "COMPL_pct_roll12" in hosp_rows.columns:
+                            # Sort by date/year/month to get latest
+                            if "annee" in hosp_rows.columns and "mois" in hosp_rows.columns:
+                                hosp_rows["_ym"] = pd.to_numeric(hosp_rows["annee"], errors="coerce") * 100 + pd.to_numeric(hosp_rows["mois"], errors="coerce")
+                                hosp_rows = hosp_rows.sort_values("_ym", ascending=False)
+                            compl_val = hosp_rows.iloc[0]["COMPL_pct_roll12"]
+                            if pd.notna(compl_val):
+                                hosp_compl = f"{float(compl_val):.1f}%"
+                    else:
+                        # YEAR file: get latest complete year, use COMPL_pct
+                        if "COMPL_pct" in hosp_rows.columns and "annee" in hosp_rows.columns:
+                            latest_year = _get_latest_complete_year(hosp_rows)
+                            if latest_year:
+                                hosp_rows = hosp_rows[pd.to_numeric(hosp_rows["annee"], errors="coerce") == latest_year]
+                                if not hosp_rows.empty:
+                                    compl_val = hosp_rows.iloc[0]["COMPL_pct"]
+                                    if pd.notna(compl_val):
+                                        hosp_compl = f"{float(compl_val):.1f}%"
         except Exception:
             pass
         st.markdown(f"<div class='nv-bubble' style='background:{COMPL_COLORS['hospital']};width:120px;height:120px;font-size:1.8rem'>{hosp_compl}</div>", unsafe_allow_html=True)
@@ -197,17 +226,28 @@ def render_complications(hospital_id: str):
     with col_nat:
         nat_compl = "—"
         try:
-            if not compl_natl.empty and "COMPL_pct" in compl_natl.columns:
+            if not compl_natl.empty:
                 natl_rows = compl_natl.copy()
-                # If YEAR file, get latest year
-                if not use_12m_compl and "annee" in natl_rows.columns:
-                    natl_rows["annee"] = pd.to_numeric(natl_rows["annee"], errors="coerce")
-                    latest_year = natl_rows["annee"].max()
-                    natl_rows = natl_rows[natl_rows["annee"] == latest_year]
-                if not natl_rows.empty:
-                    compl_val = natl_rows.iloc[0]["COMPL_pct"]
-                    if pd.notna(compl_val):
-                        nat_compl = f"{float(compl_val):.1f}%"
+                if use_12m_compl:
+                    # ROLL12 file: get latest month, use COMPL_pct_roll12
+                    if "COMPL_pct_roll12" in natl_rows.columns:
+                        # Sort by date/year/month to get latest
+                        if "annee" in natl_rows.columns and "mois" in natl_rows.columns:
+                            natl_rows["_ym"] = pd.to_numeric(natl_rows["annee"], errors="coerce") * 100 + pd.to_numeric(natl_rows["mois"], errors="coerce")
+                            natl_rows = natl_rows.sort_values("_ym", ascending=False)
+                        compl_val = natl_rows.iloc[0]["COMPL_pct_roll12"]
+                        if pd.notna(compl_val):
+                            nat_compl = f"{float(compl_val):.1f}%"
+                else:
+                    # YEAR file: get latest complete year, use COMPL_pct
+                    if "COMPL_pct" in natl_rows.columns and "annee" in natl_rows.columns:
+                        latest_year = _get_latest_complete_year(natl_rows)
+                        if latest_year:
+                            natl_rows = natl_rows[pd.to_numeric(natl_rows["annee"], errors="coerce") == latest_year]
+                            if not natl_rows.empty:
+                                compl_val = natl_rows.iloc[0]["COMPL_pct"]
+                                if pd.notna(compl_val):
+                                    nat_compl = f"{float(compl_val):.1f}%"
         except Exception:
             pass
         st.markdown(f"<div class='nv-bubble' style='background:{COMPL_COLORS['national']};width:120px;height:120px;font-size:1.8rem'>{nat_compl}</div>", unsafe_allow_html=True)
@@ -217,17 +257,29 @@ def render_complications(hospital_id: str):
     with col_reg:
         reg_compl = "—"
         try:
-            if region_name and not compl_reg.empty and "lib_reg" in compl_reg.columns and "COMPL_pct" in compl_reg.columns:
+            if region_name and not compl_reg.empty and "lib_reg" in compl_reg.columns:
                 reg_rows = compl_reg[compl_reg["lib_reg"].astype(str).str.strip() == str(region_name)]
-                # If YEAR file, get latest year
-                if not use_12m_compl and not reg_rows.empty and "annee" in reg_rows.columns:
-                    reg_rows["annee"] = pd.to_numeric(reg_rows["annee"], errors="coerce")
-                    latest_year = reg_rows["annee"].max()
-                    reg_rows = reg_rows[reg_rows["annee"] == latest_year]
                 if not reg_rows.empty:
-                    compl_val = reg_rows.iloc[0]["COMPL_pct"]
-                    if pd.notna(compl_val):
-                        reg_compl = f"{float(compl_val):.1f}%"
+                    if use_12m_compl:
+                        # ROLL12 file: get latest month, use COMPL_pct_roll12
+                        if "COMPL_pct_roll12" in reg_rows.columns:
+                            # Sort by date/year/month to get latest
+                            if "annee" in reg_rows.columns and "mois" in reg_rows.columns:
+                                reg_rows["_ym"] = pd.to_numeric(reg_rows["annee"], errors="coerce") * 100 + pd.to_numeric(reg_rows["mois"], errors="coerce")
+                                reg_rows = reg_rows.sort_values("_ym", ascending=False)
+                            compl_val = reg_rows.iloc[0]["COMPL_pct_roll12"]
+                            if pd.notna(compl_val):
+                                reg_compl = f"{float(compl_val):.1f}%"
+                    else:
+                        # YEAR file: get latest complete year, use COMPL_pct
+                        if "COMPL_pct" in reg_rows.columns and "annee" in reg_rows.columns:
+                            latest_year = _get_latest_complete_year(reg_rows)
+                            if latest_year:
+                                reg_rows = reg_rows[pd.to_numeric(reg_rows["annee"], errors="coerce") == latest_year]
+                                if not reg_rows.empty:
+                                    compl_val = reg_rows.iloc[0]["COMPL_pct"]
+                                    if pd.notna(compl_val):
+                                        reg_compl = f"{float(compl_val):.1f}%"
         except Exception:
             pass
         st.markdown(f"<div class='nv-bubble' style='background:{COMPL_COLORS['regional']};width:120px;height:120px;font-size:1.8rem'>{reg_compl}</div>", unsafe_allow_html=True)
@@ -237,17 +289,29 @@ def render_complications(hospital_id: str):
     with col_cat:
         status_compl = "—"
         try:
-            if status_val and not compl_status.empty and "statut" in compl_status.columns and "COMPL_pct" in compl_status.columns:
+            if status_val and not compl_status.empty and "statut" in compl_status.columns:
                 status_rows = compl_status[compl_status["statut"].astype(str).str.strip() == str(status_val)]
-                # If YEAR file, get latest year
-                if not use_12m_compl and not status_rows.empty and "annee" in status_rows.columns:
-                    status_rows["annee"] = pd.to_numeric(status_rows["annee"], errors="coerce")
-                    latest_year = status_rows["annee"].max()
-                    status_rows = status_rows[status_rows["annee"] == latest_year]
                 if not status_rows.empty:
-                    compl_val = status_rows.iloc[0]["COMPL_pct"]
-                    if pd.notna(compl_val):
-                        status_compl = f"{float(compl_val):.1f}%"
+                    if use_12m_compl:
+                        # ROLL12 file: get latest month, use COMPL_pct_roll12
+                        if "COMPL_pct_roll12" in status_rows.columns:
+                            # Sort by date/year/month to get latest
+                            if "annee" in status_rows.columns and "mois" in status_rows.columns:
+                                status_rows["_ym"] = pd.to_numeric(status_rows["annee"], errors="coerce") * 100 + pd.to_numeric(status_rows["mois"], errors="coerce")
+                                status_rows = status_rows.sort_values("_ym", ascending=False)
+                            compl_val = status_rows.iloc[0]["COMPL_pct_roll12"]
+                            if pd.notna(compl_val):
+                                status_compl = f"{float(compl_val):.1f}%"
+                    else:
+                        # YEAR file: get latest complete year, use COMPL_pct
+                        if "COMPL_pct" in status_rows.columns and "annee" in status_rows.columns:
+                            latest_year = _get_latest_complete_year(status_rows)
+                            if latest_year:
+                                status_rows = status_rows[pd.to_numeric(status_rows["annee"], errors="coerce") == latest_year]
+                                if not status_rows.empty:
+                                    compl_val = status_rows.iloc[0]["COMPL_pct"]
+                                    if pd.notna(compl_val):
+                                        status_compl = f"{float(compl_val):.1f}%"
         except Exception:
             pass
         st.markdown(f"<div class='nv-bubble' style='background:{COMPL_COLORS['status']};width:120px;height:120px;font-size:1.8rem'>{status_compl}</div>", unsafe_allow_html=True)
@@ -266,7 +330,7 @@ def render_complications(hospital_id: str):
         key=f"compl_tab_funnel_scope_{hospital_id}"
     )
 
-    # Load monthly hospital data to get last 3 months (90 days)
+    
     compl_hop_monthly = _read_csv_complications("TAB_COMPL_HOP_ROLL12.csv")
     
     if compl_hop_monthly is None or compl_hop_monthly.empty or "COMPL_nb" not in compl_hop_monthly.columns:
@@ -423,7 +487,7 @@ def render_complications(hospital_id: str):
 
     # Helper function to get grade rates for a given dataset
     def _get_grade_rates(df: pd.DataFrame, filters: dict | None = None) -> dict[int, float]:
-        """Get complication rates for grades 3, 4, 5 from latest year."""
+        """Get complication rates for grades 3, 4, 5 from latest complete year."""
         if df is None or df.empty or "clav_cat_90" not in df.columns or "COMPL_pct" not in df.columns:
             return {3: 0.0, 4: 0.0, 5: 0.0}
         
@@ -438,39 +502,36 @@ def render_complications(hospital_id: str):
         if d.empty:
             return {3: 0.0, 4: 0.0, 5: 0.0}
         
-        # Get latest year
+        # Get latest complete year (use helper function from above)
         if "annee" in d.columns:
-            d["annee"] = pd.to_numeric(d["annee"], errors="coerce")
-            latest_year = d["annee"].max()
-            d = d[d["annee"] == latest_year]
+            latest_year = _get_latest_complete_year(d)
+            if latest_year:
+                d = d[pd.to_numeric(d["annee"], errors="coerce") == latest_year]
         
         if d.empty:
             return {3: 0.0, 4: 0.0, 5: 0.0}
         
         # Normalize columns
         d["clav_cat_90"] = pd.to_numeric(d["clav_cat_90"], errors="coerce")
-        d["TOT"] = pd.to_numeric(d["TOT"], errors="coerce").fillna(0)
-        d["COMPL_nb"] = pd.to_numeric(d["COMPL_nb"], errors="coerce").fillna(0)
+        d["COMPL_pct"] = pd.to_numeric(d["COMPL_pct"], errors="coerce").fillna(0)
         
-        # Aggregate by grade
+        # Use pre-calculated percentages directly from CSV
         rates = {}
         for grade in [3, 4, 5]:
             grade_rows = d[d["clav_cat_90"] == grade]
             if not grade_rows.empty:
-                # Sum complications and total for this grade
-                total_compl = grade_rows["COMPL_nb"].sum()
-                total_proc = grade_rows["TOT"].iloc[0] if len(grade_rows) > 0 else 0  # TOT should be same per year
-                rates[grade] = (total_compl / total_proc * 100.0) if total_proc > 0 else 0.0
+                # Use pre-calculated COMPL_pct from the CSV file
+                rates[grade] = float(grade_rows.iloc[0]["COMPL_pct"])
             else:
                 rates[grade] = 0.0
         
         return rates
 
     # Get never events data
-    def _get_never_events(df: pd.DataFrame, filters: dict | None = None) -> tuple[int, int]:
-        """Returns (NEVER_nb, TOT) for never events calculation."""
+    def _get_never_events(df: pd.DataFrame, filters: dict | None = None) -> tuple[int, int, float]:
+        """Returns (NEVER_nb, TOT, NEVER_pct) using pre-calculated percentage."""
         if df is None or df.empty or "NEVER_nb" not in df.columns or "TOT" not in df.columns:
-            return (0, 0)
+            return (0, 0, 0.0)
         
         d = df.copy()
         
@@ -481,13 +542,19 @@ def render_complications(hospital_id: str):
                     d = d[d[k].astype(str).str.strip() == str(v)]
         
         if d.empty:
-            return (0, 0)
+            return (0, 0, 0.0)
         
         # Normalize and sum
         never_nb = int(pd.to_numeric(d["NEVER_nb"], errors="coerce").fillna(0).sum())
         tot = int(pd.to_numeric(d["TOT"], errors="coerce").fillna(0).sum())
         
-        return (never_nb, tot)
+        # Use pre-calculated NEVER_pct if available, otherwise calculate
+        if "NEVER_pct" in d.columns:
+            never_pct = float(pd.to_numeric(d["NEVER_pct"], errors="coerce").fillna(0).iloc[0])
+        else:
+            never_pct = (never_nb / tot * 100.0) if tot > 0 else 0.0
+        
+        return (never_nb, tot, never_pct)
 
     # Compute rates for all groups
     rates_h = _get_grade_rates(grade_hop, {'finessGeoDP': str(hospital_id)})
@@ -530,9 +597,9 @@ def render_complications(hospital_id: str):
         st.plotly_chart(fig_grade, use_container_width=True, key=f"compl_grade_chart_{hospital_id}")
     
     with right:
-        # Never events table
-        def _fmt_never(n, d):
-            pct = (n / d * 100.0) if d > 0 else 0.0
+        # Never events table - use pre-calculated percentages
+        def _fmt_never(n, d, pct):
+            """Format never events using pre-calculated percentage."""
             return f"{n:,}/{d:,}", f"{pct:.1f}%"
         
         never_rows = [
