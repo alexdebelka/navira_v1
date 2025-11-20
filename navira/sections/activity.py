@@ -667,6 +667,8 @@ def render_activity(hospital_id: str):
     st.markdown("---")
     st.markdown("#### Procedure casemix")
     use_12m = st.toggle("Show last 12 months", value=False, key=f"tcn_12m_{hospital_id}")
+    if not use_12m:
+        st.caption("Data: 2025")
 
     # Load TCN datasets depending on toggle
     tcn_hop = _read_csv("TAB_TCN_HOP_12M.csv" if use_12m else "TAB_TCN_HOP_YEAR.csv")
