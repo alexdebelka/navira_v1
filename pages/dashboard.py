@@ -407,10 +407,11 @@ def _load_summary_data():
     except Exception:
         rev_hop = pd.DataFrame()
     
-    # Load complications data
+    # Load complications data (Annual)
     try:
-        compl_hop = pd.read_csv(base_dir / "COMPLICATIONS" / "TAB_COMPL_HOP_ROLL12.csv", dtype={'finessGeoDP': str})
+        compl_hop = pd.read_csv(base_dir / "COMPLICATIONS" / "TAB_COMPL_HOP_YEAR.csv", dtype={'finessGeoDP': str})
         compl_hop['finessGeoDP'] = compl_hop['finessGeoDP'].astype(str).str.strip()
+        compl_hop['annee'] = pd.to_numeric(compl_hop['annee'], errors='coerce')
         compl_hop['COMPL_pct'] = pd.to_numeric(compl_hop.get('COMPL_pct', 0), errors='coerce')
     except Exception:
         compl_hop = pd.DataFrame()
@@ -453,14 +454,28 @@ if not rev_hop_summary.empty:
         if pd.notna(rev_val):
             hospital_revision_pct = float(rev_val)
 
-# 5. Complication rate from COMPL file
+# 5. Complication rate from COMPL file (Annual - Latest complete year)
 complication_rate = None
 if not compl_hop_summary.empty:
     hosp_compl = compl_hop_summary[compl_hop_summary['finessGeoDP'] == str(selected_hospital_id)]
-    if not hosp_compl.empty and 'COMPL_pct' in hosp_compl.columns:
-        compl_val = hosp_compl.iloc[0]['COMPL_pct']
-        if pd.notna(compl_val):
-            complication_rate = float(compl_val)
+    if not hosp_compl.empty and 'COMPL_pct' in hosp_compl.columns and 'annee' in hosp_compl.columns:
+        # Logic matching complication.py: get latest complete year
+        # Sort years descending
+        years = sorted(hosp_compl['annee'].dropna().unique(), reverse=True)
+        target_year = None
+        if len(years) >= 2:
+            # If we have multiple years, use second-to-last (skip partial current year)
+            target_year = years[1]
+        elif len(years) == 1:
+            # If only one year, use it
+            target_year = years[0]
+            
+        if target_year:
+            row_yr = hosp_compl[hosp_compl['annee'] == target_year]
+            if not row_yr.empty:
+                compl_val = row_yr.iloc[0]['COMPL_pct']
+                if pd.notna(compl_val):
+                    complication_rate = float(compl_val)
 
 # First row: Left labels + three headline metrics
 left, m1, m2, m3 = st.columns([1.3, 1, 1, 1.05])
