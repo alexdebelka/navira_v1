@@ -320,7 +320,7 @@ def render_complications(hospital_id: str):
     # --- Funnel plot: Overall complication rate (90 days) ---
     st.markdown("---")
     st.markdown("#### Overall complication rate")
-    st.markdown("##### Funnel plot: 90-day complications by hospital volume")
+    st.markdown("##### Funnel plot: 90-day complications by hospital volume (Annual)")
     
     scope_funnel = st.radio(
         "Compare against",
@@ -330,43 +330,47 @@ def render_complications(hospital_id: str):
         key=f"compl_tab_funnel_scope_{hospital_id}"
     )
 
+    # Use Annual data directly
+    compl_hop_year = _read_csv_complications("TAB_COMPL_HOP_YEAR.csv")
     
-    compl_hop_monthly = _read_csv_complications("TAB_COMPL_HOP_ROLL12.csv")
-    
-    if compl_hop_monthly is None or compl_hop_monthly.empty or "COMPL_nb" not in compl_hop_monthly.columns:
-        st.info("No monthly complications data available for funnel plot.")
+    if compl_hop_year is None or compl_hop_year.empty or "COMPL_pct" not in compl_hop_year.columns:
+        st.info("No annual complications data available for funnel plot.")
     else:
         try:
-            d = compl_hop_monthly.copy()
+            d = compl_hop_year.copy()
             # Normalize columns
             d["finessGeoDP"] = d.get("finessGeoDP").astype(str)
             d["annee"] = pd.to_numeric(d.get("annee"), errors="coerce")
-            d["mois"] = pd.to_numeric(d.get("mois"), errors="coerce")
             d["TOT"] = pd.to_numeric(d.get("TOT"), errors="coerce").fillna(0)
-            d["COMPL_nb"] = pd.to_numeric(d.get("COMPL_nb"), errors="coerce").fillna(0)
+            d["COMPL_pct"] = pd.to_numeric(d.get("COMPL_pct"), errors="coerce").fillna(0)
             
-            # Get last 3 months (90 days)
-            d = d.dropna(subset=["annee", "mois"])
-            if not d.empty:
-                # Create a sortable year-month column
-                d["year_month"] = d["annee"] * 100 + d["mois"]
-                max_ym = d["year_month"].max()
+            # Get latest complete year
+            latest_year = _get_latest_complete_year(d)
+            
+            if not latest_year:
+                st.info("No valid year found for funnel plot.")
+            else:
+                # Filter for latest year
+                agg = d[d["annee"] == latest_year].copy()
                 
-                # Get last 3 month-year combinations
-                unique_ym = sorted(d["year_month"].unique(), reverse=True)[:3]
-                d_last3 = d[d["year_month"].isin(unique_ym)]
-                
-                # Aggregate by hospital: sum TOT and COMPL_nb over last 3 months
-                agg = d_last3.groupby("finessGeoDP", as_index=False).agg(
-                    total=("TOT", "sum"),
-                    events=("COMPL_nb", "sum")
-                )
-                agg = agg[agg["total"] > 0]
+                # Filter out zero volume
+                agg = agg[agg["TOT"] > 0]
                 
                 if agg.empty:
                     st.info("No valid data for funnel plot.")
                 else:
-                    agg["rate"] = agg["events"] / agg["total"]
+                    # Use pre-calculated rate from CSV (convert % to decimal for plotting logic if needed, 
+                    # but standard funnel plot usually expects rate 0-1. Let's check standard usage.)
+                    # The previous code calculated rate = events / total.
+                    # Here we have COMPL_pct (0-100). We should convert to 0-1 for consistency with probability formulas.
+                    agg["rate"] = agg["COMPL_pct"] / 100.0
+                    # We also need 'events' for the p_bar calculation if we want to be exact, 
+                    # or we can estimate it: events = rate * total. 
+                    # Or if COMPL_nb exists, use it.
+                    if "COMPL_nb" in agg.columns:
+                         agg["events"] = pd.to_numeric(agg["COMPL_nb"], errors="coerce").fillna(0)
+                    else:
+                         agg["events"] = agg["rate"] * agg["TOT"]
                     
                     # Scope filtering using region/status from rev_hop_12m
                     if scope_funnel == "Regional":
@@ -382,10 +386,11 @@ def render_complications(hospital_id: str):
                         st.info(f"No data for {scope_funnel} scope.")
                     else:
                         # Overall mean (pooled)
-                        p_bar = float(agg["events"].sum() / agg["total"].sum()) if agg["total"].sum() > 0 else 0.0
+                        # We recalculate the pooled mean from the displayed data to ensure the funnel centers correctly on the data shown
+                        p_bar = float(agg["events"].sum() / agg["TOT"].sum()) if agg["TOT"].sum() > 0 else 0.0
                         
                         # Control limits vs volume
-                        vol = np.linspace(max(1, agg["total"].min()), agg["total"].max(), 200)
+                        vol = np.linspace(max(1, agg["TOT"].min()), agg["TOT"].max(), 200)
                         se = np.sqrt(p_bar * (1 - p_bar) / vol)
                         z95 = 1.96
                         z99 = 3.09
@@ -409,7 +414,7 @@ def render_complications(hospital_id: str):
                         # Other hospitals
                         if not others.empty:
                             fig_funnel.add_trace(go.Scatter(
-                                x=others["total"], y=others["rate"], mode="markers",
+                                x=others["TOT"], y=others["rate"], mode="markers",
                                 marker=dict(color="#60a5fa", size=6, opacity=0.75), name="Other hospitals",
                                 hovertemplate='Volume: %{x:,}<br>Rate: %{y:.1%}<extra></extra>'
                             ))
@@ -417,7 +422,7 @@ def render_complications(hospital_id: str):
                         # Selected hospital
                         if not sel.empty:
                             fig_funnel.add_trace(go.Scatter(
-                                x=sel["total"], y=sel["rate"], mode="markers",
+                                x=sel["TOT"], y=sel["rate"], mode="markers",
                                 marker=dict(color="#FF8C00", size=12, line=dict(color="white", width=1)), name="Selected hospital",
                                 hovertemplate='Volume: %{x:,}<br>Rate: %{y:.1%}<extra></extra>'
                             ))
