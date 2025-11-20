@@ -644,7 +644,7 @@ user_ctx = st.session_state.get('user') or {}
 username_ctx = (user_ctx or {}).get('username', '')
 _limited = bool(st.session_state.get('_limited_user'))
 # Pilot override: enable Geography for pilot users even if limited
-pilot_users = ['andrea.lazzati', 'federica.papini', 'adriana.torcivia', 'sergio.carandina']
+pilot_users = ['andrea.lazzati', 'federica.papini', 'sergio.carandina', 'claire.blanchard', 'thomas.auguste', 'laurent.genser']
 _pilot_geo_override = username_ctx in pilot_users
 show_geography = ((not _limited) or _pilot_geo_override) and (not ONLY_ACTIVITY_DATA)
 

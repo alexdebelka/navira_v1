@@ -86,7 +86,7 @@ def init_database():
     except Exception:
         pass
     try:
-        _ensure_pilot_user_andrea()
+        _ensure_pilot_users()
     except Exception:
         pass
 
@@ -446,8 +446,10 @@ def login_page():
                     pilot_user_hospitals = {
                         'andrea.lazzati': '930100037',      # Hôpital Avicenne
                         'federica.papini': '940000573',     # CHIC DE CRETEIL
-                        'adriana.torcivia': '750100125',    # GROUPEMENT HOSPITALIER PITIE-SALPETRIERE
-                        'sergio.carandina': '830100459'     # CLINIQUE SAINT MICHEL
+                        'sergio.carandina': '830100459',    # CLINIQUE SAINT MICHEL
+                        'claire.blanchard': '440000271',    # CHU DE NANTES
+                        'thomas.auguste': '560008799',      # CHBA VANNES
+                        'laurent.genser': '750100125'       # GROUPEMENT HOSPITALIER PITIE-SALPETRIERE
                     }
                     
                     try:
@@ -642,22 +644,48 @@ def create_default_admin():
     
     conn.close()
 
-def _ensure_pilot_user_andrea():
-    """Ensure the limited pilot user 'andrea.lazzati' exists with default password."""
+def _ensure_pilot_users():
+    """Ensure all pilot users exist with default password."""
+    pilot_users = [
+        ("andrea.lazzati", "andrea.lazzati@navira.com"),
+        ("federica.papini", "federica.papini@navira.com"),
+        ("sergio.carandina", "sergio.carandina@navira.com"),
+        ("claire.blanchard", "claire.blanchard@navira.com"),
+        ("thomas.auguste", "thomas.auguste@navira.com"),
+        ("laurent.genser", "laurent.genser@navira.com")
+    ]
+    
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute('SELECT id FROM users WHERE username = ?', ("andrea.lazzati",))
-        row = cursor.fetchone()
-        if not row:
-            # Create with a stable email placeholder; login uses username
-            create_user("andrea.lazzati", "andrea.lazzati@navira.com", "12345!", role="user")
+        
+        for username, email in pilot_users:
+            cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
+            row = cursor.fetchone()
+            if not row:
+                # Create user if not exists
+                # Note: We call create_user separately to handle password hashing and permissions
+                # But we need to close this connection first or use a different connection
+                pass
+        
         conn.close()
-    except Exception:
-        try:
+        
+        # Now create missing users
+        # We do this outside the loop to avoid connection conflicts if create_user opens its own connection
+        for username, email in pilot_users:
+            # Check again (inefficient but safe)
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
+            row = cursor.fetchone()
             conn.close()
-        except Exception:
-            pass
+            
+            if not row:
+                print(f"Creating pilot user: {username}")
+                create_user(username, email, "12345!", role="user")
+                
+    except Exception as e:
+        print(f"Error ensuring pilot users: {e}")
 
 if __name__ == "__main__":
     # Initialize database and create default admin

@@ -23,19 +23,17 @@ Each pilot user is automatically assigned and restricted to their specific hospi
 - **Username:** `federica.papini`
 - **Password:** `12345!`
 - **Email:** federica.papini@navira.com
-- **User ID:** 21
 - **Status:** Active ✅
 
 ---
 
-### 2. ADRIANA TORCIVIA
-- **Name:** ADRIANA TORCIVIA
+### 2. LAURENT GENSER (Replaces Adriana Torcivia)
+- **Name:** LAURENT GENSER
 - **Center:** GROUPEMENT HOSPITALIER PITIE-SALPETRIERE
 - **FINESS Code:** 750100125
-- **Username:** `adriana.torcivia`
+- **Username:** `laurent.genser`
 - **Password:** `12345!`
-- **Email:** adriana.torcivia@navira.com
-- **User ID:** 22
+- **Email:** laurent.genser@navira.com
 - **Status:** Active ✅
 
 ---
@@ -47,7 +45,28 @@ Each pilot user is automatically assigned and restricted to their specific hospi
 - **Username:** `sergio.carandina`
 - **Password:** `12345!`
 - **Email:** sergio.carandina@navira.com
-- **User ID:** 23
+- **Status:** Active ✅
+
+---
+
+### 4. CLAIRE BLANCHARD
+- **Name:** CLAIRE BLANCHARD
+- **Center:** CHU DE NANTES (City of Nantes)
+- **FINESS Code:** 440000271
+- **Username:** `claire.blanchard`
+- **Password:** `12345!`
+- **Email:** claire.blanchard@navira.com
+- **Status:** Active ✅
+
+---
+
+### 5. THOMAS AUGUSTE
+- **Name:** THOMAS AUGUSTE
+- **Center:** CHBA VANNES (City of Vannes)
+- **FINESS Code:** 560008799
+- **Username:** `thomas.auguste`
+- **Password:** `12345!`
+- **Email:** thomas.auguste@navira.com
 - **Status:** Active ✅
 
 ---

@@ -53,8 +53,10 @@ def check_auth():
     pilot_user_hospitals = {
         'andrea.lazzati': '930100037',      # Hôpital Avicenne
         'federica.papini': '940000573',     # CHIC DE CRETEIL
-        'adriana.torcivia': '750100125',    # GROUPEMENT HOSPITALIER PITIE-SALPETRIERE
-        'sergio.carandina': '830100459'     # CLINIQUE SAINT MICHEL
+        'sergio.carandina': '830100459',    # CLINIQUE SAINT MICHEL
+        'claire.blanchard': '440000271',    # CHU DE NANTES (City of Nantes)
+        'thomas.auguste': '560008799',      # CHBA VANNES (City of Vannes)
+        'laurent.genser': '750100125'       # GROUPEMENT HOSPITALIER PITIE-SALPETRIERE
     }
     
     try:
