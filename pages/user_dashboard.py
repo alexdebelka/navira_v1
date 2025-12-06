@@ -2,6 +2,9 @@ import streamlit as st
 from auth_wrapper import add_auth_to_page
 from auth import user_dashboard as render_user_dashboard
 
+# Identify this page early to avoid redirect loops for limited users
+st.session_state.current_page = "dashboard"
+
 # Ensure auth and sidebar are set up
 add_auth_to_page()
 

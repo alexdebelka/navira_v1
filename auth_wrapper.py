@@ -59,6 +59,10 @@ def check_auth():
         'laurent.genser': '750100125'       # GROUPEMENT HOSPITALIER PITIE-SALPETRIERE
     }
     
+    # Pages that limited users (pilot users) are allowed to access
+    # Note: Pilot users have 'dashboard' permission in the database (see PILOT_USERS_CREDENTIALS.md)
+    LIMITED_USER_ALLOWED_PAGES = {'national', 'hospital', 'dashboard'}
+    
     try:
         user = st.session_state.get('user') or {}
         username = (user or {}).get('username', '')
@@ -68,9 +72,58 @@ def check_auth():
             # Force-select their assigned hospital (FINESS id)
             st.session_state.selected_hospital_id = pilot_user_hospitals.get(username)
             st.session_state._limited_user = True
-            # Only redirect to hospital dashboard if not on national page or hospital dashboard
+            
+            # Detect current page more robustly
+            # First try session state, then try to detect from script path
             current_page = st.session_state.get('current_page', 'unknown')
-            if current_page != 'national' and not st.session_state.get('_on_hospital_dashboard', False):
+            
+            # If current_page is unknown, try to detect from the script path
+            if current_page == 'unknown':
+                frame = None
+                try:
+                    import inspect
+                    import os
+                    # Walk up the call stack to find the page file
+                    frame = inspect.currentframe()
+                    depth = 0
+                    while frame and depth < 10:  # Limit depth to avoid infinite loops
+                        filename = frame.f_code.co_filename
+                        if 'pages' in filename:
+                            basename = os.path.basename(filename)
+                            if 'national.py' in basename:
+                                current_page = 'national'
+                                break
+                            elif 'dashboard.py' in basename:
+                                current_page = 'hospital'
+                                break
+                            elif 'hospital_explorer' in basename:
+                                current_page = 'hospital_explorer'
+                                break
+                            elif 'hospital_compare' in basename:
+                                current_page = 'hospital_compare'
+                                break
+                            elif 'admin.py' in basename:
+                                current_page = 'admin'
+                                break
+                            elif 'user_dashboard.py' in basename:
+                                current_page = 'dashboard'
+                                break
+                        next_frame = frame.f_back
+                        frame = next_frame
+                        depth += 1
+                except Exception:
+                    pass
+                finally:
+                    # Explicitly delete frame to break reference cycles and allow garbage collection
+                    # This is critical in Streamlit where check_auth() is called on every rerun
+                    del frame
+            
+            # Check if user is on hospital dashboard using the flag (takes precedence)
+            if st.session_state.get('_on_hospital_dashboard', False):
+                current_page = 'hospital'
+            
+            # Redirect if the page is not in the allowed list
+            if current_page not in LIMITED_USER_ALLOWED_PAGES:
                 try:
                     from navigation_utils import navigate_to_hospital_dashboard
                     navigate_to_hospital_dashboard()

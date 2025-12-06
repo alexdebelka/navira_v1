@@ -1,6 +1,9 @@
 import streamlit as st
 from auth_wrapper import add_auth_to_page
 
+# Identify this page early to avoid redirect loops for limited users
+st.session_state.current_page = "admin"
+
 # Add authentication and sidebar
 add_auth_to_page()
 

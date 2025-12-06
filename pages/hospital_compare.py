@@ -9,6 +9,9 @@ from navigation_utils import handle_navigation_request
 
 handle_navigation_request()
 
+# Identify this page early to avoid redirect loops for limited users
+st.session_state.current_page = "hospital_compare"
+
 # --- Page Configuration ---
 st.set_page_config(
     page_title="Hospital Comparison",

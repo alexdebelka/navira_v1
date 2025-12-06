@@ -42,6 +42,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Identify this page early to avoid redirect loops for limited users
+st.session_state.current_page = "assistant"
+
 # If disabled, show message and exit early without initializing chat/OpenAI
 if not _assistant_enabled():
     from auth_wrapper import add_auth_to_page as _add_auth

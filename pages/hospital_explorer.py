@@ -11,6 +11,9 @@ from auth_wrapper import add_auth_to_page
 from navigation_utils import handle_navigation_request
 handle_navigation_request()
 
+# Identify this page early to avoid redirect loops for limited users
+st.session_state.current_page = "hospital_explorer"
+
 # Add authentication check
 add_auth_to_page()
 
