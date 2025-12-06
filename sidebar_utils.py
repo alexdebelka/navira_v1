@@ -70,9 +70,14 @@ def add_sidebar_to_page():
                 from navigation_utils import navigate_to_hospital_compare
                 navigate_to_hospital_compare()
         else:
-            # Limited users see only logout; no navigation buttons
+            # Limited users (pilot users) can access National Overview and their hospital dashboard
             st.info("Limited pilot access enabled")
-            st.caption("You are viewing Avicenne hospital dashboard.")
+            if st.button("📈 National Overview", use_container_width=True):
+                _track("National Overview")
+                navigate_to_national()
+            if st.button("📊 Hospital Analysis", use_container_width=True):
+                _track("Hospital Analysis")
+                navigate_to_hospital_dashboard()
         # Assistant feature flag
         _assistant_enabled = False
         try:

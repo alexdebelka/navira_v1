@@ -68,8 +68,9 @@ def check_auth():
             # Force-select their assigned hospital (FINESS id)
             st.session_state.selected_hospital_id = pilot_user_hospitals.get(username)
             st.session_state._limited_user = True
-            # If we're not already on the hospital dashboard, redirect there
-            if not st.session_state.get('_on_hospital_dashboard', False):
+            # Only redirect to hospital dashboard if not on national page or hospital dashboard
+            current_page = st.session_state.get('current_page', 'unknown')
+            if current_page != 'national' and not st.session_state.get('_on_hospital_dashboard', False):
                 try:
                     from navigation_utils import navigate_to_hospital_dashboard
                     navigate_to_hospital_dashboard()

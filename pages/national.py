@@ -21,6 +21,9 @@ from auth_wrapper import add_auth_to_page
 from navigation_utils import handle_navigation_request
 handle_navigation_request()
 
+# Identify this page early to avoid redirect loops for limited users
+st.session_state.current_page = "national"
+
 # Add authentication check
 add_auth_to_page()
 
@@ -49,7 +52,7 @@ st.markdown("""
 df = load_and_prepare_data()
 
 # Load additional datasets
-from navira.data_loader import get_all_dataframes
+from navira.data_loader import get_all_dataframes, get_dataframes
 all_data = get_all_dataframes()
 recruitment = all_data.get('recruitment', pd.DataFrame())
 french_cities = all_data.get('cities', pd.DataFrame())
