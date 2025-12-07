@@ -56,26 +56,47 @@ def load_and_prepare_data() -> pd.DataFrame:
     )
 
     # Derive normalized fields expected by downstream functions
-    merged = merged.rename(columns={
+    # Only rename columns that actually exist
+    rename_map = {
         'id': 'hospital_id',
         'annee': 'year',
-        'statut': 'sector',
         'ville': 'city',
         'LAB_SOFFCO': 'soffco_label',
         'cso': 'cso_label',
-    })
+    }
+    # Only add 'statut' -> 'sector' rename if 'statut' exists
+    if 'statut' in merged.columns:
+        rename_map['statut'] = 'sector'
+    
+    merged = merged.rename(columns=rename_map)
 
-    merged['sector'] = merged['sector'].astype(str).str.strip().str.lower()
+    # Create or process 'sector' column
+    if 'sector' not in merged.columns:
+        # If 'sector' doesn't exist, create a default column
+        # Try to infer from other available columns or set a default
+        merged['sector'] = 'unknown'
+        # If we have the original 'statut' in establishments, try to use it
+        if 'statut' in establishments.columns:
+            est_statut = establishments.set_index('id')['statut'].astype(str).str.strip().str.lower()
+            merged['sector'] = merged['hospital_id'].astype(str).map(est_statut).fillna('unknown')
+    else:
+        # Process existing 'sector' column
+        merged['sector'] = merged['sector'].astype(str).str.strip().str.lower()
+    
     sector_mapping = {
         'private not-for-profit': 'private',
         'public': 'public',
-        'private for profit': 'private'
+        'private for profit': 'private',
+        'private': 'private',  # Handle already normalized values
+        'unknown': 'unknown'
     }
-    merged['sector'] = merged['sector'].map(sector_mapping)
+    merged['sector'] = merged['sector'].map(sector_mapping).fillna('unknown')
 
     # Profit status from original statut
     merged['profit_status'] = 'not_for_profit'
-    merged.loc[merged['sector'] == 'public', 'profit_status'] = 'not_for_profit'
+    # Only set profit_status based on sector if sector column exists and is valid
+    if 'sector' in merged.columns:
+        merged.loc[merged['sector'] == 'public', 'profit_status'] = 'not_for_profit'
     # Try to infer from raw statut text if available via establishments
     if 'statut' in establishments.columns:
         stat_series = establishments.set_index('id')['statut'].astype(str).str.lower()
