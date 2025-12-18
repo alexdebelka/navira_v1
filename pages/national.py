@@ -113,10 +113,283 @@ national_averages = calculate_national_averages(df)
 
 # --- Page Title and Notice ---
 st.title("🇫🇷 National Overview")
-# 
 
-# Surgery-to-Population Ratio Choropleth
-st.markdown("### Surgery Density by Department")
+# --- CUSTOM CSS ---
+st.markdown("""
+    <style>
+        .summary-card {
+            background-color: #2b2b2b;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            margin-bottom: 20px;
+            height: 100%;
+        }
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #e0e0e0;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #ffffff;
+            text-align: center;
+        }
+        .metric-label {
+            font-size: 0.9rem;
+            color: #a0a0a0;
+            text-align: center;
+        }
+        .prediction-text {
+            color: #ff4b4b;
+            font-weight: bold;
+        }
+        .stat-box {
+            background-color: #3b3b3b;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            margin-bottom: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .ici-link {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #888;
+        }
+        .ici-link a {
+            color: #00bfff;
+            text-decoration: none;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- SUMMARY SECTION ---
+st.markdown('<div style="width:100%; text-align:right; margin-bottom:20px; font-size:2rem; font-weight:bold; text-decoration: underline; text-decoration-style: wavy; text-decoration-color: red;">Summary</div>', unsafe_allow_html=True)
+
+# Row 1
+col1, col2 = st.columns(2)
+
+# Card 1: Monthly Surgeries (Placeholder)
+with col1:
+    with st.container():
+        st.markdown("""
+        <div class="summary-card">
+            <div class="card-title">Monthly Surgeries with Rolling Statistics</div>
+            <div style="height: 300px; display: flex; align-items: center; justify-content: center; background: #333; border-radius: 8px; border: 1px dashed #555;">
+                <span style="color: #888;">Graph Placeholder</span>
+            </div>
+            <div class="ici-link">Bien plus de détails sur <b>les tendances</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Card 2: Intervention Types
+with col2:
+    with st.container():
+        # Clean data for Card 2
+        interventions_data = df.copy()
+        
+        # Calculate stats for 2021-202X (assuming up to max date)
+        if 'year' in interventions_data.columns:
+            mask_202x = interventions_data['year'] >= 2021
+        elif 'annee' in interventions_data.columns:
+            mask_202x = interventions_data['annee'] >= 2021
+        else:
+            mask_202x = [True] * len(interventions_data)
+        
+        df_202x = interventions_data[mask_202x]
+        
+        # Total procedures
+        total_procs = 0
+        sleeve_pct = 0
+        bypass_pct = 0
+        other_pct = 0
+        
+        if not df_202x.empty:
+            proc_cols = [c for c in ['SLE', 'BPG', 'ANN', 'REV', 'ABL', 'DBP', 'GVC', 'NDD'] if c in df_202x.columns]
+            if proc_cols:
+                totals = df_202x[proc_cols].sum()
+                total_procs = totals.sum()
+                
+                if total_procs > 0:
+                    sleeve_pct = (totals.get('SLE', 0) / total_procs) * 100
+                    bypass_pct = (totals.get('BPG', 0) / total_procs) * 100
+                    other_count = total_procs - totals.get('SLE', 0) - totals.get('BPG', 0)
+                    other_pct = (other_count / total_procs) * 100
+
+        # Donut Chart
+        labels = ['Gastric Bypass', 'Sleeve Gastrectomy', 'Other Procedures']
+        values = [bypass_pct, sleeve_pct, other_pct]
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c'] 
+        
+        fig_donut = go.Figure(data=[go.Pie(
+            labels=labels, 
+            values=values, 
+            hole=.6,
+            marker_colors=colors,
+            textinfo='percent+label',
+            showlegend=False
+        )])
+        fig_donut.update_layout(
+            margin=dict(t=0, b=0, l=0, r=0),
+            height=200,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            annotations=[dict(text='', x=0.5, y=0.5, font_size=20, showarrow=False)]
+        )
+
+        st.markdown(f"""
+        <div class="summary-card">
+            <div class="card-title">Type d'intervention de chirurgie bariatrique (2021-202x)</div>
+            <div style="display: flex; gap: 15px;">
+                <div style="width: 40%; display: flex; flex-direction: column; justify-content: center; gap: 10px;">
+                     <div class="stat-box">
+                        <div style="color: #a0a0a0; font-size: 0.8rem;">Total procedures</div>
+                        <div style="font-size: 1.2rem; font-weight: bold; color:white;">{int(total_procs):,}</div>
+                        <div style="color: #a0a0a0; font-size: 0.7rem;">(up to Nov 3rd)</div>
+                     </div>
+                     <div class="stat-box">
+                        <div style="color: #a0a0a0; font-size: 0.8rem;">Prediction</div>
+                        <div class="prediction-text" style="font-size: 1.2rem;">-7%</div>
+                     </div>
+                     <div class="stat-box">
+                        <div style="color: #a0a0a0; font-size: 0.8rem;">Sleeve/Bypass</div>
+                        <div style="font-size: 1rem; font-weight: bold; color:white;">{sleeve_pct:.0f}%/{bypass_pct:.0f}%</div>
+                     </div>
+                </div>
+                <div style="width: 60%;">
+        """, unsafe_allow_html=True)
+        
+        st.plotly_chart(fig_donut, use_container_width=True, config={'displayModeBar': False})
+        
+        st.markdown("""
+                </div>
+            </div>
+            <div class="ici-link">Analyse plus détaillée du <b>type d'intervention bariatrique</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Row 2
+col3, col4 = st.columns(2)
+
+# Card 3: MBS Robotic Rate
+with col3:
+    with st.container():
+        # Logic from "Advanced Procedure Metrics" for robotic rate
+        # We need trends for Sleeve vs Bypass over 2020-2024
+        
+        # Calculate yearly rates
+        robic_years = []
+        robic_sleeve = []
+        robic_bypass = []
+        
+        if not procedure_details.empty:
+            for y in range(2020, 2025):
+                y_data = procedure_details[procedure_details['year'] == y]
+                if not y_data.empty:
+                    # Sleeve
+                    sleeve_data = y_data[y_data['procedure_type'] == 'SLE']
+                    sleeve_tot = sleeve_data['procedure_count'].sum()
+                    sleeve_rob = sleeve_data[sleeve_data['surgical_approach'] == 'ROB']['procedure_count'].sum()
+                    sleeve_rate = (sleeve_rob / sleeve_tot * 100) if sleeve_tot > 0 else 0
+                    
+                    # Bypass
+                    bpg_data = y_data[y_data['procedure_type'] == 'BPG']
+                    bpg_tot = bpg_data['procedure_count'].sum()
+                    bpg_rob = bpg_data[bpg_data['surgical_approach'] == 'ROB']['procedure_count'].sum()
+                    bpg_rate = (bpg_rob / bpg_tot * 100) if bpg_tot > 0 else 0
+                    
+                    robic_years.append(y)
+                    robic_sleeve.append(sleeve_rate)
+                    robic_bypass.append(bpg_rate)
+        
+        if not robic_years:
+            # Fallback dummy data if empty
+             robic_years = [2020, 2021, 2022, 2023, 2024]
+             robic_sleeve = [0, 0, 0, 0, 0]
+             robic_bypass = [0, 0, 0, 0, 0]
+
+        fig_rob = go.Figure()
+        fig_rob.add_trace(go.Bar(name='Sleeve gastrectomy', x=robic_years, y=robic_sleeve, marker_color='#003366'))
+        fig_rob.add_trace(go.Bar(name='Gastric Bypass', x=robic_years, y=robic_bypass, marker_color='#004C99'))
+        
+        fig_rob.update_layout(
+            barmode='group',
+            margin=dict(t=10, b=0, l=0, r=0),
+            height=250,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
+            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
+            xaxis=dict(showgrid=False)
+        )
+
+        st.markdown("""
+        <div class="summary-card">
+            <div class="card-title" style="text-align:left; font-size:1rem;">MBS Robotic rate</div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(fig_rob, use_container_width=True, config={'displayModeBar': False})
+        st.markdown("""
+            <div class="ici-link">Bien plus de détails sur <b>l'activité robotique</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Card 4: Severe Complications
+with col4:
+    with st.container():
+        # Reuse complication logic
+        # Calculate quarterly national averages
+        quarterly_comp = pd.DataFrame()
+        if not complications.empty:
+            quarterly_comp = complications.groupby('quarter_date').agg({
+                'procedures_count': 'sum',
+                'complications_count': 'sum'
+            }).reset_index()
+            quarterly_comp['actual_rate'] = (quarterly_comp['complications_count'] / quarterly_comp['procedures_count'] * 100)
+        
+        fig_comp = go.Figure()
+        if not quarterly_comp.empty:
+             fig_comp.add_trace(go.Scatter(
+                x=quarterly_comp['quarter_date'],
+                y=quarterly_comp['actual_rate'],
+                mode='lines',
+                line=dict(color='#FF8C00', width=2),
+                showlegend=False
+            ))
+        
+        fig_comp.update_layout(
+            margin=dict(t=10, b=0, l=0, r=0),
+            height=250,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', range=[0, 5]),
+            xaxis=dict(showgrid=False)
+        )
+
+        st.markdown("""
+        <div class="summary-card">
+            <div class="card-title">Taux de complications sévères à 90 jours après chirurgie bariatrique (estimation)</div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(fig_comp, use_container_width=True, config={'displayModeBar': False})
+        st.markdown("""
+            <div class="ici-link">Bien plus de détails sur <b>les complications</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# --- MAP & LABELS SECTION (Moved to bottom as requested) ---
+# We will construct this section at the very end of the script later.
+# For now, we continue with existing logic but we will refactor the flow.
+
+# NOTE: The subsequent existing code needs to be reordered or wrapped.
+# I will use a container approach or just move the code blocks in subsequent edits
+# to placing the map/labels at the bottom.
+# However, `st.title` was at line 115. I kept it.
+
+st.header("Surgery Density by Department")
 st.markdown("*Ratio of total bariatric surgeries to department population (surgeries per 100,000 inhabitants)*")
 
 try:
@@ -326,6 +599,7 @@ st.markdown("""
 > **Note:** National means are computed across hospitals (2020–2024). Only hospitals with ≥25 interventions per year are considered.
 """)
 
+'''
 # --- (1) HOSPITAL VOLUME DISTRIBUTION ---
 st.header("Hospital Volume Distribution")
 
@@ -507,6 +781,7 @@ fig.update_layout(
 )
 
 st.plotly_chart(fig, use_container_width=True)
+'''
 
 # --- (2) HOSPITAL AFFILIATION ---
 st.header("Hospital Affiliation (2024)")
@@ -705,6 +980,7 @@ if not stacked_df.empty:
 else:
     st.info("No label data available for the selected criteria.")
 
+st.stop()
 # Affiliation trends line plot
 st.markdown(
     """
@@ -2241,187 +2517,3 @@ else:
     - Primary vs revisional robotic procedures
     - Robotic approach by procedure type analysis
     """)
-
-# 4. Volume-based Analysis
-
-
-        # # ECDF by volume bin
-        # try:
-        #     from lib.national_utils import compute_robotic_volume_distribution
-        #     dist_df = compute_robotic_volume_distribution(df)
-        #     if not dist_df.empty:
-        #         st.subheader("ECDF of hospital robotic% by volume bin")
-        #         show_ge = st.toggle("Show ≥ threshold (instead of ≤)", value=False)
-        #         ordered_cats = ["<50", "50–100", "100–200", ">200"]
-        #         ecdf_records = []
-        #         for cat in ordered_cats:
-        #             sub = dist_df[dist_df['volume_category'] == cat]['hospital_pct'].dropna().astype(float)
-        #             if len(sub) == 0:
-        #                 continue
-        #             vals = np.sort(sub.values)
-        #             frac = np.arange(1, len(vals) + 1) / len(vals)
-        #             for v, f in zip(vals, frac):
-        #                 ecdf_records.append({
-        #                     'volume_category': cat,
-        #                     'hospital_pct': v,
-        #                     'ecdf': f
-        #                 })
-
-        #         ecdf_df = pd.DataFrame(ecdf_records)
-        #         if not ecdf_df.empty:
-        #             # Invert if showing ≥ threshold
-        #             ecdf_df['ecdf_plot'] = 1 - ecdf_df['ecdf'] if show_ge else ecdf_df['ecdf']
-        #             operator = '≥' if show_ge else '≤'
-        #             ecdf_fig = px.line(
-        #                 ecdf_df,
-        #                 x='hospital_pct',
-        #                 y='ecdf_plot',
-        #                 color='volume_category',
-        #                 title=f'ECDF: Share of hospitals with robotic% {operator} threshold',
-        #                 line_shape='hv'
-        #             )
-        #             ecdf_fig.update_layout(
-        #                 xaxis_title='Robotic % (threshold)',
-        #                 yaxis_title='Cumulative share of hospitals',
-        #                 height=420,
-        #                 plot_bgcolor='rgba(0,0,0,0)',
-        #                 paper_bgcolor='rgba(0,0,0,0)'
-        #             )
-        #             ecdf_fig.update_yaxes(tickformat='.0%')
-        #             ecdf_fig.update_traces(
-        #                 hovertemplate=f'%{{fullData.name}}<br>{operator} %{{x:.1f}}% -> %{{y:.0%}}<extra></extra>'
-        #             )
-        #             # Add vertical guide lines at key thresholds
-        #             for thr in [5, 10, 20]:
-        #                 ecdf_fig.add_vline(x=thr, line_dash='dot', line_color='gray', opacity=0.5)
-        #                 ecdf_fig.add_annotation(x=thr, y=1.02, xref='x', yref='paper',
-        #                                         text=f'{thr}%', showarrow=False, font=dict(size=10, color='gray'))
-        #             st.plotly_chart(ecdf_fig, use_container_width=True)
-        # except Exception:
-        #     pass
-
-        # # Δ between weighted and mean
-        # try:
-        #     weighted = robotic_volume.get('percentages_weighted') or [None]*len(robotic_volume['volume_categories'])
-        #     mean_vals = robotic_volume.get('percentages_mean') or [None]*len(robotic_volume['volume_categories'])
-        #     deltas = []
-        #     for w, m in zip(weighted, mean_vals):
-        #         if w is not None and m is not None:
-        #             deltas.append(round(w - m, 1))
-        #         else:
-        #             deltas.append(None)
-        #     st.markdown("**Δ (weighted − mean) by volume bin:** " + ", ".join(
-        #         [f"{cat}: {d:+.1f}%" if d is not None else f"{cat}: n/a" for cat, d in zip(robotic_volume['volume_categories'], deltas)]
-        #     ))
-        # except Exception:
-        #     pass
-
-        # # Distribution plot (per-hospital robotic share) by volume bin
-        # try:
-        #     from lib.national_utils import compute_robotic_volume_distribution
-        #     dist_df = compute_robotic_volume_distribution(df)
-        #     st.subheader("Per-hospital distribution by volume")
-
-        #     # Choose representation
-        #     style = st.radio(
-        #         "Distribution style",
-        #         options=["Violin + beeswarm", "Box + beeswarm"],
-        #         horizontal=True,
-        #         index=0
-        #     )
-
-        #     ordered_cats = ["<50", "50–100", "100–200", ">200"]
-        #     fig = go.Figure()
-
-        #     for cat in ordered_cats:
-        #         sub = dist_df[dist_df['volume_category'] == cat]
-        #         if sub.empty:
-        #             continue
-        #         if style == "Violin + beeswarm":
-        #             fig.add_trace(go.Violin(
-        #                 x=[cat] * len(sub),
-        #                 y=sub['hospital_pct'],
-        #                 name=cat,
-        #                 points='all',
-        #                 jitter=0.3,
-        #                 pointpos=0.0,
-        #                 box_visible=True,
-        #                 meanline_visible=True,
-        #                 marker=dict(size=6, opacity=0.55)
-        #             ))
-        #         else:
-        #             fig.add_trace(go.Box(
-        #                 x=[cat] * len(sub),
-        #                 y=sub['hospital_pct'],
-        #                 name=cat,
-        #                 boxpoints='all',
-        #                 jitter=0.3,
-        #                 pointpos=0.0,
-        #                 marker=dict(size=6, opacity=0.55)
-        #             ))
-
-        #     fig.update_layout(
-        #         showlegend=False,
-        #         xaxis_title=None,
-        #         yaxis_title='Robotic % (per hospital)',
-        #         height=420,
-        #         plot_bgcolor='rgba(0,0,0,0)',
-        #         paper_bgcolor='rgba(0,0,0,0)'
-        #     )
-        #     st.plotly_chart(fig, use_container_width=True)
-        # except Exception as e:
-        #     st.info(f"Distribution view unavailable: {e}")
-
-        # # Continuous scatter with linear trendline
-        # try:
-        #     from lib.national_utils import compute_robotic_volume_distribution
-        #     dist_df = compute_robotic_volume_distribution(df)
-        #     if not dist_df.empty:
-        #         st.subheader("Continuous relationship: volume vs robotic %")
-        #         cont = px.scatter(
-        #             dist_df,
-        #             x='total_surgeries',
-        #             y='hospital_pct',
-        #             color='volume_category',
-        #             opacity=0.65,
-        #             title='Hospital volume (continuous) vs robotic %'
-        #         )
-        #         # Linear trendline via numpy
-        #         try:
-        #             xvals = dist_df['total_surgeries'].astype(float).values
-        #             yvals = dist_df['hospital_pct'].astype(float).values
-        #             if len(xvals) >= 2:
-        #                 slope, intercept = np.polyfit(xvals, yvals, 1)
-        #                 xs = np.linspace(xvals.min(), xvals.max(), 100)
-        #                 ys = slope * xs + intercept
-        #                 cont.add_trace(go.Scatter(x=xs, y=ys, mode='lines', name='Linear trend', line=dict(color='#4c78a8', width=2)))
-        #         except Exception:
-        #             pass
-
-        #         cont.update_layout(
-        #             xaxis_title='Total surgeries (2024)',
-        #             yaxis_title='Robotic % (per hospital)',
-        #             height=420,
-        #             plot_bgcolor='rgba(0,0,0,0)',
-        #             paper_bgcolor='rgba(0,0,0,0)'
-        #         )
-        #         st.plotly_chart(cont, use_container_width=True)
-        #         # WTLF + key findings for continuous scatter
-        #         try:
-        #             r = float(np.corrcoef(xvals, yvals)[0,1]) if len(xvals) > 1 else 0.0
-        #             with st.expander("What to look for and key findings"):
-        #                 st.markdown(
-        #                     f"""
-        #                     **What to look for:**
-        #                     - Overall relationship slope between volume and robotic%
-        #                     - Clusters and outliers at high/low volumes
-
-        #                     **Key findings:**
-        #                     - Linear trend slope: **{slope:.3f}** percentage points per surgery (approx)
-        #                     - Correlation (r): **{r:.2f}**
-        #                     """
-        #                 )
-        #         except Exception:
-        #             pass
-        # except Exception:
-        #     pass
