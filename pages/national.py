@@ -1008,12 +1008,12 @@ st.stop()
 # Affiliation trends line plot
 st.markdown(
     """
-    <div class=\"nv-info-wrap\">
-      <div class=\"nv-h3\">Hospital Affiliation Trends (2020–2024)</div>
-      <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
-        <div class=\"nv-tooltiptext\">
+    <div class="nv-info-wrap">
+      <div class="nv-h3">Activity by Affiliation Trends (2021–2024)</div>
+      <div class="nv-tooltip"><span class="nv-info-badge">i</span>
+        <div class="nv-tooltiptext">
           <b>Understanding this chart:</b><br/>
-          This stacked area chart shows how hospital affiliations have evolved from 2020 to 2024. The total height of the chart at any point represents the total number of hospitals, while the colored segments show the proportion of each affiliation type.<br/><br/>
+          This stacked area chart shows the evolution of surgical volume (total procedures) by hospital affiliation type.<br/><br/>
           <b>Affiliation Types:</b><br/>
           Public – Univ.: Public hospitals with university/academic affiliation<br/>
           Public – Non‑Acad.: Public hospitals without academic affiliation<br/>
@@ -1026,85 +1026,102 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-with st.expander("What to look for and key findings"):
-    try:
-        # Compute key changes 2020 -> 2024
-        base_year = 2020
-        last_year = 2024
-        diffs = {cat: affiliation_trends[cat].get(last_year, 0) - affiliation_trends[cat].get(base_year, 0) for cat in ['Public – Univ.', 'Public – Non-Acad.', 'Private – For-profit', 'Private – Not-for-profit']}
-        top_inc_cat = max(diffs.items(), key=lambda x: x[1])[0] if diffs else None
-        top_dec_cat = min(diffs.items(), key=lambda x: x[1])[0] if diffs else None
+# Load data locally from CSV
+try:
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    status_csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_VOL_STATUS_YEAR.csv")
+    df_status = pd.read_csv(status_csv_path)
+
+    # Filter for years 2021-2024
+    df_status = df_status[df_status['annee'].isin([2021, 2022, 2023, 2024])]
+    
+    # Map status to display names
+    status_mapping = {
+        'public academic': 'Public – Univ.',
+        'public': 'Public – Non-Acad.',
+        'private for profit': 'Private – For-profit',
+        'private not-for-profit': 'Private – Not-for-profit'
+    }
+    df_status['Affiliation'] = df_status['statut'].map(status_mapping)
+    df_status = df_status.dropna(subset=['Affiliation'])
+    
+    # Prepare data for plotting
+    trend_df = df_status.rename(columns={'annee': 'Year', 'n': 'Count'})
+    
+    # Calculate key findings (2024 vs 2021)
+    df_2024 = trend_df[trend_df['Year'] == 2024].set_index('Affiliation')['Count']
+    df_2021 = trend_df[trend_df['Year'] == 2021].set_index('Affiliation')['Count']
+    
+    diffs = {}
+    for cat in key_categories:
+        val_24 = df_2024.get(cat, 0)
+        val_21 = df_2021.get(cat, 0)
+        diffs[cat] = val_24 - val_21
+
+    top_inc_cat = max(diffs.items(), key=lambda x: x[1])[0] if diffs else None
+    top_dec_cat = min(diffs.items(), key=lambda x: x[1])[0] if diffs else None
+
+    key_categories = ['Public – Univ.', 'Public – Non-Acad.', 'Private – For-profit', 'Private – Not-for-profit']
+
+    with st.expander("What to look for and key findings"):
         st.markdown(
             f"""
             **What to look for:**
-            - Shifts in affiliation mix between 2020 and 2024
-            - Whether public or private segments gained share
-            - Academic vs non‑academic trajectories
-
-            **Key findings:**
-            - Largest increase: **{top_inc_cat if top_inc_cat else 'n/a'}** ({diffs.get(top_inc_cat, 0):+d})
-            - Largest decrease: **{top_dec_cat if top_dec_cat else 'n/a'}** ({diffs.get(top_dec_cat, 0):+d})
+            - Volume shifts between public and private sectors
+            - Which affiliation type is driving growth or decline
+            
+            **Key findings (2024 vs 2021):**
+            - Largest volume increase: **{top_inc_cat if top_inc_cat and diffs[top_inc_cat] > 0 else 'None'}** ({diffs.get(top_inc_cat, 0):+d})
+            - Largest volume decrease: **{top_dec_cat if top_dec_cat and diffs[top_dec_cat] < 0 else 'None'}** ({diffs.get(top_dec_cat, 0):+d})
             """
         )
-    except Exception:
-        st.markdown("**What to look for:** Compare the stacked areas across years to spot increases or decreases by affiliation.\n\n**Key findings:** Data sufficient to compute detailed deltas was not available.")
 
-# Removed previous blue info box in favor of hover tooltip + dropdown
-
-# Prepare data for line chart
-trend_data = []
-for year in range(2020, 2025):
-    for category in ['Public – Univ.', 'Public – Non-Acad.', 'Private – For-profit', 'Private – Not-for-profit']:
-        count = affiliation_trends[category].get(year, 0)
-        trend_data.append({
-            'Year': year,
-            'Affiliation': category,
-            'Count': count
-        })
-
-trend_df = pd.DataFrame(trend_data)
-
-if not trend_df.empty:
-    fig = px.area(
-        trend_df,
-        x='Year',
-        y='Count',
-        color='Affiliation',
-        title="Hospital Affiliation Trends Over Time",
-        color_discrete_map={
-            'Public – Univ.': '#ee6055',
-            'Public – Non-Acad.': '#60d394',
-            'Private – For-profit': '#ffd97d',
-            'Private – Not-for-profit': '#7161ef'
-        }
-    )
-    
-    fig.update_layout(
-        xaxis_title="Year",
-        yaxis_title="Number of Hospitals",
-        hovermode='x unified',
-        height=400,
-        showlegend=True,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(size=12),
-        margin=dict(l=50, r=50, t=80, b=50),
-        xaxis=dict(
-            tickmode='array',
-            tickvals=[2020, 2021, 2022, 2023, 2024],
-            ticktext=['2020', '2021', '2022', '2023', '2024'],
-            tickformat='d'
+    # Plot
+    if not trend_df.empty:
+        fig = px.area(
+            trend_df,
+            x='Year',
+            y='Count',
+            color='Affiliation',
+            title="Surgical Volume by Affiliation Over Time",
+            color_discrete_map={
+                'Public – Univ.': '#ee6055',
+                'Public – Non-Acad.': '#60d394',
+                'Private – For-profit': '#ffd97d',
+                'Private – Not-for-profit': '#7161ef'
+            },
+            category_orders={'Affiliation': key_categories}
         )
-    )
-    
-    fig.update_traces(
-        line=dict(width=0),
-        opacity=0.8
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("No affiliation trend data available.")
+        
+        fig.update_layout(
+            xaxis_title="Year",
+            yaxis_title="Total Procedures",
+            hovermode='x unified',
+            height=400,
+            showlegend=True,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12),
+            margin=dict(l=50, r=50, t=80, b=50),
+            xaxis=dict(
+                tickmode='array',
+                tickvals=[2021, 2022, 2023, 2024],
+                ticktext=['2021', '2022', '2023', '2024'],
+                tickformat='d'
+            )
+        )
+        
+        fig.update_traces(
+            line=dict(width=0),
+            opacity=0.8
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No data available after filtering.")
+
+except Exception as e:
+    st.error(f"Error loading affiliation trends: {e}")
 
 # --- (3) PROCEDURES ---
 st.header("Procedures")
