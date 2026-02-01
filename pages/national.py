@@ -174,87 +174,148 @@ st.markdown('<div style="width:100%; text-align:right; margin-bottom:20px; font-
 # Row 1
 col1, col2 = st.columns(2)
 
-# Card 1: Monthly Surgeries (Placeholder)
+# Card 1: Hospital Labels by Affiliation Type
 with col1:
     with st.container():
+        # Compute affiliation breakdown
+        # Usually from `lib.national_utils`, assuming it's imported or available
+        # It's already reused in the bottom section, so we just call it.
+        try:
+             # Need to calculate it here
+            affiliation_data = compute_affiliation_breakdown_2024(df)
+            label_breakdown = affiliation_data['label_breakdown']
+            
+            # Prepare data for plotting
+            categories = ['Public – Univ.', 'Public – Non-Acad.', 'Private – Not-for-profit', 'Private – For-profit']
+            # Map simplified categories for display if needed, but keys must match dictionary
+            
+            # Stack components
+            soffco = [label_breakdown.get(cat, {}).get('SOFFCO Label', 0) for cat in categories]
+            cso = [label_breakdown.get(cat, {}).get('CSO Label', 0) for cat in categories]
+            both = [label_breakdown.get(cat, {}).get('Both', 0) for cat in categories]
+            none = [label_breakdown.get(cat, {}).get('None', 0) for cat in categories]
+            
+            fig_aff = go.Figure()
+            
+            # Order: None (Bottom) -> Both -> CSO -> SOFFCO (Top) ?? 
+            # Reference image order seems to be: SOFFCO(Green), CSO(Yellow), Both(Blue), None(Red/Pink)
+            # Let's stack them as they appear in legend or image
+            
+            # Trace 1: SOFFCO Label (Green)
+            fig_aff.add_trace(go.Bar(
+                name='SOFFCO Label', x=categories, y=soffco, marker_color='#76D7C4'
+            ))
+            # Trace 2: CSO Label (Yellow)
+            fig_aff.add_trace(go.Bar(
+                name='CSO Label', x=categories, y=cso, marker_color='#F7DC6F'
+            ))
+            # Trace 3: Both (Blue)
+            fig_aff.add_trace(go.Bar(
+                name='Both', x=categories, y=both, marker_color='#00BFFF'
+            ))
+            # Trace 4: None (Red/Pink)
+            fig_aff.add_trace(go.Bar(
+                name='None', x=categories, y=none, marker_color='#F1948A'
+            ))
+
+            fig_aff.update_layout(
+                barmode='stack',
+                margin=dict(t=20, b=0, l=0, r=0),
+                height=250,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                legend=dict(orientation="v", yanchor="top", y=1, xanchor="right", x=1.2, font=dict(size=9)),
+                xaxis=dict(showgrid=False, tickfont=dict(size=10)),
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', title="Number of Hospitals")
+            )
+
+        except Exception as e:
+            st.error(f"Error computing affiliation data: {e}")
+            fig_aff = go.Figure()
+
         st.markdown("""
         <div class="summary-card">
-            <div class="card-title">Monthly Surgeries with Rolling Statistics</div>
-            <div style="height: 300px; display: flex; align-items: center; justify-content: center; background: #333; border-radius: 8px; border: 1px dashed #555;">
-                <span style="color: #888;">Graph Placeholder</span>
-            </div>
-            <div class="ici-link">Bien plus de détails sur <b>les tendances</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+            <div class="card-title">Hospital Labels by Affiliation Type</div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(fig_aff, use_container_width=True, config={'displayModeBar': False})
+        st.markdown("""
+            <div class="ici-link">Bien plus de détails sur <b>l'activité des hôpitaux</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
         </div>
         """, unsafe_allow_html=True)
 
 # Card 2: Intervention Types
+# Card 2: Intervention Types
 with col2:
     with st.container():
-        # Clean data for Card 2
-        interventions_data = df.copy()
-        
-        # Calculate stats for 2021-202X (assuming up to max date)
-        if 'year' in interventions_data.columns:
-            mask_202x = interventions_data['year'] >= 2021
-        elif 'annee' in interventions_data.columns:
-            mask_202x = interventions_data['annee'] >= 2021
-        else:
-            mask_202x = [True] * len(interventions_data)
-        
-        df_202x = interventions_data[mask_202x]
-        
-        # Total procedures
-        total_procs = 0
-        sleeve_pct = 0
-        bypass_pct = 0
-        other_pct = 0
-        
-        if not df_202x.empty:
-            proc_cols = [c for c in ['SLE', 'BPG', 'ANN', 'REV', 'ABL', 'DBP', 'GVC', 'NDD'] if c in df_202x.columns]
-            if proc_cols:
-                totals = df_202x[proc_cols].sum()
-                total_procs = totals.sum()
-                
-                if total_procs > 0:
-                    sleeve_pct = (totals.get('SLE', 0) / total_procs) * 100
-                    bypass_pct = (totals.get('BPG', 0) / total_procs) * 100
-                    other_count = total_procs - totals.get('SLE', 0) - totals.get('BPG', 0)
-                    other_pct = (other_count / total_procs) * 100
+        # Load the CSV data
+        try:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            # Switch to yearly data file
+            csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_TCN_NATL_YEAR.csv")
+            df_activ = pd.read_csv(csv_path)
 
-        # Donut Chart
-        labels = ['Gastric Bypass', 'Sleeve Gastrectomy', 'Other Procedures']
-        values = [bypass_pct, sleeve_pct, other_pct]
-        colors = ['#1f77b4', '#ff7f0e', '#2ca02c'] 
-        
-        fig_donut = go.Figure(data=[go.Pie(
-            labels=labels, 
-            values=values, 
-            hole=.6,
-            marker_colors=colors,
-            textinfo='percent+label',
-            showlegend=False
-        )])
-        fig_donut.update_layout(
-            margin=dict(t=0, b=0, l=0, r=0),
-            height=200,
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            annotations=[dict(text='', x=0.5, y=0.5, font_size=20, showarrow=False)]
-        )
+            # Filter for 2021-2024
+            df_activ = df_activ[df_activ['annee'].isin([2021, 2022, 2023, 2024])]
+            
+            # Calculate totals and ratios from filtered data
+            total_procs = df_activ['n'].sum()
+            
+            # Group by procedure type to get totals
+            totals_by_proc = df_activ.groupby('baria_t')['n'].sum()
+
+            sleeve_n = totals_by_proc.get('SLE', 0)
+            bypass_n = totals_by_proc.get('BPG', 0)
+            
+            sleeve_pct = (sleeve_n / total_procs * 100) if total_procs > 0 else 0
+            bypass_pct = (bypass_n / total_procs * 100) if total_procs > 0 else 0
+            
+            # Others: Total - (Sleeve + Bypass)
+            others_n = total_procs - sleeve_n - bypass_n
+            other_pct = (others_n / total_procs * 100) if total_procs > 0 else 0
+
+            # Donut Chart Data
+            labels = ['Gastric Bypass', 'Sleeve Gastrectomy', 'Other Procedures']
+            values = [bypass_pct, sleeve_pct, other_pct]
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c'] 
+            
+            fig_donut = go.Figure(data=[go.Pie(
+                labels=labels, 
+                values=values, 
+                hole=.6,
+                marker_colors=colors,
+                textinfo='percent+label',
+                showlegend=False
+            )])
+            fig_donut.update_layout(
+                margin=dict(t=0, b=0, l=0, r=0),
+                height=200,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                annotations=[dict(text='', x=0.5, y=0.5, font_size=20, showarrow=False)]
+            )
+            
+            prediction_text = "to be determined"
+
+        except Exception as e:
+            st.error(f"Error loading activity data: {e}")
+            total_procs = 0
+            sleeve_pct = 0
+            bypass_pct = 0
+            prediction_text = "Error"
+            fig_donut = go.Figure()
 
         st.markdown(f"""
         <div class="summary-card">
-            <div class="card-title">Type d'intervention de chirurgie bariatrique (2021-202x)</div>
+            <div class="card-title">Type d'intervention de chirurgie bariatrique (2021-2024)</div>
             <div style="display: flex; gap: 15px;">
                 <div style="width: 40%; display: flex; flex-direction: column; justify-content: center; gap: 10px;">
                      <div class="stat-box">
                         <div style="color: #a0a0a0; font-size: 0.8rem;">Total procedures</div>
                         <div style="font-size: 1.2rem; font-weight: bold; color:white;">{int(total_procs):,}</div>
-                        <div style="color: #a0a0a0; font-size: 0.7rem;">(up to Nov 3rd)</div>
                      </div>
                      <div class="stat-box">
                         <div style="color: #a0a0a0; font-size: 0.8rem;">Prediction</div>
-                        <div class="prediction-text" style="font-size: 1.2rem;">-7%</div>
+                        <div class="prediction-text" style="font-size: 1.0rem;">{prediction_text}</div>
                      </div>
                      <div class="stat-box">
                         <div style="color: #a0a0a0; font-size: 0.8rem;">Sleeve/Bypass</div>
@@ -269,7 +330,7 @@ with col2:
         st.markdown("""
                 </div>
             </div>
-            <div class="ici-link">Analyse plus détaillée du <b>type d'intervention bariatrique</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+            <div class="ici-link">Analyse plus détaillée du type d'intervention bariatrique -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -277,55 +338,57 @@ with col2:
 col3, col4 = st.columns(2)
 
 # Card 3: MBS Robotic Rate
+# Card 3: MBS Robotic Rate
 with col3:
     with st.container():
-        # Logic from "Advanced Procedure Metrics" for robotic rate
-        # We need trends for Sleeve vs Bypass over 2020-2024
-        
-        # Calculate yearly rates
-        robic_years = []
-        robic_sleeve = []
-        robic_bypass = []
-        
-        if not procedure_details.empty:
-            for y in range(2020, 2025):
-                y_data = procedure_details[procedure_details['year'] == y]
-                if not y_data.empty:
-                    # Sleeve
-                    sleeve_data = y_data[y_data['procedure_type'] == 'SLE']
-                    sleeve_tot = sleeve_data['procedure_count'].sum()
-                    sleeve_rob = sleeve_data[sleeve_data['surgical_approach'] == 'ROB']['procedure_count'].sum()
-                    sleeve_rate = (sleeve_rob / sleeve_tot * 100) if sleeve_tot > 0 else 0
-                    
-                    # Bypass
-                    bpg_data = y_data[y_data['procedure_type'] == 'BPG']
-                    bpg_tot = bpg_data['procedure_count'].sum()
-                    bpg_rob = bpg_data[bpg_data['surgical_approach'] == 'ROB']['procedure_count'].sum()
-                    bpg_rate = (bpg_rob / bpg_tot * 100) if bpg_tot > 0 else 0
-                    
-                    robic_years.append(y)
-                    robic_sleeve.append(sleeve_rate)
-                    robic_bypass.append(bpg_rate)
-        
-        if not robic_years:
-            # Fallback dummy data if empty
-             robic_years = [2020, 2021, 2022, 2023, 2024]
-             robic_sleeve = [0, 0, 0, 0, 0]
-             robic_bypass = [0, 0, 0, 0, 0]
+        # Load the CSV data for robotic rate
+        try:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            rob_csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_APP_NATL_YEAR.csv")
+            df_rob = pd.read_csv(rob_csv_path)
+
+            # Filter for Robotic approach (ROB) and years 2021-2024
+            df_rob = df_rob[(df_rob['vda'] == 'ROB') & (df_rob['annee'].isin([2021, 2022, 2023, 2024]))]
+            
+            # Sort by year just in case
+            df_rob = df_rob.sort_values('annee')
+            
+            years = df_rob['annee'].tolist()
+            rates = df_rob['pct'].tolist()
+            
+        except Exception as e:
+            st.error(f"Error loading robotic data: {e}")
+            years = []
+            rates = []
 
         fig_rob = go.Figure()
-        fig_rob.add_trace(go.Bar(name='Sleeve gastrectomy', x=robic_years, y=robic_sleeve, marker_color='#003366'))
-        fig_rob.add_trace(go.Bar(name='Gastric Bypass', x=robic_years, y=robic_bypass, marker_color='#004C99'))
+        
+        if years:
+            fig_rob.add_trace(go.Bar(
+                x=years,
+                y=rates,
+                text=[f"{r}%" for r in rates],
+                textposition='outside', # Show text above data
+                marker_color='#003366',
+                name='Robotic Rate'
+            ))
         
         fig_rob.update_layout(
-            barmode='group',
-            margin=dict(t=10, b=0, l=0, r=0),
-            height=250,
+            margin=dict(t=20, b=0, l=0, r=0),
+            height=200,
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
-            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
-            xaxis=dict(showgrid=False)
+            xaxis=dict(
+                showgrid=False, 
+                type='category', # Treat years as categories so they are evenly spaced
+                tickfont=dict(color='#888')
+            ), 
+            yaxis=dict(
+                showgrid=False, # Clean look per reference
+                visible=False,   # Hide y-axis if we have labels
+                range=[0, max(rates)*1.2 if rates else 10] # Add headroom for labels
+            ),
+            showlegend=False
         )
 
         st.markdown("""
@@ -339,35 +402,63 @@ with col3:
         """, unsafe_allow_html=True)
 
 # Card 4: Severe Complications
+# Card 4: Severe Complications
 with col4:
     with st.container():
-        # Reuse complication logic
-        # Calculate quarterly national averages
-        quarterly_comp = pd.DataFrame()
-        if not complications.empty:
-            quarterly_comp = complications.groupby('quarter_date').agg({
-                'procedures_count': 'sum',
-                'complications_count': 'sum'
-            }).reset_index()
-            quarterly_comp['actual_rate'] = (quarterly_comp['complications_count'] / quarterly_comp['procedures_count'] * 100)
+        # Load the CSV data for complications
+        try:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            comp_csv_path = os.path.join(base_dir, "new_data", "COMPLICATIONS", "TAB_COMPL_GRADE_NATL_YEAR.csv")
+            df_comp = pd.read_csv(comp_csv_path)
+
+            # Filter for years 2021-2024 and Severe Complications (Grade >= 3)
+            # The CSV has 'clav_cat_90' which seems to be the grade (3, 4, 5)
+            df_comp = df_comp[
+                (df_comp['annee'].isin([2021, 2022, 2023, 2024])) & 
+                (df_comp['clav_cat_90'].isin([3, 4, 5]))
+            ]
+            
+            # Group by year and sum the percentages (since they are parts of the total)
+            yearly_severe = df_comp.groupby('annee')['COMPL_pct'].sum().reset_index()
+            yearly_severe = yearly_severe.sort_values('annee')
+            
+            comp_years = yearly_severe['annee'].tolist()
+            comp_rates = yearly_severe['COMPL_pct'].tolist()
+            
+        except Exception as e:
+            st.error(f"Error loading complications data: {e}")
+            comp_years = []
+            comp_rates = []
         
         fig_comp = go.Figure()
-        if not quarterly_comp.empty:
+        if comp_years:
              fig_comp.add_trace(go.Scatter(
-                x=quarterly_comp['quarter_date'],
-                y=quarterly_comp['actual_rate'],
-                mode='lines',
-                line=dict(color='#FF8C00', width=2),
+                x=comp_years,
+                y=comp_rates,
+                mode='lines+markers+text',
+                text=[f"{r:.1f}%" for r in comp_rates],
+                textposition="top center",
+                line=dict(color='#FF8C00', width=3),
+                marker=dict(size=8),
                 showlegend=False
             ))
         
         fig_comp.update_layout(
-            margin=dict(t=10, b=0, l=0, r=0),
-            height=250,
+            margin=dict(t=20, b=0, l=0, r=0),
+            height=200,
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
-            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', range=[0, 5]),
-            xaxis=dict(showgrid=False)
+            xaxis=dict(
+                showgrid=False,
+                type='category',
+                tickfont=dict(color='#888')
+            ), 
+            yaxis=dict(
+                showgrid=True, 
+                gridcolor='rgba(255,255,255,0.1)', 
+                range=[0, max(comp_rates)*1.3 if comp_rates else 5],
+                tickfont=dict(color='#888')
+            )
         )
 
         st.markdown("""
