@@ -266,68 +266,105 @@ with col2:
 
             # Load Trend Data for Prediction
             trend_csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_TREND_NATL.csv")
+            diff_pct_val = 0
             if os.path.exists(trend_csv_path):
                 df_trend = pd.read_csv(trend_csv_path)
-                diff_pct = df_trend['diff_pct'].iloc[0]
-                prediction_text = f"{diff_pct}%"
+                diff_pct_val = df_trend['diff_pct'].iloc[0]
+                prediction_text = f"{diff_pct_val:+.1f}%"
             else:
                 prediction_text = "N/A"
 
-            # Donut Chart Data
+            # Create Combined Figure (Stats + Donut)
+            fig_combined = go.Figure()
+
+            # Donut Chart (Right Side)
             labels = ['Gastric Bypass', 'Sleeve Gastrectomy', 'Other Procedures']
             values = [bypass_pct, sleeve_pct, other_pct]
             colors = ['#1f77b4', '#ff7f0e', '#2ca02c'] 
             
-            fig_donut = go.Figure(data=[go.Pie(
+            fig_combined.add_trace(go.Pie(
                 labels=labels, 
                 values=values, 
                 hole=.6,
                 marker_colors=colors,
                 textinfo='percent+label',
-                showlegend=False
-            )])
-            fig_donut.update_layout(
-                margin=dict(t=0, b=0, l=0, r=0),
-                height=200,
+                showlegend=False,
+                domain={'x': [0.5, 1], 'y': [0, 1]}
+            ))
+
+            # Stats Boxes (Left Side Annotations)
+            # Box 1: Total Procedures
+            fig_combined.add_annotation(
+                x=0.05, y=0.90, xref="paper", yref="paper",
+                text="Total procedures", showarrow=False,
+                font=dict(color="#a0a0a0", size=12), xanchor="left"
+            )
+            fig_combined.add_annotation(
+                x=0.05, y=0.78, xref="paper", yref="paper",
+                text=f"{int(total_procs):,}", showarrow=False,
+                font=dict(color="white", size=20, weight="bold"), xanchor="left"
+            )
+
+            # Box 2: Prediction
+            pred_color = "#ff4b4b" if diff_pct_val < 0 else "#2ca02c"
+            fig_combined.add_annotation(
+                x=0.05, y=0.55, xref="paper", yref="paper",
+                text="Prediction", showarrow=False,
+                font=dict(color="#a0a0a0", size=12), xanchor="left"
+            )
+            fig_combined.add_annotation(
+                x=0.05, y=0.43, xref="paper", yref="paper",
+                text=prediction_text, showarrow=False,
+                font=dict(color=pred_color, size=20, weight="bold"), xanchor="left"
+            )
+
+            # Box 3: Sleeve/Bypass
+            fig_combined.add_annotation(
+                x=0.05, y=0.20, xref="paper", yref="paper",
+                text="Sleeve/Bypass", showarrow=False,
+                font=dict(color="#a0a0a0", size=12), xanchor="left"
+            )
+            fig_combined.add_annotation(
+                x=0.05, y=0.08, xref="paper", yref="paper",
+                text=f"{sleeve_pct:.0f}%/{bypass_pct:.0f}%", showarrow=False,
+                font=dict(color="white", size=16, weight="bold"), xanchor="left"
+            )
+
+            # Add Box Shapes
+            box_style = dict(
+                type="rect", xref="paper", yref="paper",
+                fillcolor="rgba(255, 255, 255, 0.05)",
+                line=dict(color="rgba(255, 255, 255, 0.1)", width=1),
+                layer="below"
+            )
+            
+            fig_combined.update_layout(
+                shapes=[
+                    # Box 1
+                    dict(x0=0, x1=0.45, y0=0.72, y1=0.98, **box_style),
+                    # Box 2
+                    dict(x0=0, x1=0.45, y0=0.37, y1=0.63, **box_style),
+                    # Box 3
+                    dict(x0=0, x1=0.45, y0=0.02, y1=0.28, **box_style),
+                ],
+                margin=dict(t=10, b=10, l=10, r=10),
+                height=250, # Increased height to fit boxes
                 paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                annotations=[dict(text='', x=0.5, y=0.5, font_size=20, showarrow=False)]
+                plot_bgcolor='rgba(0,0,0,0)'
             )
             
         except Exception as e:
             st.error(f"Error loading activity/trend data: {e}")
-            total_procs = 0
-            sleeve_pct = 0
-            bypass_pct = 0
-            prediction_text = "Error"
-            fig_donut = go.Figure()
+            fig_combined = go.Figure()
 
         st.markdown(f"""
         <div class="summary-card">
             <div class="card-title">Type d'intervention de chirurgie bariatrique (2021-2024)</div>
-            <div style="display: flex; gap: 15px;">
-                <div style="width: 40%; display: flex; flex-direction: column; justify-content: center; gap: 10px;">
-                     <div class="stat-box">
-                        <div style="color: #a0a0a0; font-size: 0.8rem;">Total procedures</div>
-                        <div style="font-size: 1.2rem; font-weight: bold; color:white;">{int(total_procs):,}</div>
-                     </div>
-                     <div class="stat-box">
-                        <div style="color: #a0a0a0; font-size: 0.8rem;">Prediction</div>
-                        <div class="prediction-text" style="font-size: 1.0rem;">{prediction_text}</div>
-                     </div>
-                     <div class="stat-box">
-                        <div style="color: #a0a0a0; font-size: 0.8rem;">Sleeve/Bypass</div>
-                        <div style="font-size: 1rem; font-weight: bold; color:white;">{sleeve_pct:.0f}%/{bypass_pct:.0f}%</div>
-                     </div>
-                </div>
-                <div style="width: 60%;">
         """, unsafe_allow_html=True)
         
-        st.plotly_chart(fig_donut, use_container_width=True, config={'displayModeBar': False})
+        st.plotly_chart(fig_combined, use_container_width=True, config={'displayModeBar': False})
         
         st.markdown("""
-                </div>
-            </div>
             <div class="ici-link">Analyse plus détaillée du type d'intervention bariatrique -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
         </div>
         """, unsafe_allow_html=True)
@@ -593,7 +630,8 @@ with col6:
             <div class="ici-link">Bien plus de détails sur <b>l'activité des hôpitaux</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
         </div>
         """, unsafe_allow_html=True)
-    st.exception(e)
+
+
 
 ## Moved: Kaplan–Meier national complication rate section now lives under the "National Complication Rate Trends" subsection below.
 
