@@ -295,12 +295,12 @@ with col2:
             # Stats Boxes (Left Side Annotations)
             # Box 1: Total Procedures
             fig_combined.add_annotation(
-                x=0.05, y=0.90, xref="paper", yref="paper",
+                x=0.06, y=0.88, xref="paper", yref="paper",
                 text="Total procedures", showarrow=False,
                 font=dict(color="#a0a0a0", size=12), xanchor="left"
             )
             fig_combined.add_annotation(
-                x=0.05, y=0.78, xref="paper", yref="paper",
+                x=0.06, y=0.79, xref="paper", yref="paper",
                 text=f"{int(total_procs):,}", showarrow=False,
                 font=dict(color="white", size=20, weight="bold"), xanchor="left"
             )
@@ -308,24 +308,24 @@ with col2:
             # Box 2: Prediction
             pred_color = "#ff4b4b" if diff_pct_val < 0 else "#2ca02c"
             fig_combined.add_annotation(
-                x=0.05, y=0.55, xref="paper", yref="paper",
+                x=0.06, y=0.53, xref="paper", yref="paper",
                 text="Prediction", showarrow=False,
                 font=dict(color="#a0a0a0", size=12), xanchor="left"
             )
             fig_combined.add_annotation(
-                x=0.05, y=0.43, xref="paper", yref="paper",
+                x=0.06, y=0.44, xref="paper", yref="paper",
                 text=prediction_text, showarrow=False,
                 font=dict(color=pred_color, size=20, weight="bold"), xanchor="left"
             )
 
             # Box 3: Sleeve/Bypass
             fig_combined.add_annotation(
-                x=0.05, y=0.20, xref="paper", yref="paper",
+                x=0.06, y=0.18, xref="paper", yref="paper",
                 text="Sleeve/Bypass", showarrow=False,
                 font=dict(color="#a0a0a0", size=12), xanchor="left"
             )
             fig_combined.add_annotation(
-                x=0.05, y=0.08, xref="paper", yref="paper",
+                x=0.06, y=0.09, xref="paper", yref="paper",
                 text=f"{sleeve_pct:.0f}%/{bypass_pct:.0f}%", showarrow=False,
                 font=dict(color="white", size=16, weight="bold"), xanchor="left"
             )
@@ -651,184 +651,159 @@ st.markdown("""
 # --- (1) HOSPITAL VOLUME DISTRIBUTION ---
 st.header("Hospital Volume Distribution")
 
-# Compute KPIs
-kpis = compute_national_kpis(df)
-volume_2024 = compute_volume_bins_2024(df)
-baseline_2020_2023 = compute_baseline_bins_2020_2023(df)
+# Load and Process Data Locally
+try:
+    vol_csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_VOL_HOP_YEAR.csv")
+    df_vol = pd.read_csv(vol_csv_path)
 
-# Calculate deltas
-delta_less_50 = volume_2024["<50"] - baseline_2020_2023["<50"]
-delta_more_200 = volume_2024[">200"] - baseline_2020_2023[">200"]
+    # Filter years (assuming 2021 start based on file inspection)
+    # We need 2024 for current, and 2021-2023 for baseline
+    df_vol = df_vol[df_vol['annee'].isin([2021, 2022, 2023, 2024])]
 
-# KPI Row
-col1, col2, col3, col4, col5 = st.columns(5)
+    # Define Bins
+    def assign_bin(n):
+        if n < 50: return "<50"
+        elif 50 <= n < 100: return "50–100"
+        elif 100 <= n < 200: return "100–200"
+        else: return ">200"
 
-with col1:
-    st.metric(
-        "Total Hospitals (2024)", 
-        f"{kpis['total_hospitals_2024']:.0f}"
-    )
-
-with col2:
-    st.metric(
-        "Total Surgeries (2024)", 
-        f"{int(round(kpis['avg_surgeries_per_year'])):,}" # it is total_surgeries_2024
-    )
-
-with col3:
-    # Calculate revision percentage
-    revision_percentage = (kpis['avg_revisions_per_year'] / kpis['avg_surgeries_per_year']) * 100 if kpis['avg_surgeries_per_year'] > 0 else 0
+    df_vol['bin'] = df_vol['n'].apply(assign_bin)
     
-    st.metric(
-        "Total Revisions (2024)", 
-        f"{int(round(kpis['avg_revisions_per_year'])):,}" # it is total_revisions_2024
-    )
-    st.markdown(f"<span style='color: grey; font-size: 0.9em; display:block; margin-top:-8px;'>{revision_percentage:.0f}% of total surgeries</span>", unsafe_allow_html=True)
+    # KPIs for 2024
+    df_2024 = df_vol[df_vol['annee'] == 2024]
+    total_hosp_2024 = df_2024['finessGeoDP'].nunique()
+    total_surg_2024 = df_2024['n'].sum()
+    
+    # Bin counts for 2024
+    counts_2024 = df_2024['bin'].value_counts()
+    
+    hosp_less_50_2024 = counts_2024.get("<50", 0)
+    hosp_more_200_2024 = counts_2024.get(">200", 0)
 
-with col4:
-    delta_color = "normal" if delta_less_50 <= 0 else "inverse"
-    st.metric(
-        "Hospitals <50/year (2024)",
-        f"{int(round(volume_2024['<50'])):,}",
-        delta_color=delta_color
-    )
+    # Baseline (2021-2023) Average
+    df_baseline = df_vol[df_vol['annee'].isin([2021, 2022, 2023])]
+    # Count per year then average
+    baseline_counts_per_year = df_baseline.groupby(['annee', 'bin'])['finessGeoDP'].count().unstack(fill_value=0)
+    avg_baseline = baseline_counts_per_year.mean()
+    
+    hosp_less_50_base = avg_baseline.get("<50", 0)
+    hosp_more_200_base = avg_baseline.get(">200", 0)
+    
+    delta_less_50 = hosp_less_50_2024 - hosp_less_50_base
+    delta_more_200 = hosp_more_200_2024 - hosp_more_200_base
 
-with col5:
-    delta_color = "normal" if delta_more_200 >= 0 else "inverse"
-    st.metric(
-        "Hospitals >200/year (2024)",
-        f"{int(round(volume_2024['>200'])):,}",
-        delta_color=delta_color
-    )
+    # Display KPIs
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Hospitals (2024)", f"{total_hosp_2024}")
+        
+    with col2:
+        st.metric("Total Surgeries (2024)", f"{total_surg_2024:,}")
+        
+    with col3:
+        st.metric(
+            "Hospitals <50/year (2024)", 
+            f"{hosp_less_50_2024}", 
+            delta=f"{delta_less_50:+.1f} vs 21-23 avg",
+            delta_color="inverse"
+        )
+        
+    with col4:
+        st.metric(
+            "Hospitals >200/year (2024)", 
+            f"{hosp_more_200_2024}", 
+            delta=f"{delta_more_200:+.1f} vs 21-23 avg",
+            delta_color="normal"
+        )
 
-# Volume Distribution Chart (with hover info)
-st.markdown(
-    """
-    <div class="nv-info-wrap">
-      <div class="nv-h3">Volume Distribution by Hospital</div>
-      <div class="nv-tooltip"><span class="nv-info-badge">i</span>
-        <div class="nv-tooltiptext">
-          <b>Understanding this chart:</b><br/>
-          This chart shows how hospitals are distributed across different volume categories based on their annual bariatric surgery procedures. The main bars (blue) represent the average number of hospitals in each volume category during the 2020–2023 period, serving as a baseline for comparison.<br/><br/>
-          <b>Volume Categories:</b><br/>
-          &lt;50 procedures/year: Small‑volume hospitals (typically smaller facilities or those just starting bariatric programs)<br/>
-          50–100 procedures/year: Medium‑low volume hospitals<br/>
-          100–200 procedures/year: Medium‑high volume hospitals<br/>
-          &gt;200 procedures/year: High‑volume hospitals (typically specialized centers of excellence)<br/><br/>
-          When you toggle "Show 2024 comparison", the overlay bars (yellow) show the actual 2024 distribution, allowing you to see how hospital volumes have changed compared to the previous 4‑year average.
+    # Chart Section
+    st.markdown("""
+        <div class="nv-info-wrap">
+          <div class="nv-h3">Volume Distribution by Hospital</div>
+          <div class="nv-tooltip"><span class="nv-info-badge">i</span>
+            <div class="nv-tooltiptext">
+              <b>Understanding this chart:</b><br/>
+              Distribution of hospitals based on annual surgical volume.<br/>
+              Categories: &lt;50, 50–100, 100–200, &gt;200 procedures/year.<br/>
+              Use the toggle to compare 2024 against the 2021–2023 average.
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+    """, unsafe_allow_html=True)
+    
+    # Toggle
+    show_comparison = st.toggle("Show 2024 comparison (vs 2021-23 Avg)", value=True)
+    
+    # Helper to ensure all bins are present in order
+    bin_order = ["<50", "50–100", "100–200", ">200"]
+    
+    # Align data to bin order
+    y_2024 = [counts_2024.get(b, 0) for b in bin_order]
+    y_base = [avg_baseline.get(b, 0) for b in bin_order]
+    
+    fig_vol = go.Figure()
+    
+    if show_comparison:
+        # Baseline Bars
+        fig_vol.add_trace(go.Bar(
+            x=bin_order, y=y_base,
+            name='2021-2023 Average',
+            marker_color='#2E86AB',
+            hovertemplate='<b>%{x}</b><br>Avg: %{y:.1f}<extra></extra>'
+        ))
+        
+        # 2024 Overlay
+        fig_vol.add_trace(go.Bar(
+            x=bin_order, y=y_2024,
+            name='2024',
+            marker_color='rgba(255, 193, 7, 0.7)',
+            text=y_2024,
+            textposition='auto',
+            hovertemplate='<b>%{x}</b><br>2024: %{y}<extra></extra>'
+        ))
+        barmode = 'overlay'
+    else:
+        # Only 2024
+        fig_vol.add_trace(go.Bar(
+            x=bin_order, y=y_2024,
+            name='2024',
+            marker_color='#FFC107',
+            text=y_2024,
+            textposition='auto',
+            hovertemplate='<b>%{x}</b><br>2024: %{y}<extra></extra>'
+        ))
+        barmode = 'group'
 
-# Pre-compute values used in dropdown key findings
-small_vol_2024 = int(volume_2024['<50'])
-small_vol_baseline = round(baseline_2020_2023['<50'])
-med_low_2024 = int(volume_2024['50–100'])
-med_low_baseline = round(baseline_2020_2023['50–100'])
-med_high_2024 = int(volume_2024['100–200'])
-med_high_baseline = round(baseline_2020_2023['100–200'])
-high_vol_2024 = int(volume_2024['>200'])
-high_vol_baseline = round(baseline_2020_2023['>200'])
-
-# Calculate percentages
-high_vol_pct = round((high_vol_2024 / kpis['total_hospitals_2024']) * 100)
-small_vol_pct = round((small_vol_2024 / kpis['total_hospitals_2024']) * 100)
-med_low_pct = round((med_low_2024 / kpis['total_hospitals_2024']) * 100)
-med_high_pct = round((med_high_2024 / kpis['total_hospitals_2024']) * 100)
-
-# Calculate trends
-concentration_trend = "increased" if high_vol_2024 > high_vol_baseline else "decreased"
-small_vol_trend = "More" if small_vol_2024 > small_vol_baseline else "Fewer"
-med_low_trend = "increased" if med_low_2024 > med_low_baseline else "decreased"
-med_high_trend = "increased" if med_high_2024 > med_high_baseline else "decreased"
-
-# Dropdown with only What to look for + Key findings (understanding lives in the info tooltip above)
-with st.expander("What to look for and key findings"):
-    st.markdown(
-        f"""
-        **What to look for:**
-        - Distribution shifts across the four volume bins
-        - Growth or decline in the medium categories (50–100, 100–200)
-        - Concentration of high‑volume centers (>200)
-
-        **Key findings:**
-        - Small‑volume hospitals (<50/year): **{small_vol_2024}** in 2024 vs **{small_vol_baseline}** avg (2020–2023)
-        - High‑volume hospitals (>200/year): **{high_vol_2024}** in 2024 vs **{high_vol_baseline}** avg (2020–2023)
-        - Medium‑low volume (50–100/year): **{med_low_2024}** in 2024 vs **{med_low_baseline}** avg — **{med_low_trend}** by **{abs(med_low_2024 - med_low_baseline)}** hospitals
-        - Medium‑high volume (100–200/year): **{med_high_2024}** in 2024 vs **{med_high_baseline}** avg — **{med_high_trend}** by **{abs(med_high_2024 - med_high_baseline)}** hospitals
-
-        **Current Distribution (2024):**
-        - <50: **{small_vol_pct}%** of hospitals | 50–100: **{med_low_pct}%** | 100–200: **{med_high_pct}%** | >200: **{high_vol_pct}%**
-        """
+    fig_vol.update_layout(
+        title="Hospital Volume Distribution",
+        xaxis_title="Procedures per Year",
+        yaxis_title="Number of Hospitals",
+        barmode=barmode,
+        hovermode='x unified',
+        height=400,
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        margin=dict(l=50, r=50, t=50, b=50),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
+    
+    st.plotly_chart(fig_vol, use_container_width=True)
+    
+    # Key Findings / Expander
+    with st.expander("Key findings"):
+        st.markdown(f"""
+        **2024 Distribution:**
+        - **{hosp_less_50_2024}** hospitals performed <50 procedures.
+        - **{hosp_more_200_2024}** hospitals performed >200 procedures.
+        
+        **Compared to 2021-2023 Average:**
+        - Small volume (<50): {delta_less_50:+.1f}
+        - High volume (>200): {delta_more_200:+.1f}
+        """)
 
-# (Removed previous info block in favor of hover tooltip)
-
-# Prepare data for chart
-volume_data = []
-for bin_name, count in volume_2024.items():
-    volume_data.append({
-        'Volume Category': bin_name,
-        'Number of Hospitals': count,
-        'Percentage': (count / kpis['total_hospitals_2024']) * 100 if kpis['total_hospitals_2024'] > 0 else 0
-    })
-
-volume_df = pd.DataFrame(volume_data)
-
-# Toggle for 2024 comparison
-show_baseline = st.toggle("Show 2024 comparison", value=True)
-
-# Create Plotly chart
-fig = go.Figure()
-
-# Main bars for 2020-2023 average
-baseline_data = []
-for bin_name, avg_count in baseline_2020_2023.items():
-    baseline_data.append({
-        'Volume Category': bin_name,
-        'Average Hospitals': avg_count
-    })
-baseline_df = pd.DataFrame(baseline_data)
-
-fig.add_trace(go.Bar(
-    x=baseline_df['Volume Category'],
-    y=baseline_df['Average Hospitals'],
-    name='2020-2023 Average',
-    marker_color='#2E86AB',
-    hovertemplate='<b>%{x}</b><br>Average Hospitals: %{y:.2f}<extra></extra>'
-))
-
-if show_baseline:
-    # 2024 bars as overlay (semi-transparent)
-    fig.add_trace(go.Bar(
-        x=volume_df['Volume Category'],
-        y=volume_df['Number of Hospitals'],
-        name='2024',
-        marker_color='rgba(255, 193, 7, 0.7)',
-        hovertemplate='<b>%{x}</b><br>Hospitals: %{y}<br>Percentage: %{text:.2f}%<extra></extra>',
-        text=volume_df['Percentage'],
-        texttemplate='%{text:.2f}%',
-        textposition='auto'
-    ))
-
-fig.update_layout(
-    title="Hospital Volume Distribution",
-    xaxis_title="Annual Interventions per Hospital",
-    yaxis_title="Number of Hospitals",
-    barmode='overlay',
-    hovermode='x unified',
-    showlegend=True,
-    height=400,
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    font=dict(size=12),
-    margin=dict(l=50, r=50, t=80, b=50)
-)
-
-st.plotly_chart(fig, use_container_width=True)
+except Exception as e:
+    st.error(f"Error loading volume data: {e}")
 '''
 
 # --- (2) HOSPITAL AFFILIATION ---
