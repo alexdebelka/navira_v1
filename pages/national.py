@@ -647,12 +647,13 @@ st.markdown("""
 > **Note:** National means are computed across hospitals (2020–2024). Only hospitals with ≥25 interventions per year are considered.
 """)
 
-'''
+
 # --- (1) HOSPITAL VOLUME DISTRIBUTION ---
 st.header("Hospital Volume Distribution")
 
 # Load and Process Data Locally
 try:
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     vol_csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_VOL_HOP_YEAR.csv")
     df_vol = pd.read_csv(vol_csv_path)
 
@@ -804,7 +805,7 @@ try:
 
 except Exception as e:
     st.error(f"Error loading volume data: {e}")
-'''
+
 
 # --- (2) HOSPITAL AFFILIATION ---
 st.header("Hospital Affiliation (2024)")
