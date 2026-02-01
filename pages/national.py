@@ -111,6 +111,54 @@ def calculate_national_averages(df: pd.DataFrame):
 
 national_averages = calculate_national_averages(df)
 
+# --- MAP DATA HELPERS ---
+@st.cache_data(show_spinner=False)
+def load_population_data():
+    """Load and process the population data by department."""
+    try:
+        pop_df = pd.read_csv("data/DS_ESTIMATION_POPULATION (1).csv", sep=';')
+        # Clean and process the data
+        pop_df = pop_df[pop_df['GEO_OBJECT'] == 'DEP'].copy()  # Only departments
+        pop_df = pop_df[pop_df['TIME_PERIOD'] == 2024].copy()  # Use 2024 data (was 2020 in comment but code says 2024?)
+        # Double check, user file says 2020 usually, but let's stick to existing logic if it worked
+        pop_df['dept_code'] = pop_df['GEO'].str.strip().str.replace('"', '')
+        pop_df['population'] = pop_df['OBS_VALUE'].astype(int)
+        return pop_df[['dept_code', 'population']]
+    except Exception as e:
+        st.error(f"Error loading population data: {e}")
+        return pd.DataFrame()
+
+@st.cache_data(show_spinner=False)
+def calculate_surgery_by_department(_df):
+    """Calculate total surgeries by department from hospital data."""
+    try:
+        # Get department from hospital data
+        df_copy = _df.copy()
+        df_copy['dept_code'] = df_copy['code_postal'].astype(str).str[:2]
+        
+        # Handle special cases (Corsica, overseas)
+        def standardize_dept_code(postal_code):
+            postal_str = str(postal_code)
+            if postal_str.startswith('97') or postal_str.startswith('98'):
+                return postal_str[:3]
+            elif postal_str.startswith('201'):
+                return '2A'
+            elif postal_str.startswith('202'):
+                return '2B'
+            else:
+                return postal_str[:2]
+        
+        df_copy['dept_code'] = df_copy['code_postal'].astype(str).apply(standardize_dept_code)
+        
+        # Sum total procedures by department
+        dept_surgeries = df_copy.groupby('dept_code')['total_procedures_year'].sum().reset_index()
+        dept_surgeries.columns = ['dept_code', 'total_surgeries']
+        
+        return dept_surgeries
+    except Exception as e:
+        st.error(f"Error calculating surgery totals: {e}")
+        return pd.DataFrame()
+
 # --- Page Title and Notice ---
 st.title("🇫🇷 National Overview")
 
@@ -174,83 +222,26 @@ st.markdown('<div style="width:100%; text-align:right; margin-bottom:20px; font-
 # Row 1
 col1, col2 = st.columns(2)
 
-# Card 1: Hospital Labels by Affiliation Type
+# Card 1: Monthly Surgeries (Placeholder)
 with col1:
     with st.container():
-        # Compute affiliation breakdown
-        # Usually from `lib.national_utils`, assuming it's imported or available
-        # It's already reused in the bottom section, so we just call it.
-        try:
-             # Need to calculate it here
-            affiliation_data = compute_affiliation_breakdown_2024(df)
-            label_breakdown = affiliation_data['label_breakdown']
-            
-            # Prepare data for plotting
-            categories = ['Public – Univ.', 'Public – Non-Acad.', 'Private – Not-for-profit', 'Private – For-profit']
-            # Map simplified categories for display if needed, but keys must match dictionary
-            
-            # Stack components
-            soffco = [label_breakdown.get(cat, {}).get('SOFFCO Label', 0) for cat in categories]
-            cso = [label_breakdown.get(cat, {}).get('CSO Label', 0) for cat in categories]
-            both = [label_breakdown.get(cat, {}).get('Both', 0) for cat in categories]
-            none = [label_breakdown.get(cat, {}).get('None', 0) for cat in categories]
-            
-            fig_aff = go.Figure()
-            
-            # Order: None (Bottom) -> Both -> CSO -> SOFFCO (Top) ?? 
-            # Reference image order seems to be: SOFFCO(Green), CSO(Yellow), Both(Blue), None(Red/Pink)
-            # Let's stack them as they appear in legend or image
-            
-            # Trace 1: SOFFCO Label (Green)
-            fig_aff.add_trace(go.Bar(
-                name='SOFFCO Label', x=categories, y=soffco, marker_color='#76D7C4'
-            ))
-            # Trace 2: CSO Label (Yellow)
-            fig_aff.add_trace(go.Bar(
-                name='CSO Label', x=categories, y=cso, marker_color='#F7DC6F'
-            ))
-            # Trace 3: Both (Blue)
-            fig_aff.add_trace(go.Bar(
-                name='Both', x=categories, y=both, marker_color='#00BFFF'
-            ))
-            # Trace 4: None (Red/Pink)
-            fig_aff.add_trace(go.Bar(
-                name='None', x=categories, y=none, marker_color='#F1948A'
-            ))
-
-            fig_aff.update_layout(
-                barmode='stack',
-                margin=dict(t=20, b=0, l=0, r=0),
-                height=250,
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                legend=dict(orientation="v", yanchor="top", y=1, xanchor="right", x=1.2, font=dict(size=9)),
-                xaxis=dict(showgrid=False, tickfont=dict(size=10)),
-                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', title="Number of Hospitals")
-            )
-
-        except Exception as e:
-            st.error(f"Error computing affiliation data: {e}")
-            fig_aff = go.Figure()
-
         st.markdown("""
         <div class="summary-card">
-            <div class="card-title">Hospital Labels by Affiliation Type</div>
-        """, unsafe_allow_html=True)
-        st.plotly_chart(fig_aff, use_container_width=True, config={'displayModeBar': False})
-        st.markdown("""
-            <div class="ici-link">Bien plus de détails sur <b>l'activité des hôpitaux</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+            <div class="card-title">Monthly Surgeries with Rolling Statistics</div>
+            <div style="height: 300px; display: flex; align-items: center; justify-content: center; background: #333; border-radius: 8px; border: 1px dashed #555;">
+                <span style="color: #888;">Graph Placeholder</span>
+            </div>
+            <div class="ici-link">Bien plus de détails sur <b>les tendances</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
         </div>
         """, unsafe_allow_html=True)
 
-# Card 2: Intervention Types
 # Card 2: Intervention Types
 with col2:
     with st.container():
         # Load the CSV data
         try:
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            # Switch to yearly data file
+            # Load Activity Data
             csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_TCN_NATL_YEAR.csv")
             df_activ = pd.read_csv(csv_path)
 
@@ -273,6 +264,15 @@ with col2:
             others_n = total_procs - sleeve_n - bypass_n
             other_pct = (others_n / total_procs * 100) if total_procs > 0 else 0
 
+            # Load Trend Data for Prediction
+            trend_csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_TREND_NATL.csv")
+            if os.path.exists(trend_csv_path):
+                df_trend = pd.read_csv(trend_csv_path)
+                diff_pct = df_trend['diff_pct'].iloc[0]
+                prediction_text = f"{diff_pct}%"
+            else:
+                prediction_text = "N/A"
+
             # Donut Chart Data
             labels = ['Gastric Bypass', 'Sleeve Gastrectomy', 'Other Procedures']
             values = [bypass_pct, sleeve_pct, other_pct]
@@ -294,10 +294,8 @@ with col2:
                 annotations=[dict(text='', x=0.5, y=0.5, font_size=20, showarrow=False)]
             )
             
-            prediction_text = "to be determined"
-
         except Exception as e:
-            st.error(f"Error loading activity data: {e}")
+            st.error(f"Error loading activity/trend data: {e}")
             total_procs = 0
             sleeve_pct = 0
             bypass_pct = 0
@@ -337,7 +335,6 @@ with col2:
 # Row 2
 col3, col4 = st.columns(2)
 
-# Card 3: MBS Robotic Rate
 # Card 3: MBS Robotic Rate
 with col3:
     with st.container():
@@ -401,7 +398,6 @@ with col3:
         </div>
         """, unsafe_allow_html=True)
 
-# Card 4: Severe Complications
 # Card 4: Severe Complications
 with col4:
     with st.container():
@@ -471,209 +467,132 @@ with col4:
         </div>
         """, unsafe_allow_html=True)
 
-# --- MAP & LABELS SECTION (Moved to bottom as requested) ---
-# We will construct this section at the very end of the script later.
-# For now, we continue with existing logic but we will refactor the flow.
+# Row 3
+col5, col6 = st.columns(2)
 
-# NOTE: The subsequent existing code needs to be reordered or wrapped.
-# I will use a container approach or just move the code blocks in subsequent edits
-# to placing the map/labels at the bottom.
-# However, `st.title` was at line 115. I kept it.
-
-st.header("Surgery Density by Department")
-st.markdown("*Ratio of total bariatric surgeries to department population (surgeries per 100,000 inhabitants)*")
-
-try:
-    # Load population data
-    @st.cache_data(show_spinner=False)
-    def load_population_data():
-        """Load and process the population data by department."""
+# Card 5: Surgery Density Map
+with col5:
+    with st.container():
+        st.header("Surgery Density by Department")
+        st.markdown("*Ratio of total bariatric surgeries to department population (surgeries per 100,000 inhabitants)*")
+        
         try:
-            pop_df = pd.read_csv("data/DS_ESTIMATION_POPULATION (1).csv", sep=';')
-            # Clean and process the data
-            pop_df = pop_df[pop_df['GEO_OBJECT'] == 'DEP'].copy()  # Only departments
-            pop_df = pop_df[pop_df['TIME_PERIOD'] == 2024].copy()  # Use 2020 data
-            pop_df['dept_code'] = pop_df['GEO'].str.strip().str.replace('"', '')
-            pop_df['population'] = pop_df['OBS_VALUE'].astype(int)
-            return pop_df[['dept_code', 'population']]
-        except Exception as e:
-            st.error(f"Error loading population data: {e}")
-            return pd.DataFrame()
-
-    # Calculate surgery totals by department
-    @st.cache_data(show_spinner=False)
-    def calculate_surgery_by_department(_df):
-        """Calculate total surgeries by department from hospital data."""
-        try:
-            # Get department from hospital data
-            df_copy = _df.copy()
-            df_copy['dept_code'] = df_copy['code_postal'].astype(str).str[:2]
+            # Load the data using helpers defined at top
+            population_data = load_population_data()
+            surgery_data = calculate_surgery_by_department(df)
             
-            # Handle special cases (Corsica, overseas)
-            def standardize_dept_code(postal_code):
-                postal_str = str(postal_code)
-                if postal_str.startswith('97') or postal_str.startswith('98'):
-                    return postal_str[:3]
-                elif postal_str.startswith('201'):
-                    return '2A'
-                elif postal_str.startswith('202'):
-                    return '2B'
-                else:
-                    return postal_str[:2]
-            
-            df_copy['dept_code'] = df_copy['code_postal'].astype(str).apply(standardize_dept_code)
-            
-            # Sum total procedures by department
-            dept_surgeries = df_copy.groupby('dept_code')['total_procedures_year'].sum().reset_index()
-            dept_surgeries.columns = ['dept_code', 'total_surgeries']
-            
-            return dept_surgeries
-        except Exception as e:
-            st.error(f"Error calculating surgery totals: {e}")
-            return pd.DataFrame()
-
-    # Load the data
-    population_data = load_population_data()
-    surgery_data = calculate_surgery_by_department(df)
-    
-    if not population_data.empty and not surgery_data.empty:
-        # Merge population and surgery data
-        ratio_data = pd.merge(surgery_data, population_data, on='dept_code', how='inner')
-        
-        # Calculate ratio (surgeries per 100,000 inhabitants)
-        ratio_data['surgery_ratio'] = (ratio_data['total_surgeries'] / ratio_data['population']) * 100000
-        ratio_data['surgery_ratio'] = ratio_data['surgery_ratio'].round(1)
-        
-        # Display summary stats
-        col1, col2, col3, col4 = st.columns([1, 1, 1.5, 1])
-        with col1:
-            st.metric("Departments with Data", len(ratio_data))
-        with col2:
-            avg_ratio = ratio_data['surgery_ratio'].mean()
-            st.metric("Average Ratio", f"{avg_ratio:.1f}")
-        with col3:
-            max_dept = ratio_data.loc[ratio_data['surgery_ratio'].idxmax()]
-            st.metric("Highest Ratio", f"Dep. {max_dept['dept_code']}: {max_dept['surgery_ratio']:.1f}")
-        with col4:
-            total_surgeries = ratio_data['total_surgeries'].sum()
-            st.metric("Total Surgeries", f"{total_surgeries:,}")
-        
-        # Create the choropleth map
-        gj = _get_fr_departments_geojson()
-        if gj and not ratio_data.empty:
-            m = folium.Map(location=[46.5, 2.5], zoom_start=6, tiles="CartoDB positron")
-            
-            # Create value mapping and colormap
-            vmin = float(ratio_data['surgery_ratio'].min())
-            vmax = float(ratio_data['surgery_ratio'].max())
-            colormap = cm.linear.YlOrRd_09.scale(vmin, vmax)
-            colormap.caption = 'Surgeries per 100K inhabitants'
-            colormap.add_to(m)
-            
-            val_map = dict(zip(ratio_data['dept_code'].astype(str), ratio_data['surgery_ratio'].astype(float)))
-            
-            def _style_fn(feat):
-                code = str(feat.get('properties', {}).get('code', ''))
-                v = val_map.get(code, 0.0)
-                opacity = 0.25 if v == 0 else 0.7
-                return {"fillColor": colormap(v), "color": "#555555", "weight": 0.8, "fillOpacity": opacity}
-            
-            # Add GeoJSON with proper tooltips and popups
-            def create_feature_popup(feature):
-                """Create popup content for each department."""
-                props = feature.get('properties', {})
-                code = str(props.get('code', ''))
-                name = str(props.get('nom', code))
-                ratio_val = val_map.get(code, 0.0)
+            if not population_data.empty and not surgery_data.empty:
+                # Merge population and surgery data
+                ratio_data = pd.merge(surgery_data, population_data, on='dept_code', how='inner')
                 
-                # Get additional data for popup
-                dept_row = ratio_data[ratio_data['dept_code'] == code]
-                if not dept_row.empty:
-                    surgeries = int(dept_row.iloc[0]['total_surgeries'])
-                    population = int(dept_row.iloc[0]['population'])
+                # Calculate ratio (surgeries per 100,000 inhabitants)
+                ratio_data['surgery_ratio'] = (ratio_data['total_surgeries'] / ratio_data['population']) * 100000
+                ratio_data['surgery_ratio'] = ratio_data['surgery_ratio'].round(1)
+                
+                # Create the choropleth map
+                gj = _get_fr_departments_geojson()
+                if gj and not ratio_data.empty:
+                    m = folium.Map(location=[46.5, 2.5], zoom_start=5, tiles="CartoDB positron")
                     
-                    popup_html = f"""
-                    <div style="font-family: Arial, sans-serif; min-width: 200px;">
-                        <h4 style="margin: 0 0 8px 0; color: #d62728; font-size: 16px;">{name}</h4>
-                        <div style="font-size: 12px; color: #666;">Department {code}</div>
-                        <hr style="margin: 8px 0; border: none; border-top: 1px solid #ddd;">
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <div><strong>Surgery Density:</strong> {ratio_val:.1f} per 100K inhabitants</div>
-                            <div><strong>Total Surgeries:</strong> {surgeries:,}</div>
-                            <div><strong>Population (2020):</strong> {population:,}</div>
-                        </div>
-                    </div>
-                    """
-                    return popup_html
+                    # Create value mapping and colormap
+                    vmin = float(ratio_data['surgery_ratio'].min())
+                    vmax = float(ratio_data['surgery_ratio'].max())
+                    colormap = cm.linear.YlOrRd_09.scale(vmin, vmax)
+                    colormap.caption = 'Surgeries per 100K inhabitants'
+                    colormap.add_to(m)
+                    
+                    val_map = dict(zip(ratio_data['dept_code'].astype(str), ratio_data['surgery_ratio'].astype(float)))
+                    
+                    def _style_fn(feat):
+                        code = str(feat.get('properties', {}).get('code', ''))
+                        v = val_map.get(code, 0.0)
+                        opacity = 0.25 if v == 0 else 0.7
+                        return {"fillColor": colormap(v), "color": "#555555", "weight": 0.8, "fillOpacity": opacity}
+                    
+                    # Add GeoJSON layer
+                    folium.GeoJson(
+                        gj,
+                        style_function=_style_fn,
+                        tooltip=folium.Tooltip("Click for details"),
+                        popup=None
+                    ).add_to(m)
+                    
+                    # Display the map
+                    st_folium(m, width="100%", height=400, key="surgery_population_ratio_choropleth_summary")
                 else:
-                    return f"""
-                    <div style="font-family: Arial, sans-serif; min-width: 200px;">
-                        <h4 style="margin: 0 0 8px 0; color: #666; font-size: 16px;">{name}</h4>
-                        <div style="font-size: 12px; color: #666;">Department {code}</div>
-                        <hr style="margin: 8px 0; border: none; border-top: 1px solid #ddd;">
-                        <div style="color: #888;">No surgery data available</div>
-                    </div>
-                    """
+                    st.error("Could not load department GeoJSON for surgery ratio map.")
+            else:
+                 st.info("Data for map not available.")
+                
+        except Exception as e:
+            st.error(f"Error creating surgery-to-population ratio map: {e}")
+
+        st.markdown("""
+            <div class="ici-link" style="text-align:left;">Distribution de <b>l'offre de soins</b> sur le territoire -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+        """, unsafe_allow_html=True)
+
+
+# Card 6: Hospital Labels by Affiliation Type (Moved here)
+with col6:
+    with st.container():
+        # Compute affiliation breakdown
+        try:
+             # Need to calculate it here
+            affiliation_data = compute_affiliation_breakdown_2024(df)
+            label_breakdown = affiliation_data['label_breakdown']
             
-            # Create GeoJSON layer with proper popups
-            geojson_layer = folium.GeoJson(
-                gj,
-                style_function=_style_fn,
-                tooltip=folium.Tooltip("Click for details"),
-                popup=None  # We'll add custom popups below
+            # Prepare data for plotting
+            categories = ['Public – Univ.', 'Public – Non-Acad.', 'Private – Not-for-profit', 'Private – For-profit']
+            
+            # Stack components
+            soffco = [label_breakdown.get(cat, {}).get('SOFFCO Label', 0) for cat in categories]
+            cso = [label_breakdown.get(cat, {}).get('CSO Label', 0) for cat in categories]
+            both = [label_breakdown.get(cat, {}).get('Both', 0) for cat in categories]
+            none = [label_breakdown.get(cat, {}).get('None', 0) for cat in categories]
+            
+            fig_aff = go.Figure()
+            
+            # Trace 1: SOFFCO Label (Green)
+            fig_aff.add_trace(go.Bar(
+                name='SOFFCO Label', x=categories, y=soffco, marker_color='#76D7C4'
+            ))
+            # Trace 2: CSO Label (Yellow)
+            fig_aff.add_trace(go.Bar(
+                name='CSO Label', x=categories, y=cso, marker_color='#F7DC6F'
+            ))
+            # Trace 3: Both (Blue)
+            fig_aff.add_trace(go.Bar(
+                name='Both', x=categories, y=both, marker_color='#00BFFF'
+            ))
+            # Trace 4: None (Red/Pink)
+            fig_aff.add_trace(go.Bar(
+                name='None', x=categories, y=none, marker_color='#F1948A'
+            ))
+
+            fig_aff.update_layout(
+                barmode='stack',
+                margin=dict(t=20, b=0, l=0, r=0),
+                height=300,  # Slightly taller for this position
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                legend=dict(orientation="v", yanchor="top", y=1, xanchor="right", x=1.2, font=dict(size=9)),
+                xaxis=dict(showgrid=False, tickfont=dict(size=10)),
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', title="Number of Hospitals")
             )
-            
-            # Add custom popups to each feature
-            for feature in gj['features']:
-                code = str(feature.get('properties', {}).get('code', ''))
-                name = str(feature.get('properties', {}).get('nom', code))
-                ratio_val = val_map.get(code, 0.0)
-                
-                # Create tooltip text
-                tooltip_text = f"{name}: {ratio_val:.1f} per 100K"
-                
-                # Create popup content
-                popup_content = create_feature_popup(feature)
-                
-                # Add to the layer
-                folium.GeoJson(
-                    feature,
-                    style_function=_style_fn,
-                    tooltip=tooltip_text,
-                    popup=folium.Popup(popup_content, max_width=300)
-                ).add_to(m)
-            
-            # Fit bounds to France
-            try:
-                m.fit_bounds([[41.0, -5.3], [51.5, 9.6]])
-            except Exception:
-                pass
-            
-            # Display the map
-            st_folium(m, width="100%", height=540, key="surgery_population_ratio_choropleth")
-            
-            # Show top/bottom departments
-            st.markdown("#### 📊 Department Rankings")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("**Highest Surgery Density (per 100K inhabitants)**")
-                top_5 = ratio_data.nlargest(5, 'surgery_ratio')[['dept_code', 'surgery_ratio', 'total_surgeries']]
-                for _, row in top_5.iterrows():
-                    st.write(f"**Dep. {row['dept_code']}**: {row['surgery_ratio']:.1f} ({row['total_surgeries']} surgeries)")
-            
-            with col2:
-                st.markdown("**📉 Lowest Surgery Density**")
-                bottom_5 = ratio_data.nsmallest(5, 'surgery_ratio')[['dept_code', 'surgery_ratio', 'total_surgeries']]
-                for _, row in bottom_5.iterrows():
-                    st.write(f"**Dep. {row['dept_code']}**: {row['surgery_ratio']:.1f} ({row['total_surgeries']} surgeries)")
-        else:
-            st.error("Could not load department GeoJSON for surgery ratio map.")
-    else:
-        st.error("Could not load population or surgery data for ratio calculation.")
-        
-except Exception as e:
-    st.error(f"Error creating surgery-to-population ratio map: {e}")
+
+        except Exception as e:
+            st.error(f"Error computing affiliation data: {e}")
+            fig_aff = go.Figure()
+
+        st.markdown("""
+        <div class="summary-card">
+            <div class="card-title">Hospital Labels by Affiliation Type</div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(fig_aff, use_container_width=True, config={'displayModeBar': False})
+        st.markdown("""
+            <div class="ici-link">Bien plus de détails sur <b>l'activité des hôpitaux</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+        </div>
+        """, unsafe_allow_html=True)
     st.exception(e)
 
 ## Moved: Kaplan–Meier national complication rate section now lives under the "National Complication Rate Trends" subsection below.
