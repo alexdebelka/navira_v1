@@ -4,492 +4,339 @@ import plotly.graph_objects as go
 import streamlit as st
 import os
 import sys
+import requests
+import folium
+from streamlit_folium import st_folium
+import branca.colormap as cm
 
 # Add the parent directory to the Python path to import lib
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from lib.national_utils import (
-    compute_affiliation_breakdown_2024,
-    compute_affiliation_trends_2020_2024,
-    BARIATRIC_PROCEDURE_NAMES
-)
+from lib.national_utils import compute_affiliation_breakdown_2024
 
 
 def render_overall_trends(df: pd.DataFrame):
-    """Render the Overall Trends section for national page.
+    """Render the Overall Trends section (formerly Summary section) for national page.
     
-    This section contains:
-    - Hospital Volume Distribution
-    - Hospital Affiliation breakdown and trends
+    This section contains summary cards showing:
+    - Monthly Surgeries with Rolling Statistics (placeholder)
+    - Type d'intervention (procedure types donut chart)
+    - MBS Robotic rate
+    - Severe Complications trend
+    - Surgery Density Map
+    - Hospital Labels by Affiliation
     """
     
-    # --- (1) HOSPITAL VOLUME DISTRIBUTION ---
-    st.header("Hospital Volume Distribution")
+    # Helper functions for map
+    @st.cache_data(show_spinner=False)
+    def _get_fr_departments_geojson():
+        try:
+            url = "https://france-geojson.gregoiredavid.fr/repo/departements.geojson"
+            r = requests.get(url, timeout=10)
+            r.raise_for_status()
+            return r.json()
+        except Exception:
+            return None
     
-    # Load and Process Data Locally
-    try:
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        vol_csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_VOL_HOP_YEAR.csv")
-        df_vol = pd.read_csv(vol_csv_path)
+    @st.cache_data(show_spinner=False)
+    def load_population_data():
+        """Load and process the population data by department."""
+        try:
+            pop_df = pd.read_csv("data/DS_ESTIMATION_POPULATION (1).csv", sep=';')
+            pop_df = pop_df[pop_df['GEO_OBJECT'] == 'DEP'].copy()
+            pop_df = pop_df[pop_df['TIME_PERIOD'] == 2024].copy()
+            pop_df['dept_code'] = pop_df['GEO'].str.strip().str.replace('"', '')
+            pop_df['population'] = pop_df['OBS_VALUE'].astype(int)
+            return pop_df[['dept_code', 'population']]
+        except Exception as e:
+            st.error(f"Error loading population data: {e}")
+            return pd.DataFrame()
     
-        # Filter years (assuming 2021 start based on file inspection)
-        # We need 2024 for current, and 2021-2023 for baseline
-        df_vol = df_vol[df_vol['annee'].isin([2021, 2022, 2023, 2024])]
-    
-        # Define Bins
-        def assign_bin(n):
-            if n < 50: return "<50"
-            elif 50 <= n < 100: return "50–100"
-            elif 100 <= n < 200: return "100–200"
-            else: return ">200"
-    
-        df_vol['bin'] = df_vol['n'].apply(assign_bin)
-        
-        # KPIs for 2024
-        df_2024 = df_vol[df_vol['annee'] == 2024]
-        total_hosp_2024 = df_2024['finessGeoDP'].nunique()
-        total_surg_2024 = df_2024['n'].sum()
-        
-        # Bin counts for 2024
-        counts_2024 = df_2024['bin'].value_counts()
-        
-        hosp_less_50_2024 = counts_2024.get("<50", 0)
-        hosp_more_200_2024 = counts_2024.get(">200", 0)
-    
-        # Baseline (2021-2023) Average
-        df_baseline = df_vol[df_vol['annee'].isin([2021, 2022, 2023])]
-        # Count per year then average
-        baseline_counts_per_year = df_baseline.groupby(['annee', 'bin'])['finessGeoDP'].count().unstack(fill_value=0)
-        avg_baseline = baseline_counts_per_year.mean()
-        
-        hosp_less_50_base = avg_baseline.get("<50", 0)
-        hosp_more_200_base = avg_baseline.get(">200", 0)
-        
-        delta_less_50 = hosp_less_50_2024 - hosp_less_50_base
-        delta_more_200 = hosp_more_200_2024 - hosp_more_200_base
-    
-        # Display KPIs
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("Total Hospitals (2024)", f"{total_hosp_2024}")
+    @st.cache_data(show_spinner=False)
+    def calculate_surgery_by_department(_df):
+        """Calculate total surgeries by department from hospital data."""
+        try:
+            df_copy = _df.copy()
             
-        with col2:
-            st.metric("Total Surgeries (2024)", f"{total_surg_2024:,}")
+            def standardize_dept_code(postal_code):
+                postal_str = str(postal_code)
+                if postal_str.startswith('97') or postal_str.startswith('98'):
+                    return postal_str[:3]
+                elif postal_str.startswith('201'):
+                    return '2A'
+                elif postal_str.startswith('202'):
+                    return '2B'
+                else:
+                    return postal_str[:2]
             
-        with col3:
-            st.metric(
-                "Hospitals <50/year (2024)", 
-                f"{hosp_less_50_2024}", 
-                delta=f"{delta_less_50:+.1f} vs 21-23 avg",
-                delta_color="inverse"
-            )
+            df_copy['dept_code'] = df_copy['code_postal'].astype(str).apply(standardize_dept_code)
+            dept_surgeries = df_copy.groupby('dept_code')['total_procedures_year'].sum().reset_index()
+            dept_surgeries.columns = ['dept_code', 'total_surgeries']
             
-        with col4:
-            st.metric(
-                "Hospitals >200/year (2024)", 
-                f"{hosp_more_200_2024}", 
-                delta=f"{delta_more_200:+.1f} vs 21-23 avg",
-                delta_color="normal"
-            )
+            return dept_surgeries
+        except Exception as e:
+            st.error(f"Error calculating surgery totals: {e}")
+            return pd.DataFrame()
     
-        # Chart Section
-        st.markdown("""
-            <div class="nv-info-wrap">
-              <div class="nv-h3">Volume Distribution by Hospital</div>
-              <div class="nv-tooltip"><span class="nv-info-badge">i</span>
-                <div class="nv-tooltiptext">
-                  <b>Understanding this chart:</b><br/>
-                  Distribution of hospitals based on annual surgical volume.<br/>
-                  Categories: &lt;50, 50–100, 100–200, &gt;200 procedures/year.<br/>
-                  Use the toggle to compare 2024 against the 2021–2023 average.
-                </div>
-              </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        # Toggle
-        show_comparison = st.toggle("Show 2024 comparison (vs 2021-23 Avg)", value=True)
-        
-        # Helper to ensure all bins are present in order
-        bin_order = ["<50", "50–100", "100–200", ">200"]
-        
-        # Align data to bin order
-        y_2024 = [counts_2024.get(b, 0) for b in bin_order]
-        y_base = [avg_baseline.get(b, 0) for b in bin_order]
-        
-        fig_vol = go.Figure()
-        
-        if show_comparison:
-            # Baseline Bars
-            fig_vol.add_trace(go.Bar(
-                x=bin_order, y=y_base,
-                name='2021-2023 Average',
-                marker_color='#2E86AB',
-                hovertemplate='<b>%{x}</b><br>Avg: %{y:.1f}<extra></extra>'
-            ))
-            
-            # 2024 Overlay
-            fig_vol.add_trace(go.Bar(
-                x=bin_order, y=y_2024,
-                name='2024',
-                marker_color='rgba(255, 193, 7, 0.7)',
-                text=y_2024,
-                textposition='auto',
-                hovertemplate='<b>%{x}</b><br>2024: %{y}<extra></extra>'
-            ))
-            barmode = 'overlay'
-        else:
-            # Only 2024
-            fig_vol.add_trace(go.Bar(
-                x=bin_order, y=y_2024,
-                name='2024',
-                marker_color='#FFC107',
-                text=y_2024,
-                textposition='auto',
-                hovertemplate='<b>%{x}</b><br>2024: %{y}<extra></extra>'
-            ))
-            barmode = 'group'
-    
-        fig_vol.update_layout(
-            title="Hospital Volume Distribution",
-            xaxis_title="Procedures per Year",
-            yaxis_title="Number of Hospitals",
-            barmode=barmode,
-            hovermode='x unified',
-            height=400,
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            margin=dict(l=50, r=50, t=50, b=50),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        
-        st.plotly_chart(fig_vol, use_container_width=True)
-        
-        # Key Findings / Expander
-        with st.expander("Key findings"):
-            st.markdown(f"""
-            **2024 Distribution:**
-            - **{hosp_less_50_2024}** hospitals performed <50 procedures.
-            - **{hosp_more_200_2024}** hospitals performed >200 procedures.
-            
-            **Compared to 2021-2023 Average:**
-            - Small volume (<50): {delta_less_50:+.1f}
-            - High volume (>200): {delta_more_200:+.1f}
-            """)
-    
-    except Exception as e:
-        st.error(f"Error loading volume data: {e}")
-    
-    
-    # --- (2) HOSPITAL AFFILIATION ---
-    st.header("Hospital Affiliation (2024)")
-    
-    affiliation_data = compute_affiliation_breakdown_2024(df)
-    affiliation_counts = affiliation_data['affiliation_counts']
-    label_breakdown = affiliation_data['label_breakdown']
-    
-    # Compute affiliation trends for line plot
-    affiliation_trends = compute_affiliation_trends_2020_2024(df)
-    
-    # First block: Affiliation cards
+    # Row 1
     col1, col2 = st.columns(2)
     
+    # Card 1: Monthly Surgeries (Placeholder)
     with col1:
-        st.subheader("Public")
-        
-        # Calculate total hospitals for percentage
-        total_hospitals = sum(affiliation_counts.values())
-        
-        # Public university hospitals
-        public_univ_count = affiliation_counts.get('Public – Univ.', 0)
-        public_univ_pct = round((public_univ_count / total_hospitals) * 100) if total_hospitals > 0 else 0
-       
-        st.metric(
-            "Public University Hospital",
-            f"{int(round(public_univ_count)):,}"
-        )
-        st.markdown(f"<span style='color: grey; font-size: 0.9em; display:block; margin-top:-8px;'>{public_univ_pct}% of total</span>", unsafe_allow_html=True)
-        
-        # Public non-academic hospitals
-        public_non_acad_count = affiliation_counts.get('Public – Non-Acad.', 0)
-        public_non_acad_pct = round((public_non_acad_count / total_hospitals) * 100) if total_hospitals > 0 else 0
-       
-        st.metric(
-            "Public, No Academic Affiliation",
-            f"{int(round(public_non_acad_count)):,}"
-        )
-        st.markdown(f"<span style='color: grey; font-size: 0.9em; display:block; margin-top:-8px;'>{public_non_acad_pct}% of total</span>", unsafe_allow_html=True)
+        with st.container():
+            st.markdown("""
+            <div class="summary-card">
+                <div class="card-title">Monthly Surgeries with Rolling Statistics</div>
+                <div style="height: 300px; display: flex; align-items: center; justify-content: center; background: #333; border-radius: 8px; border: 1px dashed #555;">
+                    <span style="color: #888;">Graph Placeholder</span>
+                </div>
+                <div class="ici-link">Bien plus de détails sur <b>les tendances</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+            </div>
+            """, unsafe_allow_html=True)
     
+    # Card 2: Intervention Types
     with col2:
-        st.subheader("Private")
-        
-        # Private for-profit hospitals
-        private_for_profit_count = affiliation_counts.get('Private – For-profit', 0)
-        private_for_profit_pct = round((private_for_profit_count / total_hospitals) * 100) if total_hospitals > 0 else 0
-        
-        st.metric(
-            "Private For Profit",
-            f"{int(round(private_for_profit_count)):,}"
-        )
-        st.markdown(f"<span style='color: grey; font-size: 0.9em; display:block; margin-top:-8px;'>{private_for_profit_pct}% of total</span>", unsafe_allow_html=True)
-        
-        # Private not-for-profit hospitals
-        private_not_profit_count = affiliation_counts.get('Private – Not-for-profit', 0)
-        private_not_profit_pct = round((private_not_profit_count / total_hospitals) * 100) if total_hospitals > 0 else 0
-        
-        st.metric(
-            "Private Not For Profit",
-            f"{int(round(private_not_profit_count)):,}"
-        )
-        st.markdown(f"<span style='color: grey; font-size: 0.9em; display:block; margin-top:-8px;'>{private_not_profit_pct}% of total</span>", unsafe_allow_html=True)
+        with st.container():
+            # Load the CSV data
+            try:
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_TCN_NATL_YEAR.csv")
+                df_activ = pd.read_csv(csv_path)
     
-    # Calculate label statistics for university vs private hospitals
-    try:
-        # Calculate university hospitals with labels
-        univ_total = affiliation_counts.get('Public – Univ.', 0)
-        univ_labeled = (
-            label_breakdown.get('Public – Univ.', {}).get('SOFFCO Label', 0) +
-            label_breakdown.get('Public – Univ.', {}).get('CSO Label', 0) +
-            label_breakdown.get('Public – Univ.', {}).get('Both', 0)
-        )
-        univ_pct = round((univ_labeled / univ_total * 100)) if univ_total > 0 else 0
-        
-        # Calculate private hospitals with labels
-        private_total = (
-            affiliation_counts.get('Private – For-profit', 0) +
-            affiliation_counts.get('Private – Not-for-profit', 0)
-        )
-        private_labeled = (
-            label_breakdown.get('Private – For-profit', {}).get('SOFFCO Label', 0) +
-            label_breakdown.get('Private – For-profit', {}).get('CSO Label', 0) +
-            label_breakdown.get('Private – For-profit', {}).get('Both', 0) +
-            label_breakdown.get('Private – Not-for-profit', {}).get('SOFFCO Label', 0) +
-            label_breakdown.get('Private – Not-for-profit', {}).get('CSO Label', 0) +
-            label_breakdown.get('Private – Not-for-profit', {}).get('Both', 0)
-        )
-        private_pct = round((private_labeled / private_total * 100)) if private_total > 0 else 0
-        
-        st.markdown(f"#### **{univ_pct}%** of the university hospitals have SOFFCO, CSO or both labels and **{private_pct}%** of private hospitals have SOFFCO, CSO or both labels")
-    except Exception:
-        st.markdown("Label statistics unavailable")
+                df_activ = df_activ[df_activ['annee'].isin([2021, 2022, 2023, 2024])]
+                total_procs = df_activ['n'].sum()
+                totals_by_proc = df_activ.groupby('baria_t')['n'].sum()
     
-    # Second block: Stacked bar chart
-    st.markdown(
-        """
-        <div class=\"nv-info-wrap\">
-          <div class=\"nv-h3\">Hospital Labels by Affiliation Type</div>
-          <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
-            <div class=\"nv-tooltiptext\">
-              <b>Understanding this chart:</b><br/>
-              This stacked bar chart shows the distribution of hospital labels (SOFFCO and CSO) across different affiliation types. Each bar represents an affiliation category, and the colored segments within each bar show how many hospitals have specific label combinations.
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+                sleeve_n = totals_by_proc.get('SLE', 0)
+                bypass_n = totals_by_proc.get('BPG', 0)
+                sleeve_pct = (sleeve_n / total_procs * 100) if total_procs > 0 else 0
+                bypass_pct = (bypass_n / total_procs * 100) if total_procs > 0 else 0
+                others_n = total_procs - sleeve_n - bypass_n
+                other_pct = (others_n / total_procs * 100) if total_procs > 0 else 0
     
-    with st.expander("What to look for and key findings"):
-        # Computed key findings from label_breakdown
-        try:
-            totals = {k: 0 for k in ['SOFFCO Label', 'CSO Label', 'Both', 'None']}
-            labeled_by_category = {}
-            for cat in ['Public – Univ.', 'Public – Non-Acad.', 'Private – For-profit', 'Private – Not-for-profit']:
-                if cat in label_breakdown:
-                    labeled_by_category[cat] = (
-                        label_breakdown[cat].get('SOFFCO Label', 0)
-                        + label_breakdown[cat].get('CSO Label', 0)
-                        + label_breakdown[cat].get('Both', 0)
-                    )
-                    for lab in totals.keys():
-                        totals[lab] += label_breakdown[cat].get(lab, 0)
+                # Load Trend Data for Prediction
+                trend_csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_TREND_NATL.csv")
+                diff_pct_val = 0
+                if os.path.exists(trend_csv_path):
+                    df_trend = pd.read_csv(trend_csv_path)
+                    diff_pct_val = df_trend['diff_pct'].iloc[0]
+                    prediction_text = f"{diff_pct_val:+.1f}%"
+                else:
+                    prediction_text = "N/A"
     
-            top_cat = max(labeled_by_category.items(), key=lambda x: x[1])[0] if labeled_by_category else None
-            most_common_label = max(totals.items(), key=lambda x: x[1])[0] if totals else None
-    
-            st.markdown(
-                f"""
-                **What to look for:**
-                - Label concentration by affiliation type
-                - Balance of SOFFCO vs CSO vs Dual labels
-                - Affiliation types with few or no labels
-    
-                **Key findings:**
-                - Most labeled affiliation type: **{top_cat if top_cat else 'n/a'}**
-                - Most common label overall: **{most_common_label if most_common_label else 'n/a'}**
-                - Totals — SOFFCO: **{totals.get('SOFFCO Label', 0):,}**, CSO: **{totals.get('CSO Label', 0):,}**, Both: **{totals.get('Both', 0):,}**, None: **{totals.get('None', 0):,}**
-                """
-            )
-        except Exception:
-            pass
-    
-    # Prepare data for stacked bar chart
-    stacked_data = []
-    categories = ['Public – Univ.', 'Public – Non-Acad.', 'Private – For-profit', 'Private – Not-for-profit']
-    labels = ['SOFFCO Label', 'CSO Label', 'Both', 'None']
-    
-    for category in categories:
-        if category in label_breakdown:
-            for label in labels:
-                count = label_breakdown[category].get(label, 0)
-                if count > 0:  # Only add non-zero values
-                    stacked_data.append({
-                        'Affiliation': category,
-                        'Label': label,
-                        'Count': count
-                    })
-    
-    stacked_df = pd.DataFrame(stacked_data)
-    
-    if not stacked_df.empty:
-        fig = px.bar(
-            stacked_df,
-            x='Affiliation',
-            y='Count',
-            color='Label',
-            title="Hospital Labels by Affiliation Type",
-            color_discrete_map={
-                'SOFFCO Label': '#7fd8be',
-                'CSO Label': '#ffd97d',
-                'Both': '#00bfff',
-                'None': '#f08080'
-            }
-        )
-        
-        fig.update_layout(
-            xaxis_title="Affiliation Type",
-            yaxis_title="Number of Hospitals",
-            hovermode='x unified',
-            height=400,
-            showlegend=True,
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(size=12),
-            margin=dict(l=50, r=50, t=80, b=50)
-        )
-        
-        fig.update_traces(
-            hovertemplate='<b>%{fullData.name}</b><br>%{x}<br>Count: %{y}<extra></extra>'
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("No label data available for the selected criteria.")
-    
-    # Affiliation trends line plot
-    st.markdown(
-        """
-        <div class="nv-info-wrap">
-          <div class="nv-h3">Activity by Affiliation Trends (2021–2024)</div>
-          <div class="nv-tooltip"><span class="nv-info-badge">i</span>
-            <div class="nv-tooltiptext">
-              <b>Understanding this chart:</b><br/>
-              This stacked area chart shows the evolution of surgical volume (total procedures) by hospital affiliation type.<br/><br/>
-              <b>Affiliation Types:</b><br/>
-              Public – Univ.: Public hospitals with university/academic affiliation<br/>
-              Public – Non‑Acad.: Public hospitals without academic affiliation<br/>
-              Private – For‑profit: Private for‑profit hospitals<br/>
-              Private – Not‑for‑profit: Private not‑for‑profit hospitals
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    
-    # Load data locally from CSV
-    try:
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        status_csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_VOL_STATUS_YEAR.csv")
-        df_status = pd.read_csv(status_csv_path)
-    
-        # Filter for years 2021-2024
-        df_status = df_status[df_status['annee'].isin([2021, 2022, 2023, 2024])]
-        
-        # Map status to display names
-        status_mapping = {
-            'public academic': 'Public – Univ.',
-            'public': 'Public – Non-Acad.',
-            'private for profit': 'Private – For-profit',
-            'private not-for-profit': 'Private – Not-for-profit'
-        }
-        df_status['Affiliation'] = df_status['statut'].map(status_mapping)
-        df_status = df_status.dropna(subset=['Affiliation'])
-        
-        # Prepare data for plotting
-        trend_df = df_status.rename(columns={'annee': 'Year', 'n': 'Count'})
-        
-        key_categories = ['Public – Univ.', 'Public – Non-Acad.', 'Private – For-profit', 'Private – Not-for-profit']
-        
-        # Calculate key findings (2024 vs 2021)
-        df_2024 = trend_df[trend_df['Year'] == 2024].set_index('Affiliation')['Count']
-        df_2021 = trend_df[trend_df['Year'] == 2021].set_index('Affiliation')['Count']
-        
-        diffs = {}
-        for cat in key_categories:
-            val_24 = df_2024.get(cat, 0)
-            val_21 = df_2021.get(cat, 0)
-            diffs[cat] = val_24 - val_21
-    
-        top_inc_cat = max(diffs.items(), key=lambda x: x[1])[0] if diffs else None
-        top_dec_cat = min(diffs.items(), key=lambda x: x[1])[0] if diffs else None
-    
-        with st.expander("What to look for and key findings"):
-            st.markdown(
-                f"""
-                **What to look for:**
-                - Volume shifts between public and private sectors
-                - Which affiliation type is driving growth or decline
+                # Create Combined Figure
+                fig_combined = go.Figure()
+                labels = ['Gastric Bypass', 'Sleeve Gastrectomy', 'Other Procedures']
+                values = [bypass_pct, sleeve_pct, other_pct]
+                colors = ['#1f77b4', '#ff7f0e', '#2ca02c'] 
                 
-                **Key findings (2024 vs 2021):**
-                - Largest volume increase: **{top_inc_cat if top_inc_cat and diffs[top_inc_cat] > 0 else 'None'}** ({diffs.get(top_inc_cat, 0):+d})
-                - Largest volume decrease: **{top_dec_cat if top_dec_cat and diffs[top_dec_cat] < 0 else 'None'}** ({diffs.get(top_dec_cat, 0):+d})
-                """
-            )
+                fig_combined.add_trace(go.Pie(
+                    labels=labels, 
+                    values=values, 
+                    hole=.6,
+                    marker_colors=colors,
+                    textinfo='percent+label',
+                    showlegend=False,
+                    domain={'x': [0.5, 1], 'y': [0, 1]}
+                ))
     
-        # Plot
-        if not trend_df.empty:
-            fig = px.area(
-                trend_df,
-                x='Year',
-                y='Count',
-                color='Affiliation',
-                title="Surgical Volume by Affiliation Over Time",
-                color_discrete_map={
-                    'Public – Univ.': '#ee6055',
-                    'Public – Non-Acad.': '#60d394',
-                    'Private – For-profit': '#ffd97d',
-                    'Private – Not-for-profit': '#7161ef'
-                },
-                category_orders={'Affiliation': key_categories}
-            )
-            
-            fig.update_layout(
-                xaxis_title="Year",
-                yaxis_title="Total Procedures",
-                hovermode='x unified',
-                height=400,
-                showlegend=True,
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font=dict(size=12),
-                margin=dict(l=50, r=50, t=80, b=50),
-                xaxis=dict(
-                    tickmode='array',
-                    tickvals=[2021, 2022, 2023, 2024],
-                    ticktext=['2021', '2022', '2023', '2024'],
-                    tickformat='d'
+                # Stats Boxes
+                pred_color = "#ff4b4b" if diff_pct_val < 0 else "#2ca02c"
+                fig_combined.add_annotation(x=0.06, y=0.88, xref="paper", yref="paper", text="Total procedures", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.79, xref="paper", yref="paper", text=f"{int(total_procs):,}", showarrow=False, font=dict(color="white", size=20, weight="bold"), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.53, xref="paper", yref="paper", text="Prediction", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.44, xref="paper", yref="paper", text=prediction_text, showarrow=False, font=dict(color=pred_color, size=20, weight="bold"), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.18, xref="paper", yref="paper", text="Sleeve/Bypass", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.09, xref="paper", yref="paper", text=f"{sleeve_pct:.0f}%/{bypass_pct:.0f}%", showarrow=False, font=dict(color="white", size=16, weight="bold"), xanchor="left")
+    
+                box_style = dict(type="rect", xref="paper", yref="paper", fillcolor="rgba(255, 255, 255, 0.05)", line=dict(color="rgba(255, 255, 255, 0.1)", width=1), layer="below")
+                fig_combined.update_layout(
+                    shapes=[
+                        dict(x0=0, x1=0.45, y0=0.72, y1=0.98, **box_style),
+                        dict(x0=0, x1=0.45, y0=0.37, y1=0.63, **box_style),
+                        dict(x0=0, x1=0.45, y0=0.02, y1=0.28, **box_style),
+                    ],
+                    margin=dict(t=10, b=10, l=10, r=10),
+                    height=250,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)'
                 )
-            )
-            
-            fig.update_traces(
-                line=dict(width=0),
-                opacity=0.8
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No data available after filtering.")
+                
+            except Exception as e:
+                st.error(f"Error loading activity/trend data: {e}")
+                fig_combined = go.Figure()
     
-    except Exception as e:
-        st.error(f"Error loading affiliation trends: {e}")
+            st.markdown("""
+            <div class="summary-card">
+                <div class="card-title">Type d'intervention de chirurgie bariatrique (2021-2024)</div>
+            """, unsafe_allow_html=True)
+            st.plotly_chart(fig_combined, use_container_width=True, config={'displayModeBar': False})
+            st.markdown("""
+                <div class="ici-link">Analyse plus détaillée du type d'intervention bariatrique -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Row 2
+    col3, col4 = st.columns(2)
+    
+    # Card 3: MBS Robotic Rate
+    with col3:
+        with st.container():
+            try:
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                rob_csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_APP_NATL_YEAR.csv")
+                df_rob = pd.read_csv(rob_csv_path)
+                df_rob = df_rob[(df_rob['vda'] == 'ROB') & (df_rob['annee'].isin([2021, 2022, 2023, 2024]))]
+                df_rob = df_rob.sort_values('annee')
+                years = df_rob['annee'].tolist()
+                rates = df_rob['pct'].tolist()
+            except Exception as e:
+                st.error(f"Error loading robotic data: {e}")
+                years = []
+                rates = []
+    
+            fig_rob = go.Figure()
+            if years:
+                fig_rob.add_trace(go.Bar(x=years, y=rates, text=[f"{r}%" for r in rates], textposition='outside', marker_color='#003366', name='Robotic Rate'))
+            
+            fig_rob.update_layout(
+                margin=dict(t=20, b=0, l=0, r=0), height=200, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(showgrid=False, type='category', tickfont=dict(color='#888')), 
+                yaxis=dict(showgrid=False, visible=False, range=[0, max(rates)*1.2 if rates else 10]),
+                showlegend=False
+            )
+    
+            st.markdown("""
+            <div class="summary-card">
+                <div class="card-title" style="text-align:left; font-size:1rem;">MBS Robotic rate</div>
+            """, unsafe_allow_html=True)
+            st.plotly_chart(fig_rob, use_container_width=True, config={'displayModeBar': False})
+            st.markdown("""
+                <div class="ici-link">Bien plus de détails sur <b>l'activité robotique</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Card 4: Severe Complications
+    with col4:
+        with st.container():
+            try:
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                comp_csv_path = os.path.join(base_dir, "new_data", "COMPLICATIONS", "TAB_COMPL_GRADE_NATL_YEAR.csv")
+                df_comp = pd.read_csv(comp_csv_path)
+                df_comp = df_comp[(df_comp['annee'].isin([2021, 2022, 2023, 2024])) & (df_comp['clav_cat_90'].isin([3, 4, 5]))]
+                yearly_severe = df_comp.groupby('annee')['COMPL_pct'].sum().reset_index().sort_values('annee')
+                comp_years = yearly_severe['annee'].tolist()
+                comp_rates = yearly_severe['COMPL_pct'].tolist()
+            except Exception as e:
+                st.error(f"Error loading complications data: {e}")
+                comp_years = []
+                comp_rates = []
+            
+            fig_comp = go.Figure()
+            if comp_years:
+                 fig_comp.add_trace(go.Scatter(x=comp_years, y=comp_rates, mode='lines+markers+text', text=[f"{r:.1f}%" for r in comp_rates], textposition="top center", line=dict(color='#FF8C00', width=3), marker=dict(size=8), showlegend=False))
+            
+            fig_comp.update_layout(
+                margin=dict(t=20, b=0, l=0, r=0), height=200, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(showgrid=False, type='category', tickfont=dict(color='#888')), 
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', range=[0, max(comp_rates)*1.3 if comp_rates else 5], tickfont=dict(color='#888'))
+            )
+    
+            st.markdown("""
+            <div class="summary-card">
+                <div class="card-title">Taux de complications sévères à 90 jours après chirurgie bariatrique (estimation)</div>
+            """, unsafe_allow_html=True)
+            st.plotly_chart(fig_comp, use_container_width=True, config={'displayModeBar': False})
+            st.markdown("""
+                <div class="ici-link">Bien plus de détails sur <b>les complications</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Row 3
+    col5, col6 = st.columns(2)
+    
+    # Card 5: Surgery Density Map
+    with col5:
+        with st.container():
+            st.header("Surgery Density by Department")
+            st.markdown("*Ratio of total bariatric surgeries to department population (surgeries per 100,000 inhabitants)*")
+            
+            try:
+                population_data = load_population_data()
+                surgery_data = calculate_surgery_by_department(df)
+                
+                if not population_data.empty and not surgery_data.empty:
+                    ratio_data = pd.merge(surgery_data, population_data, on='dept_code', how='inner')
+                    ratio_data['surgery_ratio'] = (ratio_data['total_surgeries'] / ratio_data['population']) * 100000
+                    ratio_data['surgery_ratio'] = ratio_data['surgery_ratio'].round(1)
+                    
+                    gj = _get_fr_departments_geojson()
+                    if gj and not ratio_data.empty:
+                        m = folium.Map(location=[46.5, 2.5], zoom_start=5, tiles="CartoDB positron")
+                        vmin = float(ratio_data['surgery_ratio'].min())
+                        vmax = float(ratio_data['surgery_ratio'].max())
+                        colormap = cm.linear.YlOrRd_09.scale(vmin, vmax)
+                        colormap.caption = 'Surgeries per 100K inhabitants'
+                        colormap.add_to(m)
+                        
+                        val_map = dict(zip(ratio_data['dept_code'].astype(str), ratio_data['surgery_ratio'].astype(float)))
+                        
+                        def _style_fn(feat):
+                            code = str(feat.get('properties', {}).get('code', ''))
+                            v = val_map.get(code, 0.0)
+                            opacity = 0.25 if v == 0 else 0.7
+                            return {"fillColor": colormap(v), "color": "#555555", "weight": 0.8, "fillOpacity": opacity}
+                        
+                        folium.GeoJson(gj, style_function=_style_fn, tooltip=folium.Tooltip("Click for details"), popup=None).add_to(m)
+                        st_folium(m, width="100%", height=400, key="surgery_population_ratio_choropleth_summary")
+                    else:
+                        st.error("Could not load department GeoJSON for surgery ratio map.")
+                else:
+                     st.info("Data for map not available.")
+                    
+            except Exception as e:
+                st.error(f"Error creating surgery-to-population ratio map: {e}")
+    
+            st.markdown("""
+                <div class="ici-link" style="text-align:left;">Distribution de <b>l'offre de soins</b> sur le territoire -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+            """, unsafe_allow_html=True)
+    
+    # Card 6: Hospital Labels by Affiliation Type
+    with col6:
+        with st.container():
+            try:
+                affiliation_data = compute_affiliation_breakdown_2024(df)
+                label_breakdown = affiliation_data['label_breakdown']
+                
+                categories = ['Public – Univ.', 'Public – Non-Acad.', 'Private – Not-for-profit', 'Private – For-profit']
+                soffco = [label_breakdown.get(cat, {}).get('SOFFCO Label', 0) for cat in categories]
+                cso = [label_breakdown.get(cat, {}).get('CSO Label', 0) for cat in categories]
+                both = [label_breakdown.get(cat, {}).get('Both', 0) for cat in categories]
+                none = [label_breakdown.get(cat, {}).get('None', 0) for cat in categories]
+                
+                fig_aff = go.Figure()
+                fig_aff.add_trace(go.Bar(name='SOFFCO Label', x=categories, y=soffco, marker_color='#76D7C4'))
+                fig_aff.add_trace(go.Bar(name='CSO Label', x=categories, y=cso, marker_color='#F7DC6F'))
+                fig_aff.add_trace(go.Bar(name='Both', x=categories, y=both, marker_color='#00BFFF'))
+                fig_aff.add_trace(go.Bar(name='None', x=categories, y=none, marker_color='#F1948A'))
+    
+                fig_aff.update_layout(
+                    barmode='stack', margin=dict(t=20, b=0, l=0, r=0), height=300,
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                    legend=dict(orientation="v", yanchor="top", y=1, xanchor="right", x=1.2, font=dict(size=9)),
+                    xaxis=dict(showgrid=False, tickfont=dict(size=10)),
+                    yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', title="Number of Hospitals")
+                )
+    
+            except Exception as e:
+                st.error(f"Error computing affiliation data: {e}")
+                fig_aff = go.Figure()
+    
+            st.markdown("""
+            <div class="summary-card">
+                <div class="card-title">Hospital Labels by Affiliation Type</div>
+            """, unsafe_allow_html=True)
+            st.plotly_chart(fig_aff, use_container_width=True, config={'displayModeBar': False})
+            st.markdown("""
+                <div class="ici-link">Bien plus de détails sur <b>l'activité des hôpitaux</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
+            </div>
+            """, unsafe_allow_html=True)
