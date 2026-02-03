@@ -11,11 +11,13 @@ import folium
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 import branca.colormap as cm
+
+# Add the parent directory to the Python path FIRST
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Now import from navira and local modules
 from navira.competitor_layers import build_cp_to_insee
 from navira.geojson_loader import load_communes_geojson_filtered, load_communes_geojson, detect_insee_key
-
-# Add the parent directory to the Python path to import lib
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lib.national_utils import *
 from auth_wrapper import add_auth_to_page
 from navigation_utils import handle_navigation_request
@@ -292,7 +294,7 @@ with tab4:
     render_complication_national(all_data)
 
 with tab5:
-    render_hospitals(procedure_details)
+    render_hospitals(df, procedure_details)
 
 
 

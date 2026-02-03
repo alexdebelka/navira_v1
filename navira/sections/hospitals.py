@@ -14,7 +14,7 @@ from lib.national_utils import (
 )
 
 
-def render_hospitals(procedure_details: pd.DataFrame):
+def render_hospitals(df: pd.DataFrame, procedure_details: pd.DataFrame):
     """Render the Hospitals section for national page.
     
     This section contains:
@@ -26,17 +26,7 @@ def render_hospitals(procedure_details: pd.DataFrame):
     - Robotic adoption trends by procedure
     """
     
-    # Get dataframe from session state or data loader
-    try:
-        df = st.session_state.get('df')
-        if df is None:
-            from navira.data_loader import get_all_dataframes
-            all_data = get_all_dataframes()
-            df = all_data.get('annual', pd.DataFrame())
-    except Exception:
-        df = pd.DataFrame()
-    
-    # ---(1) HOSPITAL VOLUME DISTRIBUTION ---
+    # --- (1) HOSPITAL VOLUME DISTRIBUTION ---
     st.header("Hospital Volume Distribution")
     
     # Load and Process Data Locally
