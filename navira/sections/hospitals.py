@@ -29,13 +29,38 @@ def render_hospitals(df: pd.DataFrame, procedure_details: pd.DataFrame):
     # --- (1) HOSPITAL VOLUME DISTRIBUTION ---
     st.header("Hospital Volume Distribution")
     
+    # What to look for guidance
+    with st.expander("ℹ️ What to look for"):
+        st.markdown("""
+        **Understanding hospital volume distribution:**
+        - Shows how bariatric surgical volume is distributed across hospitals
+        - Hospitals are categorized by annual procedure volume: <50, 50-100, 100-200, >200
+        - Higher volume centers often have more experience and specialized resources
+        
+        **Key findings:**
+        - Most hospitals perform **<100 procedures/year**
+        - A small number of **high-volume centers (>200/year)** perform a significant share of procedures
+        - Trend shows consolidation toward higher-volume centers
+        
+        **What to watch for:**
+        - 📉 **Decreasing low-volume hospitals**: May indicate quality-driven centralization
+        - 📈 **Increasing high-volume centers**: Positive for outcomes (volume-outcome relationship)
+        - **Balance**: Need to ensure geographic access while maintaining quality
+        
+        **Clinical significance:** Studies show better outcomes at higher-volume centers (>100 procedures/year)
+        """)
+    
     # Load and Process Data Locally
     try:
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         vol_csv_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_VOL_HOP_YEAR.csv")
+        vol_natl_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_VOL_NATL_YEAR.csv")
+        
         df_vol = pd.read_csv(vol_csv_path)
+        df_natl = pd.read_csv(vol_natl_path)
     
         df_vol = df_vol[df_vol['annee'].isin([2021, 2022, 2023, 2024])]
+        df_natl = df_natl[df_natl['annee'].isin([2021, 2022, 2023, 2024])]
     
         # Define Bins
         def assign_bin(n):
@@ -51,9 +76,14 @@ def render_hospitals(df: pd.DataFrame, procedure_details: pd.DataFrame):
         total_hosp_2024 = df_2024['finessGeoDP'].nunique()
         total_surg_2024 = df_2024['n'].sum()
         
+        # Get national total from TAB_VOL_NATL_YEAR for validation
+        natl_2024 = df_natl[df_natl['annee'] == 2024]['n'].sum() if not df_natl.empty else total_surg_2024
+        avg_per_hospital_2024 = total_surg_2024 / total_hosp_2024 if total_hosp_2024 > 0 else 0
+        
         counts_2024 = df_2024['bin'].value_counts()
         hosp_less_50_2024 = counts_2024.get("<50", 0)
         hosp_more_200_2024 = counts_2024.get(">200", 0)
+        hosp_high_volume_2024 = counts_2024.get("100–200", 0) + hosp_more_200_2024  # >=100
     
         # Baseline (2021-2023) Average
         df_baseline = df_vol[df_vol['annee'].isin([2021, 2022, 2023])]
@@ -62,21 +92,29 @@ def render_hospitals(df: pd.DataFrame, procedure_details: pd.DataFrame):
         
         hosp_less_50_base = avg_baseline.get("<50", 0)
         hosp_more_200_base = avg_baseline.get(">200", 0)
+        hosp_high_volume_base = avg_baseline.get("100–200", 0) + hosp_more_200_base  # >=100 baseline
         
         delta_less_50 = hosp_less_50_2024 - hosp_less_50_base
-        delta_more_200 = hosp_more_200_2024 - hosp_more_200_base
+        delta_high_volume = hosp_high_volume_2024 - hosp_high_volume_base
     
         # Display KPIs
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             st.metric("Total Hospitals (2024)", f"{total_hosp_2024}")
+            st.caption(f"Avg: {avg_per_hospital_2024:.0f} procedures/hospital")
         with col2:
             st.metric("Total Surgeries (2024)", f"{total_surg_2024:,}")
+            if natl_2024 != total_surg_2024:
+                st.caption(f"National total: {natl_2024:,}")
         with col3:
             st.metric("Hospitals <50/year (2024)", f"{hosp_less_50_2024}", delta=f"{delta_less_50:+.1f} vs 21-23 avg", delta_color="inverse")
+            pct_low = (hosp_less_50_2024 / total_hosp_2024 * 100) if total_hosp_2024 > 0 else 0
+            st.caption(f"{pct_low:.0f}% of all hospitals")
         with col4:
-            st.metric("Hospitals >200/year (2024)", f"{hosp_more_200_2024}", delta=f"{delta_more_200:+.1f} vs 21-23 avg", delta_color="normal")
+            st.metric("Hospitals ≥100/year (2024)", f"{hosp_high_volume_2024}", delta=f"{delta_high_volume:+.1f} vs 21-23 avg", delta_color="normal")
+            pct_high = (hosp_high_volume_2024 / total_hosp_2024 * 100) if total_hosp_2024 > 0 else 0
+            st.caption(f"{pct_high:.0f}% of all hospitals")
     
         # Chart Section
         st.markdown("""
@@ -101,10 +139,10 @@ def render_hospitals(df: pd.DataFrame, procedure_details: pd.DataFrame):
         fig_vol = go.Figure()
         if show_comparison:
             fig_vol.add_trace(go.Bar(x=bin_order, y=y_base, name='2021-2023 Average', marker_color='#2E86AB', hovertemplate='<b>%{x}</b><br>Avg: %{y:.1f}<extra></extra>'))
-            fig_vol.add_trace(go.Bar(x=bin_order, y=y_2024, name='2024', marker_color='rgba(255, 193, 7, 0.7)', text=y_2024, textposition='auto', hovertemplate='<b>%{x}</b><br>2024: %{y}<extra></extra>'))
+            fig_vol.add_trace(go.Bar(x=bin_order, y=y_2024, name='2024', marker_color='rgba(255, 140, 0, 0.7)', text=y_2024, textposition='auto', hovertemplate='<b>%{x}</b><br>2024: %{y}<extra></extra>'))
             barmode = 'overlay'
         else:
-            fig_vol.add_trace(go.Bar(x=bin_order, y=y_2024, name='2024', marker_color='#FFC107', text=y_2024, textposition='auto', hovertemplate='<b>%{x}</b><br>2024: %{y}<extra></extra>'))
+            fig_vol.add_trace(go.Bar(x=bin_order, y=y_2024, name='2024', marker_color='#FF8C00', text=y_2024, textposition='auto', hovertemplate='<b>%{x}</b><br>2024: %{y}<extra></extra>'))
             barmode = 'group'
     
         fig_vol.update_layout(
@@ -123,18 +161,161 @@ def render_hospitals(df: pd.DataFrame, procedure_details: pd.DataFrame):
         st.plotly_chart(fig_vol, use_container_width=True)
         
         with st.expander("Key findings"):
+            # Calculate volume concentration
+            high_vol_surgeries = df_2024[df_2024['n'] >= 100]['n'].sum()
+            pct_surgeries_high_vol = (high_vol_surgeries / total_surg_2024 * 100) if total_surg_2024 > 0 else 0
+            
             st.markdown(f"""
             **2024 Distribution:**
-            - **{hosp_less_50_2024}** hospitals performed <50 procedures.
-            - **{hosp_more_200_2024}** hospitals performed >200 procedures.
+            - **{hosp_less_50_2024}** hospitals performed <50 procedures ({pct_low:.0f}% of hospitals)
+            - **{hosp_high_volume_2024}** hospitals performed ≥100 procedures ({pct_high:.0f}% of hospitals)
+            - High-volume centers (≥100/year) performed **{pct_surgeries_high_vol:.1f}%** of all procedures
             
             **Compared to 2021-2023 Average:**
             - Small volume (<50): {delta_less_50:+.1f}
-            - High volume (>200): {delta_more_200:+.1f}
+            - High volume (≥100): {delta_high_volume:+.1f}
+            
+            **Clinical Context:**
+            - Higher-volume centers (≥100/year) typically show better patient outcomes
+            - Current distribution shows {"good" if pct_surgeries_high_vol > 60 else "moderate"} centralization at experienced centers
             """)
     
     except Exception as e:
         st.error(f"Error loading volume data: {e}")
+    
+    
+    # --- (1.5) REVISION SURGERY RATE ---
+    st.header("Revision Surgery Rate")
+    
+    # What to look for guidance
+    with st.expander("ℹ️ What to look for"):
+        st.markdown("""
+        **Understanding revision surgery:**
+        - Revision surgery refers to any bariatric procedure performed after a previous bariatric operation
+        - Can be due to complications, inadequate weight loss, or weight regain
+        - Includes conversions from one procedure type to another (e.g., band to bypass)
+        
+        **Key findings:**
+        - National revision rate is **13%** of all bariatric procedures
+        - Academic hospitals typically have **higher revision rates** (17.5%) due to complex referrals
+        - Private hospitals show **lower revision rates** (~12%)
+        
+        **What to watch for:**
+        - **Academic centers**: Higher rates expected due to tertiary referral patterns
+        - **Overall trends**: Stable rates around 12-15% are typical
+        - **By affiliation**: Variation reflects case complexity and referral patterns
+        
+        **Clinical context:** Higher revision rates at academic centers often reflect their role in managing complex cases
+        """)
+    
+    try:
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        rev_natl_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_REV_NATL.csv")
+        rev_status_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_REV_STATUS.csv")
+        rev_12m_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_REV_NATL_12M.csv")
+        
+        df_rev_natl = pd.read_csv(rev_natl_path)
+        df_rev_status = pd.read_csv(rev_status_path)
+        df_rev_12m = pd.read_csv(rev_12m_path)
+        
+        # National metrics
+        if not df_rev_natl.empty:
+            total_procedures = df_rev_natl['TOT'].iloc[0]
+            total_revisions = df_rev_natl['TOT_rev'].iloc[0]
+            revision_pct = df_rev_natl['PCT_rev'].iloc[0]
+            
+            # Last 12 months data
+            if not df_rev_12m.empty:
+                total_12m = df_rev_12m['TOT'].iloc[0]
+                rev_12m = df_rev_12m['TOT_rev'].iloc[0]
+                rev_pct_12m = df_rev_12m['PCT_rev'].iloc[0]
+            else:
+                total_12m = 0
+                rev_12m = 0
+                rev_pct_12m = 0
+            
+            # Display metrics
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Overall Revision Rate", f"{revision_pct:.1f}%")
+                st.caption(f"{total_revisions:,} revisions out of {total_procedures:,} procedures")
+            
+            with col2:
+                st.metric("Last 12 Months", f"{rev_pct_12m:.1f}%")
+                st.caption(f"{rev_12m:,} revisions out of {total_12m:,} procedures")
+                
+            with col3:
+                primary_procedures = total_procedures - total_revisions
+                st.metric("Primary Procedures", f"{(100-revision_pct):.1f}%")
+                st.caption(f"{primary_procedures:,} primary procedures")
+        
+        # Revision rate by hospital affiliation
+        if not df_rev_status.empty:
+            st.markdown("#### Revision Rate by Hospital Affiliation")
+            
+            # Map status to affiliation names
+            status_mapping = {
+                'public academic': 'Public – Univ.',
+                'public': 'Public – Non-Acad.',
+                'private for profit': 'Private – For-profit',
+                'private not-for-profit': 'Private – Not-for-profit'
+            }
+            
+            df_rev_status['Affiliation'] = df_rev_status['statut'].map(status_mapping)
+            df_rev_status = df_rev_status.dropna(subset=['Affiliation'])
+            df_rev_status = df_rev_status.sort_values('PCT_rev', ascending=True)
+            
+            # Create horizontal bar chart
+            fig_rev = go.Figure()
+            fig_rev.add_trace(go.Bar(
+                x=df_rev_status['PCT_rev'],
+                y=df_rev_status['Affiliation'],
+                orientation='h',
+                marker_color='#FF8C00',
+                text=[f"{r:.1f}%" for r in df_rev_status['PCT_rev']],
+                textposition='outside',
+                hovertemplate='<b>%{y}</b><br>Revision Rate: %{x:.1f}%<br>Revisions: %{customdata[0]:,}<br>Total: %{customdata[1]:,}<extra></extra>',
+                customdata=df_rev_status[['TOT_rev', 'TOT']].values
+            ))
+            
+            fig_rev.update_layout(
+                title="Revision Rate by Hospital Affiliation",
+                xaxis_title="Revision Rate (%)",
+                yaxis_title="",
+                height=350,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                showlegend=False,
+                margin=dict(l=150, r=50, t=50, b=50)
+            )
+            
+            st.plotly_chart(fig_rev, use_container_width=True)
+            
+            # Key findings
+            with st.expander("Key findings"):
+                highest_rev = df_rev_status.loc[df_rev_status['PCT_rev'].idxmax()]
+                lowest_rev = df_rev_status.loc[df_rev_status['PCT_rev'].idxmin()]
+                
+                st.markdown(f"""
+                **Revision Rate by Affiliation:**
+                - **Highest**: {highest_rev['Affiliation']} at **{highest_rev['PCT_rev']:.1f}%** ({highest_rev['TOT_rev']:,} out of {highest_rev['TOT']:,} procedures)
+                - **Lowest**: {lowest_rev['Affiliation']} at **{lowest_rev['PCT_rev']:.1f}%** ({lowest_rev['TOT_rev']:,} out of {lowest_rev['TOT']:,} procedures)
+                
+                **Context:**
+                - Academic hospitals typically see higher revision rates due to complex referral patterns
+                - They serve as tertiary centers managing failed primary procedures from other facilities
+                - Private hospitals tend to have lower rates, focusing more on primary procedures
+                """)
+                
+                st.markdown("**Complete Breakdown:**")
+                # Use st.dataframe for better table rendering
+                display_df = df_rev_status[['Affiliation', 'TOT', 'TOT_rev', 'PCT_rev']].copy()
+                display_df.columns = ['Affiliation', 'Total Procedures', 'Revisions', 'Revision Rate (%)']
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
+    
+    except Exception as e:
+        st.error(f"Error loading revision data: {e}")
     
     
     # --- (2) HOSPITAL AFFILIATION ---

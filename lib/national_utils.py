@@ -75,9 +75,23 @@ def load_and_prepare_data() -> pd.DataFrame:
         # If 'sector' doesn't exist, create a default column
         # Try to infer from other available columns or set a default
         merged['sector'] = 'unknown'
-        # If we have the original 'statut' in establishments, try to use it
+        
+        # Check for BOTH 'statut' and 'status' columns in establishments (CSV loader renames 'statut' to 'status')
+        status_col = None
         if 'statut' in establishments.columns:
-            est_statut = establishments.set_index('id')['statut'].astype(str).str.strip().str.lower()
+            status_col = 'statut'
+        elif 'status' in establishments.columns:
+            status_col = 'status'
+        
+        if status_col:
+            # Drop duplicates and create a clean mapping from id to sector
+            # Filter out any NaN IDs first, then drop duplicates
+            est_clean = establishments[['id', status_col]].copy()
+            est_clean = est_clean.dropna(subset=['id'])  # Remove rows with NaN IDs
+            est_clean['id'] = est_clean['id'].astype(str)  # Ensure string type
+            est_clean = est_clean.drop_duplicates(subset=['id'], keep='first')  # Drop duplicates
+            est_clean = est_clean.set_index('id')  # Now safe to set index
+            est_statut = est_clean[status_col].astype(str).str.strip().str.lower()
             merged['sector'] = merged['hospital_id'].astype(str).map(est_statut).fillna('unknown')
     else:
         # Process existing 'sector' column
@@ -90,17 +104,40 @@ def load_and_prepare_data() -> pd.DataFrame:
         'private': 'private',  # Handle already normalized values
         'unknown': 'unknown'
     }
+    
     merged['sector'] = merged['sector'].map(sector_mapping).fillna('unknown')
+
 
     # Profit status from original statut
     merged['profit_status'] = 'not_for_profit'
     # Only set profit_status based on sector if sector column exists and is valid
     if 'sector' in merged.columns:
         merged.loc[merged['sector'] == 'public', 'profit_status'] = 'not_for_profit'
-    # Try to infer from raw statut text if available via establishments
-    if 'statut' in establishments.columns:
-        stat_series = establishments.set_index('id')['statut'].astype(str).str.lower()
-        merged['profit_status'] = merged['hospital_id'].map(lambda x: 'for_profit' if stat_series.get(str(x), '').find('for profit') >= 0 else 'not_for_profit')
+        
+        # Try to infer profit status for PRIVATE hospitals from raw statut text if available
+        # Check for BOTH 'statut' and 'status' columns (CSV loader renames 'statut' to 'status')
+        status_col = None
+        if 'statut' in establishments.columns:
+            status_col = 'statut'
+        elif 'status' in establishments.columns:
+            status_col = 'status'
+        
+        if status_col:
+            # Create a clean mapping (drop NaN IDs and duplicates)
+            est_clean = establishments[['id', status_col]].copy()
+            est_clean = est_clean.dropna(subset=['id'])
+            est_clean['id'] = est_clean['id'].astype(str)
+            est_clean = est_clean.drop_duplicates(subset=['id'], keep='first')
+            
+            # Check if status contains 'for profit' and create a mapping
+            est_clean['is_for_profit'] = est_clean[status_col].astype(str).str.lower().str.contains('for profit', na=False)
+            profit_map = est_clean.set_index('id')['is_for_profit'].map({True: 'for_profit', False: 'not_for_profit'})
+            
+            # Only update profit_status for private sector hospitals
+            private_mask = merged['sector'] == 'private'
+            merged.loc[private_mask, 'profit_status'] = merged.loc[private_mask, 'hospital_id'].map(profit_map).fillna('not_for_profit')
+
+
 
     # Revision count available at establishment level; map to rows (ensure unique index)
     if 'revision_surgeries_n' in establishments.columns:
@@ -199,9 +236,9 @@ def compute_baseline_bins_2020_2023(df: pd.DataFrame) -> Dict[str, float]:
 # --- AFFILIATION ANALYSIS ---
 @st.cache_data
 def compute_affiliation_breakdown_2024(df: pd.DataFrame) -> Dict[str, Dict[str, int]]:
-    """Compute hospital affiliation breakdown for 2024."""
-    df_2024 = df[df['year'] == 2024].copy()
-    df_eligible = filter_eligible_years(df_2024)
+    """Compute hospital affiliation breakdown for 2025."""
+    df_2025 = df[df['year'] == 2025].copy()
+    df_eligible = filter_eligible_years(df_2025).copy()  # Ensure we have a copy, not a view
     
     # Create affiliation categories
     def get_affiliation_category(row):
@@ -255,7 +292,7 @@ def compute_affiliation_trends_2020_2024(df: pd.DataFrame) -> Dict[str, Dict[int
     
     for year in range(2020, 2025):
         df_year = df[df['year'] == year].copy()
-        df_eligible = filter_eligible_years(df_year)
+        df_eligible = filter_eligible_years(df_year).copy()  # Ensure we have a copy, not a view
         
         # Create affiliation categories for this year
         def get_affiliation_category(row):

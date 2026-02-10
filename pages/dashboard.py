@@ -1,5 +1,13 @@
 # pages/Hospital_Dashboard.py
 import streamlit as st
+
+# --- Page Configuration --- MUST BE FIRST STREAMLIT COMMAND
+st.set_page_config(
+    page_title="Hospital Dashboard",
+    page_icon="📊",
+    layout="wide"
+)
+
 import pandas as pd
 import numpy as np
 import folium
@@ -39,13 +47,6 @@ st.session_state._on_hospital_dashboard = True
 
 # Add authentication check
 add_auth_to_page()
-
-# --- Page Configuration ---
-st.set_page_config(
-    page_title="Hospital Dashboard",
-    page_icon="📊",
-    layout="wide"
-)
 
 # Build/version indicator to verify redeploys
 try:

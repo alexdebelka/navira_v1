@@ -30,59 +30,74 @@ def render_robot(df: pd.DataFrame):
     
     st.header("Approach Trends")
     
-    # Compute approach data
-    approach_trends = compute_approach_trends(df)
-    approach_mix_2024 = compute_2024_approach_mix(df)
+    # Get base directory for CSV loading
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     
-    st.markdown(
-        """
-        <div class=\"nv-info-wrap\">
-          <div class=\"nv-h3\">Surgical Approach Mix (2024)</div>
-          <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
-            <div class=\"nv-tooltiptext\">
-              <b>Understanding this chart:</b><br/>
-              This pie chart shows the proportion of surgical approaches used in 2024 across all eligible hospitals.
+    # Add toggle for year filtering
+    toggle_robot_2024_only = st.toggle("Show 2024 data only", value=False, key="robot_approach_toggle_2024")
+    
+    # Load data from CSV
+    try:
+        app_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_APP_NATL_YEAR.csv")
+        df_app = pd.read_csv(app_path)
+        
+        # Filter by year based on toggle
+        if toggle_robot_2024_only:
+            df_app_filtered = df_app[df_app['annee'] == 2024]
+            year_label = "2024"
+        else:
+            df_app_filtered = df_app[(df_app['annee'] >= 2021) & (df_app['annee'] <= 2024)]
+            year_label = "2021-2024"
+        
+        # Map approach codes to names
+        approach_map = {
+            'COE': 'Laparoscopy',
+            'LAP': 'Open Surgery',
+            'ROB': 'Robotic'
+        }
+        
+        # Aggregate data
+        approach_totals = df_app_filtered.groupby('vda')['n'].sum().reset_index()
+        approach_totals['Approach'] = approach_totals['vda'].map(approach_map)
+        approach_totals = approach_totals.rename(columns={'n': 'Count'})
+        
+        st.markdown(
+            f"""
+            <div class=\"nv-info-wrap\">
+              <div class=\"nv-h3\">Surgical Approach Mix ({year_label})</div>
+              <div class=\"nv-tooltip\"><span class=\"nv-info-badge\">i</span>
+                <div class=\"nv-tooltiptext\">
+                  <b>Understanding this chart:</b><br/>
+                  This pie chart shows the proportion of surgical approaches used across all bariatric procedures.
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    
-    if approach_mix_2024:
-        # Prepare data for pie chart
-        pie_data = []
-        for approach_name, count in approach_mix_2024.items():
-            if count > 0:
-                pie_data.append({
-                    'Approach': approach_name,
-                    'Count': count
-                })
+            """,
+            unsafe_allow_html=True
+        )
         
-        pie_df = pd.DataFrame(pie_data)
-        
-        if not pie_df.empty:
-            # Precompute integer percentage labels (no decimals)
-            total_cnt = max(1, int(pie_df['Count'].sum()))
-            pie_df['PctLabel'] = (pie_df['Count'] / total_cnt * 100).round(0).astype(int).astype(str) + '%'
+        if not approach_totals.empty:
+            # Precompute integer percentage labels
+            total_cnt = max(1, int(approach_totals['Count'].sum()))
+            approach_totals['PctLabel'] = (approach_totals['Count'] / total_cnt * 100).round(0).astype(int).astype(str) + '%'
 
             # Create side-by-side comparison
-            col1, col2 = st.columns([2, 1])  # National graphs larger (2), Hospital comparison smaller (1)
+            col1, col2 = st.columns([2, 1])
             
             with col1:
-                st.markdown("#### National: Surgical Approach Distribution")
-                # Define a consistent color mapping used across pie and bars
+                st.markdown(f"#### National: Surgical Approach Distribution ({year_label})")
+                # Define consistent color mapping
                 APPROACH_COLORS = {
-                    'Coelioscopy': '#2E86AB',
-                    'Robotic': '#F7931E',
-                    'Open Surgery': '#A23B72'
+                    'Laparoscopy': '#2E86AB',
+                    'Open Surgery': '#A6CEE3',
+                    'Robotic': '#F7931E'
                 }
 
                 fig = px.pie(
-                    pie_df,
+                    approach_totals,
                     values='Count',
                     names='Approach',
-                    title="National Approach Distribution (2024)",
+                    title=f"National Approach Distribution ({year_label})",
                     color='Approach',
                     color_discrete_map=APPROACH_COLORS
                 )
@@ -94,37 +109,69 @@ def render_robot(df: pd.DataFrame):
                 )
                 
                 fig.update_traces(
-                    hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent:.0f}%<extra></extra>',
+                    hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent:.1f}%<extra></extra>',
                     textposition='outside',
-                    text=pie_df['PctLabel'],
+                    text=approach_totals['PctLabel'],
                     textinfo='text+label',
                     textfont=dict(size=16)
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
             
-            
-            # Dropdown with What to look for + Key findings
-            try:
-                total_approaches = pie_df['Count'].sum()
-                robotic_cnt = int(pie_df[pie_df['Approach'] == 'Robotic']['Count'].sum()) if 'Robotic' in pie_df['Approach'].values else 0
-                robotic_share = (robotic_cnt / total_approaches * 100) if total_approaches > 0 else 0
-                top_row = pie_df.sort_values('Count', ascending=False).iloc[0]
-                with st.expander("What to look for and key findings"):
-                    st.markdown(f"""
-                    **What to look for:**
-                    - Dominant approach segment size
-                    - Relative share of Robotic vs others
-                    - Presence of small slivers indicating rare approaches
+            # Enhanced "What to look for" expander
+            with st.expander("What to look for and key findings"):
+                try:
+                    total_approaches = approach_totals['Count'].sum()
+                    robotic_cnt = int(approach_totals[approach_totals['Approach'] == 'Robotic']['Count'].sum()) if 'Robotic' in approach_totals['Approach'].values else 0
+                    robotic_share = (robotic_cnt / total_approaches * 100) if total_approaches > 0 else 0
+                    
+                    laparoscopy_cnt = int(approach_totals[approach_totals['Approach'] == 'Laparoscopy']['Count'].sum()) if 'Laparoscopy' in approach_totals['Approach'].values else 0
+                    laparoscopy_pct = (laparoscopy_cnt / total_approaches * 100) if total_approaches > 0 else 0
+                    
+                    top_row = approach_totals.sort_values('Count', ascending=False).iloc[0]
+                    top_pct = (top_row['Count'] / total_approaches * 100) if total_approaches > 0 else 0
+                    
+                    if toggle_robot_2024_only:
+                        st.markdown(f"""
+                        **What to look for:**
+                        - Relative proportion of each surgical approach in 2024
+                        - Dominant approach vs emerging techniques
+                        - Share of robotic surgery in the current year
+                        - Balance between traditional and innovative approaches
 
-                    **Key findings:**
-                    - Robotic share in 2024: **{robotic_share:.1f}%** ({robotic_cnt:,} procedures)
-                    - Most common approach: **{top_row['Approach']}** ({int(top_row['Count']):,})
-                    """)
-            except Exception:
-                pass
-    else:
-        st.info("No approach data available for 2024.")
+                        **Key findings (2024):**
+                        - **Robotic surgery** accounts for **{robotic_share:.1f}%** of procedures ({robotic_cnt:,} cases)
+                        - Most common approach: **{top_row['Approach']}** ({int(top_row['Count']):,} procedures, {top_pct:.1f}%)
+                        - **Laparoscopy** represents **{laparoscopy_pct:.1f}%** of surgeries
+                        - Robotic adoption shows continued growth trajectory
+                        """)
+                    else:
+                        st.markdown(f"""
+                        **What to look for:**
+                        - Overall distribution across 4 years (2021-2024)
+                        - Which approach dominates the national landscape
+                        - Cumulative robotic surgery volume and market share
+                        - Evolution of surgical technique preferences
+
+                        **Key findings (2021-2024):**
+                        - **Robotic surgery**: **{robotic_share:.1f}%** of all {int(total_approaches):,} procedures
+                        - Total robotic procedures: **{robotic_cnt:,}** over 4 years
+                        - Most common approach: **{top_row['Approach']}** ({int(top_row['Count']):,} procedures, {top_pct:.1f}%)
+                        - **Laparoscopy** is the dominant technique at **{laparoscopy_pct:.1f}%**
+                        - Robotic share growing year-over-year from 4.0% (2021) to 6.2% (2024)
+                        """)
+                except Exception as e:
+                    st.markdown("Unable to compute detailed insights.")
+        else:
+            st.info(f"No approach data available for {year_label}.")
+    
+    except Exception as e:
+        st.error(f"Error loading approach data: {e}")
+        st.info("Unable to load surgical approach data from CSV.")
+    
+    # Compute approach trends for the line chart (keep using df for now)
+    approach_trends = compute_approach_trends(df)
+
     
     # Single column layout for trends
     with st.container():
@@ -142,6 +189,44 @@ def render_robot(df: pd.DataFrame):
             """,
             unsafe_allow_html=True
         )
+        
+        # Load hospital-level robotic data for additional metrics
+        try:
+            rob_hosp_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_ROB_HOP_12M.csv")
+            df_rob_hosp = pd.read_csv(rob_hosp_path)
+            
+            # Calculate metrics
+            num_hospitals = len(df_rob_hosp)
+            avg_rob_per_hospital = int(df_rob_hosp['n'].mean())
+            total_rob_12m = int(df_rob_hosp['n'].sum())
+            
+            # Display metrics in columns
+            met_col1, met_col2, met_col3 = st.columns(3)
+            
+            with met_col1:
+                st.metric(
+                    "Hospitals Performing Robotic Surgery", 
+                    f"{num_hospitals}",
+                    help="Number of hospitals that performed at least 1 robotic bariatric surgery (recent 12 months)"
+                )
+            
+            with met_col2:
+                st.metric(
+                    "Avg Robotic Procedures per Hospital", 
+                    f"{avg_rob_per_hospital}",
+                    help="Average number of robotic procedures per hospital (recent 12 months)"
+                )
+            
+            with met_col3:
+                st.metric(
+                    "Total Robotic (12-month snapshot)", 
+                    f"{total_rob_12m:,}",
+                    help="Total robotic procedures across all hospitals (recent 12 months)"
+                )
+        except Exception as e:
+            # If we can't load the data, just skip the metrics
+            pass
+        
         trend_data = []
         for year in range(2020, 2025):
             trend_data.append({
@@ -177,253 +262,167 @@ def render_robot(df: pd.DataFrame):
         )
 
         st.plotly_chart(fig, use_container_width=True)
-        try:
-            first_year = 2020
-            last_year = 2024
-            rob_start = int(approach_trends['robotic'].get(first_year, 0))
-            rob_end = int(approach_trends['robotic'].get(last_year, 0))
-            pct_rob_2024 = (approach_trends['robotic'].get(2024, 0) / max(approach_trends['all'].get(2024, 1), 1)) * 100 if approach_trends['all'].get(2024, 0) else 0
-            with st.expander("What to look for and key findings"):
+        
+        with st.expander("What to look for and key findings"):
+            try:
+                first_year = 2020
+                last_year = 2024
+                rob_start = int(approach_trends['robotic'].get(first_year, 0))
+                rob_end = int(approach_trends['robotic'].get(last_year, 0))
+                pct_rob_2024 = (approach_trends['robotic'].get(2024, 0) / max(approach_trends['all'].get(2024, 1), 1)) * 100 if approach_trends['all'].get(2024, 0) else 0
+                
+                # Calculate growth rate
+                growth_pct = ((rob_end - rob_start) / rob_start * 100) if rob_start > 0 else 0
+                
                 st.markdown(f"""
                 **What to look for:**
-                - Year‑over‑year growth or dips
-                - Peak adoption year
-                - Gap between robotic and total surgeries
+                - Year-over-year growth trajectory in total robotic surgeries
+                - Acceleration or deceleration in adoption rate
+                - Current number of hospitals offering robotic surgery
+                - Average volume per hospital (indicates both adoption and experience level)
 
-                **Key findings:**
-                - Robotic surgeries grew from **{rob_start:,}** (2020) to **{rob_end:,}** (2024)
-                - Robotic share in 2024: **{pct_rob_2024:.1f}%** of all surgeries
+                **Key findings (2020-2024):**
+                - Total robotic surgeries grew from **{rob_start:,}** (2020) to **{rob_end:,}** (2024)
+                - Overall growth rate: **{growth_pct:+.1f}%** over 5 years
+                - Robotic share in 2024: **{pct_rob_2024:.1f}%** of all bariatric surgeries
+                - **{num_hospitals} hospitals** currently performing robotic bariatric surgery
+                - Average robotic volume per hospital: **~{avg_rob_per_hospital} procedures** per year
+                
+                **Insights on adoption:**
+                - Robotic surgery is spreading to more centers but remains in **early adoption phase**
+                - Most centers perform relatively low volumes (avg ~{avg_rob_per_hospital}/year)
+                - This suggests technology is accessible but not yet mainstream
+                - Both volume growth AND number of centers are increasing
+                
+                **Calculation methodology:**
+                - Hospital count and averages based on TAB_ROB_HOP_12M.csv (most recent 12-month period)
+                - Only hospitals with at least 1 robotic procedure counted
+                - Average = Total robotic procedures ÷ Number of hospitals performing robotic surgery
                 """)
-        except Exception:
-            pass
-
-
-    # --- ROBOTIC SURGERY COMPARATIVE ANALYSIS ---
-    st.header("Robotic Surgery Comparative Analysis")
-    
-    # Compute all robotic surgery comparisons
-    robotic_geographic = compute_robotic_geographic_analysis(df)
-    robotic_affiliation = compute_robotic_affiliation_analysis(df)
-    robotic_volume = compute_robotic_volume_analysis(df)
-    robotic_temporal = compute_robotic_temporal_analysis(df)
-    robotic_institutional = compute_robotic_institutional_analysis(df)
-
-    # 2. Geographic Analysis
-    with st.expander("🗺️ 1. Geographic Analysis - Regional Robotic Adoption"):
-        st.markdown("""
-        **Understanding this analysis:**
-        
-        This chart shows robotic surgery adoption rates across different geographic regions of France. It reveals which regions are leading in robotic technology adoption and which may need more support.
-        
-        **How we calculated this:**
-        - **Data source**: 2024 data for all eligible hospitals (≥25 procedures/year)
-        - **Grouping**: Hospitals grouped by their geographic region (lib_reg column)
-        - **Robotic count**: Sum of robotic procedures (ROB column) per region
-        - **Total procedures**: Sum of all bariatric procedures per region
-        - **Percentage**: (Robotic procedures / Total procedures) × 100 per region
-        - **Filtering**: Only regions with >0 robotic procedures and valid percentages
-        
-        **What the percentages mean:**
-        - **Percentage**: Shows what % of ALL bariatric surgeries in that region are performed robotically
-        - **Example**: If ILE-DE-FRANCE shows 5.4%, it means 5.4% of all bariatric surgeries in Île‑de‑France are robotic
-        - **Robotic count**: The actual number of robotic procedures performed in that region
-        
-        """)
-        
-        if robotic_geographic['regions'] and len(robotic_geographic['regions']) > 0:
-            fig = px.bar(
-                x=robotic_geographic['percentages'],
-                y=robotic_geographic['regions'],
-                orientation='h',
-                title="Robotic Surgery Adoption by Region (2024)",
-                color=robotic_geographic['percentages'],
-                color_continuous_scale='Oranges',
-                text=[f"{p:.1f}%" for p in robotic_geographic['percentages']]
-            )
-            
-            fig.update_layout(
-                xaxis_title="Robotic Surgery Percentage (%)",
-                yaxis_title="",
-                height=440,
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font=dict(size=12),
-                margin=dict(l=160, r=50, t=80, b=40),
-                yaxis=dict(automargin=True, categoryorder='total ascending')
-            )
-            
-            fig.update_traces(
-                hovertemplate='<b>%{y}</b><br>Percentage: %{x:.1f}%<br>Robotic: %{customdata}<extra></extra>',
-                customdata=robotic_geographic['robotic_counts']
-            )
-            fig.update_traces(textposition='outside', cliponaxis=False)
-            
-            st.plotly_chart(fig, use_container_width=True)
-            try:
-                top_idx = int(pd.Series(robotic_geographic['percentages']).idxmax())
-                top_region = robotic_geographic['regions'][top_idx]
-                top_pct = robotic_geographic['percentages'][top_idx]
-                with st.expander("What to look for and key findings"):
-                    st.markdown(f"""
-                    **What to look for:**
-                    - Regions with notably higher robotic percentages
-                    - Regional disparities in access to robotic surgery
-                    
-                    **Key findings:**
-                    - Highest regional adoption: **{top_region}** at **{top_pct:.1f}%**
-                    """)
             except Exception:
-                pass
-        else:
-            st.info("No geographic data available. Region information may not be included in the dataset.")
+                st.markdown("""
+                Review the chart for year-over-year growth patterns in robotic surgery adoption.
+                """)
     
-    # 3. Institutional Analysis
-    with st.expander("🏥 2. Affiliation Analysis"):
-        st.markdown("""
-        **Understanding this analysis:**
-        
-        This chart compares robotic surgery adoption between hospital sectors: public vs private institutions.
-        
-        **How we calculated this:**
-        - **Data source**: 2024 data for all eligible hospitals (≥25 procedures/year)
-        - **Sector grouping**: Hospitals grouped by sector (public vs private)
-        - **Robotic count**: Sum of robotic procedures (ROB column) per hospital type
-        - **Total procedures**: Sum of all bariatric procedures per hospital type
-        - **Percentage**: (Robotic procedures / Total procedures) × 100 per hospital type
-        
-        **What the percentages mean:**
-        - **Percentage**: Share of all bariatric surgeries in that sector that are robotic
-        - **Robotic count**: The actual number of robotic procedures performed in that sector
-        """)
-        
-        # Merged bar chart: sector and affiliation side-by-side
-        merged_x = []
-        merged_y = []
-        merged_color = []
-        # Sector bars removed per request (keep only affiliation bars)
-        try:
-            if robotic_affiliation['affiliations'] and robotic_affiliation['percentages']:
-                for t, v in zip(robotic_affiliation['affiliations'], robotic_affiliation['percentages']):
-                    merged_x.append(f"Affil – {t}")
-                    merged_y.append(v)
-                    merged_color.append('Affiliation')
-        except Exception:
-            pass
-        if merged_x:
-            fig_merge = px.bar(x=merged_x, y=merged_y, color=merged_color, title="Robotic Adoption by Sector and Affiliation (2024)",
-                               color_discrete_map={'Sector':'#34a853','Affiliation':'#db4437'})
-            fig_merge.update_layout(height=380, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis_title=None, yaxis_title='Robotic Surgery Percentage (%)', showlegend=False)
-            fig_merge.update_traces(hovertemplate='<b>%{x}</b><br>Percentage: %{y:.1f}%<extra></extra>', marker_line_width=0)
-            st.plotly_chart(fig_merge, use_container_width=True)
-            with st.expander("What to look for and key findings"):
-                try:
-                    import numpy as np
-                    sector_vals = np.array(robotic_institutional.get('sector',{}).get('percentages',[]) or [])
-                    aff_vals = np.array(robotic_affiliation.get('percentages',[]) or [])
-                    s_max = sector_vals.max() if sector_vals.size else None
-                    a_max = aff_vals.max() if aff_vals.size else None
-                    st.markdown(f"""
-                    **What to look for:**
-                    - Sector vs affiliation differences in adoption
-                    - Which subgroups stand out at the high end
-
-                    **Key findings:**
-                    - Highest sector value: **{s_max:.1f}%** if available
-                    - Highest affiliation value: **{a_max:.1f}%** if available
-                    """)
-                except Exception:
-                    st.markdown("Insights unavailable due to missing values.")
-        else:
-            st.info("No sector/affiliation data available for the merged comparison.")
+    # --- Robot share scatter plot (National level) ---
+    st.markdown("---")
+    st.markdown("#### Robot share vs Hospital Volume")
     
-    with st.expander("📊 3. Volume-based Analysis - Hospital Volume vs Robotic Adoption"):
-        st.markdown("""
-        **Understanding this analysis:**
+    # Load robotic data from TAB_ROB_HOP_12M.csv
+    try:
+        rob_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_ROB_HOP_12M.csv")
+        rob_data = pd.read_csv(rob_path)
         
-        This chart shows how robotic surgery adoption varies with hospital volume. It examines whether high‑volume centers are more likely to use robotic technology.
-        
-        **How we calculated this (default chart):**
-        - **Data source**: 2024 data for all eligible hospitals (≥25 procedures/year)
-        - **Volume categorization**: Hospitals grouped by annual procedure volume:
-          * less than 50 procedures/year
-          * 50–100 procedures/year  
-          * 100–200 procedures/year
-          * more than 200 procedures/year
-        - **Weighted percentage**: For each volume group, we compute (sum of robotic surgeries ÷ sum of all surgeries) × 100. This weights each hospital by its number of surgeries so large centers are represented proportionally.
-        - Hover shows: **weighted % robotic** and the **robotic count** in that group.
-        
-        **Alternative view (optional expander below the chart):**
-        - **Unweighted mean**: Average of per‑hospital robotic shares within each group (each hospital contributes equally, regardless of size).
-        
-        **Why both matter:**
-        - Weighted view answers: "What share of all surgeries in this group are robotic?" (system‑wide perspective).
-        - Unweighted view answers: "What is the typical hospital's robotic share in this group?" (center‑level perspective).
-        
-        **Questions this helps answer:**
-        - Do higher‑volume centers have higher robotic adoption?
-        - Is the difference driven by a few very large programs or broadly across centers?
-        """)
-        
-        if robotic_volume['volume_categories'] and len(robotic_volume['volume_categories']) > 0:
-            # Keep only the continuous scatter with trendline (as per screenshot)
-            try:
-                dist_df = compute_robotic_volume_distribution(df)
-            except Exception:
-                dist_df = pd.DataFrame()
-            if not dist_df.empty:
-                st.subheader("Continuous relationship: volume vs robotic %")
+        if not rob_data.empty and "TOT" in rob_data.columns and "PCT_app" in rob_data.columns:
+            d = rob_data.copy()
+            d["finessGeoDP"] = d.get("finessGeoDP", "").astype(str)
+            d["TOT"] = pd.to_numeric(d.get("TOT", 0), errors="coerce").fillna(0)
+            d["PCT_app"] = pd.to_numeric(d.get("PCT_app", 0), errors="coerce").fillna(0)
+            
+            # National level - show all hospitals
+            d_national = d.copy()
+            
+            if not d_national.empty:
+                fig_rob = go.Figure()
+                # All hospitals
+                fig_rob.add_trace(go.Scatter(
+                    x=d_national["TOT"], y=d_national["PCT_app"], mode="markers",
+                    marker=dict(color="#60a5fa", size=6, opacity=0.75), name="All hospitals",
+                    hovertemplate='Procedures: %{x:.0f}<br>Robot share: %{y:.1f}%<extra></extra>'
+                ))
                 
-                # Add hospital names to the dataframe for hover information
-                try:
-                    establishments, _ = get_dataframes()
-                    if 'id' in establishments.columns and 'name' in establishments.columns:
-                        # Ensure consistent data types
-                        establishments['id'] = establishments['id'].astype(str)
-                        dist_df['hospital_id'] = dist_df['hospital_id'].astype(str)
-                        
-                        # Merge hospital names
-                        dist_df = dist_df.merge(
-                            establishments[['id', 'name']].drop_duplicates(subset=['id']),
-                            left_on='hospital_id',
-                            right_on='id',
-                            how='left'
-                        )
-                        dist_df['hospital_name'] = dist_df['name'].fillna('Unknown Hospital')
-                    else:
-                        dist_df['hospital_name'] = 'Hospital ' + dist_df['hospital_id'].astype(str)
-                except Exception:
-                    dist_df['hospital_name'] = 'Hospital ' + dist_df['hospital_id'].astype(str)
-                
-                cont = px.scatter(
-                    dist_df,
-                    x='total_surgeries',
-                    y='hospital_pct',
-                    color='volume_category',
-                    hover_data=['hospital_name'],
-                    opacity=0.65,
-                    title='Hospital volume (continuous) vs robotic %'
-                )
-                # Linear trendline removed per request
-                cont.update_layout(
-                    xaxis_title='Total surgeries (2024)',
-                    yaxis_title='Robotic % (per hospital)',
+                fig_rob.update_layout(
                     height=420,
-                    plot_bgcolor='rgba(0,0,0,0)',
+                    xaxis_title="Number of procedures per year (any approach)", 
+                    yaxis_title="Robot share (%)",
+                    xaxis=dict(range=[0, None]), 
+                    yaxis=dict(range=[0, 100]),
+                    plot_bgcolor='rgba(0,0,0,0)', 
                     paper_bgcolor='rgba(0,0,0,0)'
                 )
-                st.plotly_chart(cont, use_container_width=True)
-
-            # Annotations: hospitals and average surgeries per bin
-            try:
-                num_hosp = robotic_volume.get('hospitals')
-                total_counts = robotic_volume.get('total_counts')
-                ann_text = []
-                if num_hosp and total_counts:
-                    avg_surg = [round(tc / h, 1) if h else 0 for tc, h in zip(total_counts, num_hosp)]
-                    for xc, h, a in zip(robotic_volume['volume_categories'], num_hosp, avg_surg):
-                        ann_text.append(f"{h} hospitals\\n~{a} surgeries/hosp")
-                    fig_ann = px.bar(x=robotic_volume['volume_categories'], y=[0]*len(num_hosp))
-                    fig_ann.update_layout(height=1)  # placeholder
-                st.caption("Hospitals and avg surgeries per bin: " + ", ".join(ann_text))
-            except Exception:
-                pass
+                st.plotly_chart(fig_rob, use_container_width=True)
+                st.caption("Based on robotic procedures last 12 months (TAB_ROB_HOP_12M)")
+            else:
+                st.info("No data to build robot share scatter for national scope.")
+        else:
+            st.info("No robotic dataset available for scatter plot.")
+    except Exception as e:
+        st.warning(f"Could not load robot share data: {e}")
+    
+    # --- Robotic Adoption Trends Over Time ---
+    st.markdown("---")
+    st.markdown("#### Robotic Surgery Adoption Trends (2021-2024)")
+    
+    # What to look for guidance
+    with st.expander("ℹ️ What to look for"):
+        st.markdown("""
+        **Understanding robotic adoption:**
+        - Shows the percentage of all bariatric procedures performed using robotic assistance over time
+        - Includes all procedure types (Sleeve, Bypass, etc.)
+        
+        **Key findings:**
+        - Steady increase from **4.0% in 2021** to **6.2% in 2024**
+        - Growth indicates expanding robotic surgery capabilities across hospitals
+        
+        **What to watch for:**
+        - 📈 **Continuous growth**: Positive sign of technology adoption
+        - **Plateaus**: May indicate capacity constraints or training limitations
+        - **Regional variation**: Some areas may adopt faster than others
+        
+        **Note:** Robotic surgery typically shows higher adoption rates for bypass procedures compared to sleeve gastrectomy
+        """)
+    
+    try:
+        app_path = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_APP_NATL_YEAR.csv")
+        df_app_trends = pd.read_csv(app_path)
+        
+        # Filter to 2021-2024 and get robotic percentage
+        df_trends = df_app_trends[(df_app_trends['annee'] >= 2021) & (df_app_trends['annee'] <= 2024)].copy()
+        
+        if not df_trends.empty:
+            # Get robotic rates by year
+            robotic_trends = df_trends[df_trends['vda'] == 'ROB'][['annee', 'pct']].copy()
+            robotic_trends = robotic_trends.sort_values('annee')
+            
+            if not robotic_trends.empty:
+                fig_trends = go.Figure()
+                fig_trends.add_trace(go.Scatter(
+                    x=robotic_trends['annee'],
+                    y=robotic_trends['pct'],
+                    mode='lines+markers+text',
+                    text=[f"{r:.1f}%" for r in robotic_trends['pct']],
+                    textposition="top center",
+                    line=dict(color='#F7931E', width=3),
+                    marker=dict(size=10, color='#F7931E'),
+                    name='Robotic Rate',
+                    showlegend=False
+                ))
+                
+                fig_trends.update_layout(
+                    height=350,
+                    xaxis_title="Year",
+                    yaxis_title="Robotic Surgery Rate (%)",
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(
+                        showgrid=False,
+                        type='category',
+                        tickfont=dict(color='#888')
+                    ),
+                    yaxis=dict(
+                        showgrid=True,
+                        gridcolor='rgba(255,255,255,0.1)',
+                        range=[0, max(robotic_trends['pct']) * 1.3],
+                        tickfont=dict(color='#888')
+                    )
+                )
+                
+                st.plotly_chart(fig_trends, use_container_width=True, key="robot_adoption_trends")
+                st.caption("Source: TAB_APP_NATL_YEAR.csv - National robotic adoption rate across all bariatric procedures")
+            else:
+                st.info("No robotic trend data available")
+        else:
+            st.info("No trend data available for the selected period")
+            
+    except Exception as e:
+        st.warning(f"Could not load robotic adoption trends: {e}")

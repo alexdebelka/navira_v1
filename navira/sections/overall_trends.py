@@ -142,11 +142,11 @@ def render_overall_trends(df: pd.DataFrame):
                 # Stats Boxes
                 pred_color = "#ff4b4b" if diff_pct_val < 0 else "#2ca02c"
                 fig_combined.add_annotation(x=0.06, y=0.88, xref="paper", yref="paper", text="Total procedures", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
-                fig_combined.add_annotation(x=0.06, y=0.79, xref="paper", yref="paper", text=f"{int(total_procs):,}", showarrow=False, font=dict(color="white", size=20, weight="bold"), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.79, xref="paper", yref="paper", text=f"{int(total_procs):,}", showarrow=False, font=dict(color="white", size=20), xanchor="left")
                 fig_combined.add_annotation(x=0.06, y=0.53, xref="paper", yref="paper", text="Prediction", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
-                fig_combined.add_annotation(x=0.06, y=0.44, xref="paper", yref="paper", text=prediction_text, showarrow=False, font=dict(color=pred_color, size=20, weight="bold"), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.44, xref="paper", yref="paper", text=prediction_text, showarrow=False, font=dict(color=pred_color, size=20), xanchor="left")
                 fig_combined.add_annotation(x=0.06, y=0.18, xref="paper", yref="paper", text="Sleeve/Bypass", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
-                fig_combined.add_annotation(x=0.06, y=0.09, xref="paper", yref="paper", text=f"{sleeve_pct:.0f}%/{bypass_pct:.0f}%", showarrow=False, font=dict(color="white", size=16, weight="bold"), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.09, xref="paper", yref="paper", text=f"{sleeve_pct:.0f}%/{bypass_pct:.0f}%", showarrow=False, font=dict(color="white", size=16), xanchor="left")
     
                 box_style = dict(type="rect", xref="paper", yref="paper", fillcolor="rgba(255, 255, 255, 0.05)", line=dict(color="rgba(255, 255, 255, 0.1)", width=1), layer="below")
                 fig_combined.update_layout(
@@ -333,7 +333,7 @@ def render_overall_trends(df: pd.DataFrame):
     
             st.markdown("""
             <div class="summary-card">
-                <div class="card-title">Hospital Labels by Affiliation Type</div>
+                <div class="card-title">Hospital Labels by Affiliation Type (2025)</div>
             """, unsafe_allow_html=True)
             st.plotly_chart(fig_aff, use_container_width=True, config={'displayModeBar': False})
             st.markdown("""
