@@ -1,4 +1,12 @@
 import streamlit as st
+
+# Must be the first Streamlit command
+st.set_page_config(
+    page_title="National Overview - Navira",
+    page_icon="🇫🇷",
+    layout="wide"
+)
+
 import pandas as pd
 import numpy as np
 import plotly.express as px

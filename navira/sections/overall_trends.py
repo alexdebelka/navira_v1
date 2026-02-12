@@ -142,11 +142,11 @@ def render_overall_trends(df: pd.DataFrame):
                 # Stats Boxes
                 pred_color = "#ff4b4b" if diff_pct_val < 0 else "#2ca02c"
                 fig_combined.add_annotation(x=0.06, y=0.88, xref="paper", yref="paper", text="Total procedures", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
-                fig_combined.add_annotation(x=0.06, y=0.79, xref="paper", yref="paper", text=f"{int(total_procs):,}", showarrow=False, font=dict(color="white", size=20), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.79, xref="paper", yref="paper", text=f"{int(total_procs):,}", showarrow=False, font=dict(size=20), xanchor="left")
                 fig_combined.add_annotation(x=0.06, y=0.53, xref="paper", yref="paper", text="Prediction", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
                 fig_combined.add_annotation(x=0.06, y=0.44, xref="paper", yref="paper", text=prediction_text, showarrow=False, font=dict(color=pred_color, size=20), xanchor="left")
                 fig_combined.add_annotation(x=0.06, y=0.18, xref="paper", yref="paper", text="Sleeve/Bypass", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
-                fig_combined.add_annotation(x=0.06, y=0.09, xref="paper", yref="paper", text=f"{sleeve_pct:.0f}%/{bypass_pct:.0f}%", showarrow=False, font=dict(color="white", size=16), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.09, xref="paper", yref="paper", text=f"{sleeve_pct:.0f}%/{bypass_pct:.0f}%", showarrow=False, font=dict(size=16), xanchor="left")
     
                 box_style = dict(type="rect", xref="paper", yref="paper", fillcolor="rgba(255, 255, 255, 0.05)", line=dict(color="rgba(255, 255, 255, 0.1)", width=1), layer="below")
                 fig_combined.update_layout(
@@ -167,10 +167,12 @@ def render_overall_trends(df: pd.DataFrame):
     
             st.markdown("""
             <div class="summary-card">
-                <div class="card-title">Type d'intervention de chirurgie bariatrique (2021-2024)</div>
+                <div class="card-title" style="margin-bottom: 10px; line-height: 1.3;">Type d'intervention de chirurgie bariatrique (2021-2024)</div>
+            </div>
             """, unsafe_allow_html=True)
             st.plotly_chart(fig_combined, use_container_width=True, config={'displayModeBar': False})
             st.markdown("""
+            <div class="summary-card" style="margin-top: -20px;">
                 <div class="ici-link">Analyse plus détaillée du type d'intervention bariatrique -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
             </div>
             """, unsafe_allow_html=True)
@@ -304,14 +306,52 @@ def render_overall_trends(df: pd.DataFrame):
     with col6:
         with st.container():
             try:
-                affiliation_data = compute_affiliation_breakdown_2024(df)
-                label_breakdown = affiliation_data['label_breakdown']
+                # Load hospital data from the new CSV file
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                hosp_csv_path = os.path.join(base_dir, "new_data", "01_hospitals_redux.csv")
+                df_hosp = pd.read_csv(hosp_csv_path)
                 
+                # Filter for 2025 data
+                df_hosp_2025 = df_hosp[df_hosp['annee'] == 2025].copy()
+                
+                # Map status to affiliation names
+                status_mapping = {
+                    'public academic': 'Public – Univ.',
+                    'public': 'Public – Non-Acad.',
+                    'private for profit': 'Private – For-profit',
+                    'private not-for-profit': 'Private – Not-for-profit'
+                }
+                
+                df_hosp_2025['Affiliation'] = df_hosp_2025['statut'].map(status_mapping)
+                df_hosp_2025 = df_hosp_2025.dropna(subset=['Affiliation'])
+                
+                # Calculate label categories based on cso and LAB_SOFFCO columns
+                def get_label_category(row):
+                    has_cso = row['cso'] == 1
+                    has_soffco = row['LAB_SOFFCO'] == 1
+                    
+                    if has_cso and has_soffco:
+                        return 'Both'
+                    elif has_soffco:
+                        return 'SOFFCO Label'
+                    elif has_cso:
+                        return 'CSO Label'
+                    else:
+                        return 'None'
+                
+                df_hosp_2025['Label_Category'] = df_hosp_2025.apply(get_label_category, axis=1)
+                
+                # Group by affiliation and label category
+                label_counts = df_hosp_2025.groupby(['Affiliation', 'Label_Category']).size().unstack(fill_value=0)
+                
+                # Define categories in order
                 categories = ['Public – Univ.', 'Public – Non-Acad.', 'Private – Not-for-profit', 'Private – For-profit']
-                soffco = [label_breakdown.get(cat, {}).get('SOFFCO Label', 0) for cat in categories]
-                cso = [label_breakdown.get(cat, {}).get('CSO Label', 0) for cat in categories]
-                both = [label_breakdown.get(cat, {}).get('Both', 0) for cat in categories]
-                none = [label_breakdown.get(cat, {}).get('None', 0) for cat in categories]
+                
+                # Prepare data for each label type
+                soffco = [label_counts.loc[cat, 'SOFFCO Label'] if cat in label_counts.index and 'SOFFCO Label' in label_counts.columns else 0 for cat in categories]
+                cso = [label_counts.loc[cat, 'CSO Label'] if cat in label_counts.index and 'CSO Label' in label_counts.columns else 0 for cat in categories]
+                both = [label_counts.loc[cat, 'Both'] if cat in label_counts.index and 'Both' in label_counts.columns else 0 for cat in categories]
+                none = [label_counts.loc[cat, 'None'] if cat in label_counts.index and 'None' in label_counts.columns else 0 for cat in categories]
                 
                 fig_aff = go.Figure()
                 fig_aff.add_trace(go.Bar(name='SOFFCO Label', x=categories, y=soffco, marker_color='#76D7C4'))
@@ -328,7 +368,7 @@ def render_overall_trends(df: pd.DataFrame):
                 )
     
             except Exception as e:
-                st.error(f"Error computing affiliation data: {e}")
+                st.error(f"Error loading hospital labels data: {e}")
                 fig_aff = go.Figure()
     
             st.markdown("""

@@ -1,0 +1,61 @@
+"statut","annee","vda","n","pct"
+"private for profit",2021,"COE",23891,97.1
+"private for profit",2021,"LAP",177,0.7
+"private for profit",2021,"ROB",533,2.2
+"private for profit",2022,"COE",22206,97.2
+"private for profit",2022,"LAP",121,0.5
+"private for profit",2022,"ROB",530,2.3
+"private for profit",2023,"COE",20744,96.4
+"private for profit",2023,"LAP",128,0.6
+"private for profit",2023,"ROB",647,3
+"private for profit",2024,"COE",18723,96.4
+"private for profit",2024,"LAP",141,0.7
+"private for profit",2024,"ROB",566,2.9
+"private for profit",2025,"COE",9646,95.8
+"private for profit",2025,"LAP",46,0.5
+"private for profit",2025,"ROB",382,3.8
+"private not-for-profit",2021,"COE",2659,94.5
+"private not-for-profit",2021,"LAP",19,0.7
+"private not-for-profit",2021,"ROB",135,4.8
+"private not-for-profit",2022,"COE",2461,94.8
+"private not-for-profit",2022,"LAP",13,0.5
+"private not-for-profit",2022,"ROB",122,4.7
+"private not-for-profit",2023,"COE",2344,91.2
+"private not-for-profit",2023,"LAP",16,0.6
+"private not-for-profit",2023,"ROB",210,8.2
+"private not-for-profit",2024,"COE",2234,91.7
+"private not-for-profit",2024,"LAP",8,0.3
+"private not-for-profit",2024,"ROB",193,7.9
+"private not-for-profit",2025,"COE",1003,82.9
+"private not-for-profit",2025,"LAP",12,1
+"private not-for-profit",2025,"ROB",195,16.1
+"public",2021,"COE",5181,96
+"public",2021,"LAP",48,0.9
+"public",2021,"ROB",170,3.1
+"public",2022,"COE",4801,92.7
+"public",2022,"LAP",54,1
+"public",2022,"ROB",325,6.3
+"public",2023,"COE",4455,88
+"public",2023,"LAP",45,0.9
+"public",2023,"ROB",564,11.1
+"public",2024,"COE",4613,90.2
+"public",2024,"LAP",60,1.2
+"public",2024,"ROB",439,8.6
+"public",2025,"COE",2089,80.6
+"public",2025,"LAP",17,0.7
+"public",2025,"ROB",486,18.8
+"public academic",2021,"COE",4047,85
+"public academic",2021,"LAP",56,1.2
+"public academic",2021,"ROB",658,13.8
+"public academic",2022,"COE",4032,81.5
+"public academic",2022,"LAP",50,1
+"public academic",2022,"ROB",867,17.5
+"public academic",2023,"COE",3610,77.5
+"public academic",2023,"LAP",57,1.2
+"public academic",2023,"ROB",993,21.3
+"public academic",2024,"COE",3232,81
+"public academic",2024,"LAP",36,0.9
+"public academic",2024,"ROB",724,18.1
+"public academic",2025,"COE",1419,69.2
+"public academic",2025,"LAP",17,0.8
+"public academic",2025,"ROB",615,30

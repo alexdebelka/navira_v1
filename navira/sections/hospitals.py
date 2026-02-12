@@ -318,15 +318,59 @@ def render_hospitals(df: pd.DataFrame, procedure_details: pd.DataFrame):
         st.error(f"Error loading revision data: {e}")
     
     
+    
     # --- (2) HOSPITAL AFFILIATION ---
-    st.header("Hospital Affiliation (2024)")
+    st.header("Hospital Affiliation (2025)")
     
     if not df.empty:
-        affiliation_data = compute_affiliation_breakdown_2024(df)
-        affiliation_counts = affiliation_data['affiliation_counts']
-        label_breakdown = affiliation_data['label_breakdown']
+        # Load hospital data from the new CSV file
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        hosp_csv_path = os.path.join(base_dir, "new_data", "01_hospitals_redux.csv")
+        df_hosp = pd.read_csv(hosp_csv_path)
+        
+        # Filter for 2025 data
+        df_hosp_2025 = df_hosp[df_hosp['annee'] == 2025].copy()
+        
+        # Map status to affiliation names
+        status_mapping = {
+            'public academic': 'Public – Univ.',
+            'public': 'Public – Non-Acad.',
+            'private for profit': 'Private – For-profit',
+            'private not-for-profit': 'Private – Not-for-profit'
+        }
+        
+        df_hosp_2025['Affiliation'] = df_hosp_2025['statut'].map(status_mapping)
+        df_hosp_2025 = df_hosp_2025.dropna(subset=['Affiliation'])
+        
+        # Calculate affiliation counts
+        affiliation_counts = df_hosp_2025['Affiliation'].value_counts().to_dict()
+        
+        # Calculate label categories
+        def get_label_category(row):
+            has_cso = row['cso'] == 1
+            has_soffco = row['LAB_SOFFCO'] == 1
+            
+            if has_cso and has_soffco:
+                return 'Both'
+            elif has_soffco:
+                return 'SOFFCO Label'
+            elif has_cso:
+                return 'CSO Label'
+            else:
+                return 'None'
+        
+        df_hosp_2025['Label_Category'] = df_hosp_2025.apply(get_label_category, axis=1)
+        
+        # Create label_breakdown dictionary to match the old structure
+        label_breakdown = {}
+        for affiliation in affiliation_counts.keys():
+            label_breakdown[affiliation] = {}
+            affil_data = df_hosp_2025[df_hosp_2025['Affiliation'] == affiliation]
+            for label_cat in ['SOFFCO Label', 'CSO Label', 'Both', 'None']:
+                label_breakdown[affiliation][label_cat] = len(affil_data[affil_data['Label_Category'] == label_cat])
         
         affiliation_trends = compute_affiliation_trends_2020_2024(df)
+
         
         col1, col2 = st.columns(2)
         
@@ -359,31 +403,24 @@ def render_hospitals(df: pd.DataFrame, procedure_details: pd.DataFrame):
         
         # Label statistics
         try:
-            univ_total = affiliation_counts.get('Public – Univ.', 0)
-            univ_labeled = (
-                label_breakdown.get('Public – Univ.', {}).get('SOFFCO Label', 0) +
-                label_breakdown.get('Public – Univ.', {}).get('CSO Label', 0) +
-                label_breakdown.get('Public – Univ.', {}).get('Both', 0)
-            )
-            univ_pct = round((univ_labeled / univ_total * 100)) if univ_total > 0 else 0
+            # Use the already-loaded df_hosp_2025 from above
+            # Calculate university hospitals
+            univ_df = df_hosp_2025[df_hosp_2025['Affiliation'] == 'Public – Univ.']
+            univ_total = len(univ_df)
+            univ_with_labels = len(univ_df[(univ_df['cso'] == 1) | (univ_df['LAB_SOFFCO'] == 1)])
+            univ_pct = round((univ_with_labels / univ_total * 100)) if univ_total > 0 else 0
             
-            private_total = (
-                affiliation_counts.get('Private – For-profit', 0) +
-                affiliation_counts.get('Private – Not-for-profit', 0)
-            )
-            private_labeled = (
-                label_breakdown.get('Private – For-profit', {}).get('SOFFCO Label', 0) +
-                label_breakdown.get('Private – For-profit', {}).get('CSO Label', 0) +
-                label_breakdown.get('Private – For-profit', {}).get('Both', 0) +
-                label_breakdown.get('Private – Not-for-profit', {}).get('SOFFCO Label', 0) +
-                label_breakdown.get('Private – Not-for-profit', {}).get('CSO Label', 0) +
-                label_breakdown.get('Private – Not-for-profit', {}).get('Both', 0)
-            )
-            private_pct = round((private_labeled / private_total * 100)) if private_total > 0 else 0
+            # Calculate private hospitals (both for-profit and not-for-profit)
+            private_df = df_hosp_2025[df_hosp_2025['Affiliation'].isin(['Private – For-profit', 'Private – Not-for-profit'])]
+            private_total = len(private_df)
+            private_with_labels = len(private_df[(private_df['cso'] == 1) | (private_df['LAB_SOFFCO'] == 1)])
+            private_pct = round((private_with_labels / private_total * 100)) if private_total > 0 else 0
             
             st.markdown(f"#### **{univ_pct}%** of the university hospitals have SOFFCO, CSO or both labels and **{private_pct}%** of private hospitals have SOFFCO, CSO or both labels")
-        except Exception:
+        except Exception as e:
+            st.error(f"Error calculating label statistics: {e}")
             st.markdown("Label statistics unavailable")
+        
         
         # Stacked bar chart
         st.markdown("""
@@ -466,7 +503,7 @@ def render_hospitals(df: pd.DataFrame, procedure_details: pd.DataFrame):
               <div class="nv-tooltip"><span class="nv-info-badge">i</span>
                 <div class="nv-tooltiptext">
                   <b>Understanding this chart:</b><br/>
-                  Stacked area chart showing the evolution of surgical volume by hospital affiliation type (2021-2024).
+                  Line chart showing the evolution of surgical volume by hospital affiliation type (2021-2024). Each line represents a different affiliation type, making it easy to compare individual trends.
                 </div>
               </div>
             </div>
@@ -514,7 +551,7 @@ def render_hospitals(df: pd.DataFrame, procedure_details: pd.DataFrame):
                 """)
         
             if not trend_df.empty:
-                fig = px.area(
+                fig = px.line(
                     trend_df, x='Year', y='Count', color='Affiliation',
                     title="Surgical Volume by Affiliation Over Time",
                     color_discrete_map={
@@ -523,7 +560,8 @@ def render_hospitals(df: pd.DataFrame, procedure_details: pd.DataFrame):
                         'Private – For-profit': '#ffd97d',
                         'Private – Not-for-profit': '#7161ef'
                     },
-                    category_orders={'Affiliation': key_categories}
+                    category_orders={'Affiliation': key_categories},
+                    markers=True
                 )
                 fig.update_layout(
                     xaxis_title="Year", yaxis_title="Total Procedures",
@@ -532,7 +570,7 @@ def render_hospitals(df: pd.DataFrame, procedure_details: pd.DataFrame):
                     font=dict(size=12), margin=dict(l=50, r=50, t=80, b=50),
                     xaxis=dict(tickmode='array', tickvals=[2021, 2022, 2023, 2024], ticktext=['2021', '2022', '2023', '2024'], tickformat='d')
                 )
-                fig.update_traces(line=dict(width=0), opacity=0.8)
+                fig.update_traces(line=dict(width=3))
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("No data available after filtering.")

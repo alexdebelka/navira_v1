@@ -1,0 +1,81 @@
+"statut","annee","duree_cat","LOS_nb","LOS_pct"
+"private for profit",2021,"[-1,0]",1425,5.8
+"private for profit",2021,"(0,3]",18618,75.7
+"private for profit",2021,"(3,6]",4053,16.5
+"private for profit",2021,"(6,225]",505,2.1
+"private for profit",2022,"[-1,0]",1290,5.6
+"private for profit",2022,"(0,3]",17885,78.2
+"private for profit",2022,"(3,6]",3276,14.3
+"private for profit",2022,"(6,225]",406,1.8
+"private for profit",2023,"[-1,0]",1148,5.3
+"private for profit",2023,"(0,3]",17375,80.7
+"private for profit",2023,"(3,6]",2649,12.3
+"private for profit",2023,"(6,225]",347,1.6
+"private for profit",2024,"[-1,0]",980,5
+"private for profit",2024,"(0,3]",15901,81.8
+"private for profit",2024,"(3,6]",2179,11.2
+"private for profit",2024,"(6,225]",370,1.9
+"private for profit",2025,"[-1,0]",540,5.4
+"private for profit",2025,"(0,3]",8341,82.8
+"private for profit",2025,"(3,6]",1021,10.1
+"private for profit",2025,"(6,225]",172,1.7
+"private not-for-profit",2021,"[-1,0]",191,6.8
+"private not-for-profit",2021,"(0,3]",2038,72.4
+"private not-for-profit",2021,"(3,6]",505,18
+"private not-for-profit",2021,"(6,225]",79,2.8
+"private not-for-profit",2022,"[-1,0]",110,4.2
+"private not-for-profit",2022,"(0,3]",2041,78.6
+"private not-for-profit",2022,"(3,6]",396,15.3
+"private not-for-profit",2022,"(6,225]",49,1.9
+"private not-for-profit",2023,"[-1,0]",122,4.7
+"private not-for-profit",2023,"(0,3]",2060,80.2
+"private not-for-profit",2023,"(3,6]",319,12.4
+"private not-for-profit",2023,"(6,225]",69,2.7
+"private not-for-profit",2024,"[-1,0]",81,3.3
+"private not-for-profit",2024,"(0,3]",2009,82.5
+"private not-for-profit",2024,"(3,6]",289,11.9
+"private not-for-profit",2024,"(6,225]",56,2.3
+"private not-for-profit",2025,"[-1,0]",33,2.7
+"private not-for-profit",2025,"(0,3]",987,81.6
+"private not-for-profit",2025,"(3,6]",165,13.6
+"private not-for-profit",2025,"(6,225]",25,2.1
+"public",2021,"[-1,0]",71,1.3
+"public",2021,"(0,3]",3688,68.3
+"public",2021,"(3,6]",1365,25.3
+"public",2021,"(6,225]",275,5.1
+"public",2022,"[-1,0]",66,1.3
+"public",2022,"(0,3]",3516,67.9
+"public",2022,"(3,6]",1333,25.7
+"public",2022,"(6,225]",265,5.1
+"public",2023,"[-1,0]",63,1.2
+"public",2023,"(0,3]",3578,70.7
+"public",2023,"(3,6]",1210,23.9
+"public",2023,"(6,225]",213,4.2
+"public",2024,"[-1,0]",68,1.3
+"public",2024,"(0,3]",3809,74.5
+"public",2024,"(3,6]",1022,20
+"public",2024,"(6,225]",213,4.2
+"public",2025,"[-1,0]",57,2.2
+"public",2025,"(0,3]",2016,77.8
+"public",2025,"(3,6]",416,16
+"public",2025,"(6,225]",103,4
+"public academic",2021,"[-1,0]",109,2.3
+"public academic",2021,"(0,3]",2815,59.1
+"public academic",2021,"(3,6]",1551,32.6
+"public academic",2021,"(6,225]",286,6
+"public academic",2022,"[-1,0]",88,1.8
+"public academic",2022,"(0,3]",3125,63.1
+"public academic",2022,"(3,6]",1445,29.2
+"public academic",2022,"(6,225]",291,5.9
+"public academic",2023,"[-1,0]",95,2
+"public academic",2023,"(0,3]",3040,65.2
+"public academic",2023,"(3,6]",1239,26.6
+"public academic",2023,"(6,225]",286,6.1
+"public academic",2024,"[-1,0]",106,2.7
+"public academic",2024,"(0,3]",2612,65.4
+"public academic",2024,"(3,6]",1000,25.1
+"public academic",2024,"(6,225]",274,6.9
+"public academic",2025,"[-1,0]",39,1.9
+"public academic",2025,"(0,3]",1390,67.8
+"public academic",2025,"(3,6]",489,23.8
+"public academic",2025,"(6,225]",133,6.5
