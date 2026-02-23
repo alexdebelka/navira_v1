@@ -80,15 +80,52 @@ def render_overall_trends(df: pd.DataFrame):
     # Row 1
     col1, col2 = st.columns(2)
     
-    # Card 1: Monthly Surgeries (Placeholder)
+    # Card 1: Annual Procedures with 2025 Forecast
     with col1:
         with st.container():
+            try:
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                csv_path_c1 = os.path.join(base_dir, "new_data", "ACTIVITY", "TAB_TCN_NATL_YEAR.csv")
+                df_c1 = pd.read_csv(csv_path_c1)
+                df_c1 = df_c1[df_c1['annee'].isin([2022, 2023, 2024])]
+                yearly_totals = df_c1.groupby('annee')['n'].sum().reset_index().sort_values('annee')
+                c1_years  = yearly_totals['annee'].astype(str).tolist() + ['2025*']
+                c1_values = yearly_totals['n'].astype(int).tolist() + [30378]
+                c1_colors = ['#4292B9'] * len(yearly_totals) + ['#FED303']
+            except Exception:
+                c1_years  = ['2022', '2023', '2024', '2025*']
+                c1_values = [0, 0, 0, 30378]
+                c1_colors = ['#4292B9', '#4292B9', '#4292B9', '#FED303']
+
+            fig_c1 = go.Figure(go.Bar(
+                x=c1_years,
+                y=c1_values,
+                marker_color=c1_colors,
+                text=[f"{v:,}" for v in c1_values],
+                textposition='outside',
+                cliponaxis=False,
+            ))
+            fig_c1.update_layout(
+                margin=dict(t=30, b=10, l=10, r=10),
+                height=250,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(type='category', showgrid=False, tickfont=dict(color='#ccc')),
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.08)',
+                           tickfont=dict(color='#888'),
+                           range=[0, max(c1_values) * 1.25]),
+                showlegend=False,
+            )
+
             st.markdown("""
             <div class="summary-card">
-                <div class="card-title">Monthly Surgeries with Rolling Statistics</div>
-                <div style="height: 300px; display: flex; align-items: center; justify-content: center; background: #333; border-radius: 8px; border: 1px dashed #555;">
-                    <span style="color: #888;">Graph Placeholder</span>
-                </div>
+                <div class="card-title">Procédures bariatriques annuelles – Forecast 2025</div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.plotly_chart(fig_c1, use_container_width=True, config={'displayModeBar': False})
+            st.markdown("""
+            <div class="summary-card" style="margin-top:-20px;">
+                <div style="color:#888; font-size:0.78rem;">* 2025 est une projection — valeur estimée : 30 378 procédures</div>
                 <div class="ici-link">Bien plus de détails sur <b>les tendances</b> -> <span style="color: #00bfff; cursor: pointer;">ici</span></div>
             </div>
             """, unsafe_allow_html=True)
@@ -127,24 +164,27 @@ def render_overall_trends(df: pd.DataFrame):
                 fig_combined = go.Figure()
                 labels = ['Gastric Bypass', 'Sleeve Gastrectomy', 'Other Procedures']
                 values = [bypass_pct, sleeve_pct, other_pct]
-                colors = ['#1f77b4', '#ff7f0e', '#2ca02c'] 
-                
+                counts = [int(bypass_n), int(sleeve_n), int(others_n)]
+                colors = ['#1f77b4', '#ff7f0e', '#2ca02c']
+
                 fig_combined.add_trace(go.Pie(
-                    labels=labels, 
-                    values=values, 
+                    labels=labels,
+                    values=values,
                     hole=.6,
                     marker_colors=colors,
-                    textinfo='percent+label',
+                    customdata=counts,
+                    texttemplate='%{label}<br>%{percent:.1%} (%{customdata:,})',
+                    textinfo='none',
                     showlegend=False,
                     domain={'x': [0.5, 1], 'y': [0, 1]}
                 ))
     
                 # Stats Boxes
                 pred_color = "#ff4b4b" if diff_pct_val < 0 else "#2ca02c"
-                fig_combined.add_annotation(x=0.06, y=0.88, xref="paper", yref="paper", text="Total procedures", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
-                fig_combined.add_annotation(x=0.06, y=0.79, xref="paper", yref="paper", text=f"{int(total_procs):,}", showarrow=False, font=dict(size=20), xanchor="left")
-                fig_combined.add_annotation(x=0.06, y=0.53, xref="paper", yref="paper", text="Prediction", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
-                fig_combined.add_annotation(x=0.06, y=0.44, xref="paper", yref="paper", text=prediction_text, showarrow=False, font=dict(color=pred_color, size=20), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.95, xref="paper", yref="paper", text="Total procedures", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.90, xref="paper", yref="paper", text=f"{int(total_procs):,}", showarrow=False, font=dict(size=20), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.55, xref="paper", yref="paper", text="Prediction", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
+                fig_combined.add_annotation(x=0.06, y=0.48, xref="paper", yref="paper", text=prediction_text, showarrow=False, font=dict(color=pred_color, size=20), xanchor="left")
                 fig_combined.add_annotation(x=0.06, y=0.18, xref="paper", yref="paper", text="Sleeve/Bypass", showarrow=False, font=dict(color="#a0a0a0", size=12), xanchor="left")
                 fig_combined.add_annotation(x=0.06, y=0.09, xref="paper", yref="paper", text=f"{sleeve_pct:.0f}%/{bypass_pct:.0f}%", showarrow=False, font=dict(size=16), xanchor="left")
     

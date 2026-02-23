@@ -297,37 +297,77 @@ def render_complication_national(data=None):
         
         return (never_nb, tot, never_pct)
 
-    # Compute rates for national
-    rates_n = _get_grade_rates(grade_natl, None)
-
-    # Compute never events
+    # Compute never events (still needed for the card)
     never_n = _get_never_events(never_natl, None)
 
-    # Build bar chart data (national only)
-    rows = []
-    for grade in [3, 4, 5]:
-        rows.append({'Grade': f'Grade {grade}', 'Group': 'National', 'Rate': rates_n.get(grade, 0.0)})
-    
-    df_bar = pd.DataFrame(rows)
-    
-    # Layout: bar chart on left, never events card on right
+    # --- Stacked area chart: complication rate by grade over time ---
+    # Build a wide-format dataframe: rows = years, cols = grades
+    GRADE_AREA_COLORS = {
+        'Grade 3': '#4292B9',   # Boston Blue
+        'Grade 4': '#8FD79F',   # Romantic Green
+        'Grade 5': '#FED303',   # Gold
+    }
+
+    # Layout: stacked area on left, never events card on right
     left, right = st.columns([2, 1])
-    
+
     with left:
-        fig_grade = px.bar(
-            df_bar, x='Grade', y='Rate', color='Group', barmode='group',
-            color_discrete_map=GRADE_COLORS
-        )
-        fig_grade.update_layout(
-            height=360,
-            yaxis_title='Rate (%)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            showlegend=False
-        )
-        fig_grade.update_yaxes(range=[0, max(8, df_bar['Rate'].max() * 1.3)])
-        fig_grade.update_traces(hovertemplate='%{x}: %{y:.1f}%<extra></extra>')
-        st.plotly_chart(fig_grade, use_container_width=True, key="compl_nat_grade_chart")
+        if not grade_natl.empty and 'annee' in grade_natl.columns and \
+                'clav_cat_90' in grade_natl.columns and 'COMPL_pct' in grade_natl.columns:
+
+            df_area = grade_natl.copy()
+            df_area['annee'] = pd.to_numeric(df_area['annee'], errors='coerce')
+            df_area['clav_cat_90'] = pd.to_numeric(df_area['clav_cat_90'], errors='coerce')
+            df_area['COMPL_pct'] = pd.to_numeric(df_area['COMPL_pct'], errors='coerce').fillna(0)
+            df_area = df_area[df_area['annee'].isin([2021, 2022, 2023, 2024])]
+            df_area = df_area[df_area['clav_cat_90'].isin([3, 4, 5])]
+            df_area = df_area.dropna(subset=['annee', 'clav_cat_90'])
+            df_area = df_area.sort_values('annee')
+
+            # Pivot: index=year, columns=grade
+            pivot = df_area.pivot_table(
+                index='annee', columns='clav_cat_90', values='COMPL_pct', aggfunc='first'
+            ).reindex(columns=[3, 4, 5]).fillna(0)
+            pivot.index = pivot.index.astype(int)
+
+            years_a = pivot.index.tolist()
+
+            fig_grade = go.Figure()
+            for grade, col_name in [(3, 'Grade 3'), (4, 'Grade 4'), (5, 'Grade 5')]:
+                y_vals = pivot[grade].tolist() if grade in pivot.columns else [0] * len(years_a)
+                fig_grade.add_trace(go.Scatter(
+                    x=years_a,
+                    y=y_vals,
+                    name=col_name,
+                    stackgroup='one',
+                    mode='lines',
+                    line=dict(width=0.5, color=GRADE_AREA_COLORS[col_name]),
+                    fillcolor=GRADE_AREA_COLORS[col_name],
+                    hovertemplate=f'{col_name}: %{{y:.2f}}%<extra></extra>',
+                ))
+
+            fig_grade.update_layout(
+                height=360,
+                yaxis_title='Complication Rate (%)',
+                xaxis_title='Year',
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+                xaxis=dict(
+                    type='category',
+                    showgrid=False,
+                    tickfont=dict(color='#888'),
+                ),
+                yaxis=dict(
+                    showgrid=True,
+                    gridcolor='rgba(255,255,255,0.1)',
+                    tickfont=dict(color='#888'),
+                ),
+                hoverlabel=dict(bgcolor='rgba(30,30,30,0.9)'),
+            )
+            st.plotly_chart(fig_grade, use_container_width=True, key="compl_nat_grade_chart")
+        else:
+            st.info("No Clavien-Dindo grade data available.")
     
     with right:
         # Never events card - use pre-calculated percentages
